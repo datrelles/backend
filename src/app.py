@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 from src.routes.web_services import web_services
 from src.routes.auth import auth
+from dotenv import load_dotenv
 
 
 app = Flask(__name__)
@@ -25,5 +26,6 @@ def login():
 
 if __name__ == '__main__':
     # app.config.from_object(config['development'])
+    load_dotenv()
     app.run(host='0.0.0.0', port=5000)
 

@@ -3,8 +3,8 @@ import cx_Oracle
 def connection():
     try:
         conexion = cx_Oracle.connect(
-            user='stock',
-            password='stock',
+            user='wsjelou',
+            password='jelou2023',
             dsn=cx_Oracle.makedsn('192.168.51.73', 1521, 'mlgye01')
         )
     except Exception as err:
