@@ -1,10 +1,12 @@
 import cx_Oracle
 
-def connection():
+
+def connection(user,password):
     try:
+
         conexion = cx_Oracle.connect(
-            user='wsjelou',
-            password='jelou2023',
+            user=user,
+            password=password,
             dsn=cx_Oracle.makedsn('192.168.51.73', 1521, 'mlgye01')
         )
     except Exception as err:
@@ -12,6 +14,7 @@ def connection():
     else:
         print('Conectado a Oracle Database', conexion.version)
     return conexion
+
 
 def call_func(SQL, out_type, parameters):
     try:
@@ -23,11 +26,12 @@ def call_func(SQL, out_type, parameters):
     else:
         print('Funcion ejecutada corectamente!')
     conexion.close()
-    return  correct
+    return correct
 
-def execute_sql(SQL):
+
+def execute_sql(SQL,user,password):
     try:
-        conexion = connection()
+        conexion = connection(user,password)
         cur_01 = conexion.cursor()
         cur_01.execute(SQL)
         correct = cur_01.fetchall()
