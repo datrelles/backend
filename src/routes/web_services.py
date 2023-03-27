@@ -32,13 +32,13 @@ def atelier():
         user = info['username']
         password = info['password']
         array = oracle.execute_sql(
-            'select ROWNUM, P.DESCRIPCION, C.DESCRIPCION,T.DESCRIPCION, T.NOMBRE_CONTACTO, T.TELEFONO1, T.TELEFONO2, T.TELEFONO3, T.DIRECCION,T.FECHA_ADICION, T.FECHA_MODIFICACION from AR_TALLER_SERVICIO_TECNICO T , AR_PROVINCIAS P, ar_ciudades c WHERE T.CODIGO_EMPRESA = 20  and   T.CODIGO_PROVINCIA = P.CODIGO_PROVINCIA (+) and   c.codigo_ciudad(+)    = t.codigo_ciudad and   c.codigo_provincia(+) = t.codigo_provincia',user,password)
+            'select ROWNUM, P.DESCRIPCION, C.DESCRIPCION,T.DESCRIPCION, T.NOMBRE_CONTACTO, T.TELEFONO1, T.TELEFONO2, T.TELEFONO3, T.DIRECCION, T.RUC,T.FECHA_ADICION, T.FECHA_MODIFICACION from AR_TALLER_SERVICIO_TECNICO T , AR_PROVINCIAS P, ar_ciudades c WHERE T.CODIGO_EMPRESA = 20  and   T.CODIGO_PROVINCIA = P.CODIGO_PROVINCIA (+) and   c.codigo_ciudad(+)    = t.codigo_ciudad and   c.codigo_provincia(+) = t.codigo_provincia',user,password)
         mydict = create_dict()
         for row in array:
             mydict.add(row[0], (
             {"PROVINCIA": row[1], "CIUDAD": row[2], "NOMBRE TALLER": row[3], "NOMBRE MECANICO": row[4],
              "NUMERO PRINCIPAL": row[5], "NUMERO ALTERNATIVO": row[6], "NUMERO CONVENCIONAL PRINCIPAL": row[7],
-             "DIRECCION": row[8], "FECHA CREACION": row[9], "FECHA MODIFICACION": row[10]}))
+             "DIRECCION": row[8], "RUC": row[9], "FECHA CREACION": row[10], "FECHA MODIFICACION": row[11]}))
         stud_json = json.dumps(mydict, indent=2, default=str)
         return stud_json
 
