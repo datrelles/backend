@@ -15,6 +15,19 @@ def connection(user,password):
         print('Conectado a Oracle Database', conexion.version)
     return conexion
 
+def connection_test(user,password):
+    try:
+
+        conexion = cx_Oracle.connect(
+            user=user,
+            password=password,
+            dsn=cx_Oracle.makedsn('192.168.51.73', 1521, 'mlgye01')
+        )
+    except Exception as err:
+        return False
+    else:
+        return True
+
 
 def call_func(SQL, out_type, parameters):
     try:
