@@ -11,17 +11,10 @@ def get_token():
     data = request.get_json()
     usuario = data['username'].upper()
     password = data['password']
-    array = oracle.execute_sql('select USERNAME from all_users u where u.USERNAME = ' + "'"+usuario+"'",'stock', 'stock')
-    if array:
-        if array[0][0] == usuario:
-            if oracle.connection_test(usuario, password):
-                return write_token(data=request.get_json())
-            else:
-                response = jsonify({"message": "Password  is not correct"})
-                response.status_code = 404
-                return response
+    if oracle.connection_test(usuario, password):
+        return write_token(data=request.get_json())
     else:
-        response = jsonify({"message": "User not found"})
+        response = jsonify({"message": "Users or Password  is not correct"})
         response.status_code = 404
         return response
 
