@@ -3,7 +3,9 @@ from jwt import exceptions
 from os import getenv
 from datetime import datetime, timedelta
 from flask import jsonify
+import dotenv
 
+dotenv.load_dotenv()
 
 def expire_date(days: int):
     now = datetime.now()
