@@ -1,4 +1,8 @@
 import cx_Oracle
+from os import getenv
+import dotenv
+
+dotenv.load_dotenv()
 
 
 def connection(user,password):
@@ -7,7 +11,7 @@ def connection(user,password):
         conexion = cx_Oracle.connect(
             user=user,
             password=password,
-            dsn=cx_Oracle.makedsn('192.168.51.73', 1521, 'mlgye01')
+            dsn=cx_Oracle.makedsn(getenv("IP"), getenv("PORT"), getenv("SID"))
         )
     except Exception as err:
         print('Error en la conexion a la base de datos. Error:', err)
@@ -15,13 +19,14 @@ def connection(user,password):
         print('Conectado a Oracle Database', conexion.version)
     return conexion
 
+
 def connection_test(user,password):
     try:
 
         conexion = cx_Oracle.connect(
             user=user,
             password=password,
-            dsn=cx_Oracle.makedsn('192.168.51.73', 1521, 'mlgye01')
+            dsn=cx_Oracle.makedsn(getenv("IP"), getenv("PORT"), getenv("SID"))
         )
     except Exception as err:
         return False
