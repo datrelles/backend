@@ -1,5 +1,8 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_wtf.csrf import CSRFProtect
+from numpy.core.defchararray import upper
+
+from src import oracle
 from src.routes.web_services import web_services
 from src.routes.auth import auth
 from dotenv import load_dotenv, find_dotenv
@@ -8,10 +11,41 @@ from models.entities.User import User
 from flask_login import LoginManager, login_user,logout_user, login_required
 from os import getenv
 import dotenv
+from flask_cors import CORS, cross_origin
+
+import json
+import os
+from datetime import datetime, timedelta, timezone
+from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager
+
+###################################################
+from src.config.database import db
+from src.routes.routes import bp
+from src.routes.routes_custom import bpcustom
+import logging
+from sqlalchemy import create_engine
+###################################################
 
 dotenv.load_dotenv()
 
 app = Flask(__name__)
+app.config["JWT_SECRET_KEY"] = "please-remember-me"
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=1)
+app.config['CORS_HEADERS'] = 'Content-Type'
+
+###################################################
+os.environ["NLS_LANG"] = ".UTF8"
+app.config['SQLALCHEMY_DATABASE_URI'] = 'oracle+cx_oracle://stock:stock@192.168.51.73:1521/mlgye01?encoding=utf-8'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db.init_app(app)
+
+app.register_blueprint(bp)
+app.register_blueprint(bpcustom)
+
+#############################################################################
+
+jwt = JWTManager(app)
+CORS(app)
 app.secret_key = getenv("SECRET_KEY")
 login_manager = LoginManager(app)
 csrf = CSRFProtect()
@@ -19,52 +53,264 @@ csrf = CSRFProtect()
 app.register_blueprint(auth, url_prefix="/")
 app.register_blueprint(web_services, url_prefix="/api")
 
-@login_manager.user_loader
-def load_user(username):
-    return ModelUser.get_by_id(username)
 
-@app.route('/logout')
-def logout():
-    logout_user()
-    return redirect(url_for('login'))
+@app.route('/token', methods=["POST"])
+@cross_origin()
+def create_token():
+    user = request.json.get("user", None)
+    password = request.json.get("password", None)
 
-def status_401(error):
-    return redirect(url_for('login'))
-def status_404(error):
-    return "<h1>Página no encontrada</h1>", 404
-
-
-@app.route('/')
-def index():
-    return redirect(url_for('login'))
-
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        user = User(request.form['username'],request.form['password'])
-        logged_user=ModelUser.login(user)
-        if logged_user != None:
-            if logged_user.password:
-                login_user(logged_user)
-                return redirect(url_for('home'))
+    try:
+        db = oracle.connection('stock', 'stock')
+        cursor = db.cursor()
+        sql = """SELECT USUARIO_ORACLE, PASSWORD, NOMBRE FROM USUARIO 
+                WHERE USUARIO_ORACLE = '{}'""".format(user.upper())
+        cursor.execute(sql)
+        row = cursor.fetchone()
+        if row != None:
+            isCorrect = User.check_password(row[1],password)
+            if isCorrect:
+                access_token = create_access_token(identity=user)
+                return {"access_token": access_token}
             else:
-                flash("Invalid password...")
-                return render_template('auth/login.html')
+                return {"msg": "Wrong password"}, 401
         else:
-            flash("User not found...")
-            return render_template('auth/login.html')
+            return {"msg": "Wrong username"}, 401
+    except Exception as ex:
+        raise Exception(ex)
+
+@app.after_request
+@cross_origin()
+def refresh_expiring_jwts(response):
+    try:
+        exp_timestamp = get_jwt()["exp"]
+        now = datetime.now(timezone.utc)
+        target_timestamp = datetime.timestamp(now + timedelta(minutes=30))
+        if target_timestamp > exp_timestamp:
+            access_token = create_access_token(identity=get_jwt_identity())
+            data = response.get_json()
+            if type(data) is dict:
+                data["access_token"] = access_token
+                response.data = json.dumps(data)
+        return response
+    except (RuntimeError, KeyError):
+        # Case where there is not a valid JWT. Just return the original respone
+        return response
+
+@app.route('/profile')
+@jwt_required()
+@cross_origin()
+def my_profile():
+    response_body = {
+        "name": "Damian",
+        "about": "Hello! I'm a full stack developer that loves python and javascript"
+    }
+    return response_body
+
+@app.route('/enterprise/<id>')
+@jwt_required()
+@cross_origin()
+def enterprise(id):
+    aux = "N"
+    try:
+        c = oracle.connection('stock', 'stock')
+        cur_01 = c.cursor()
+        id = str(upper(id))
+        print(id)
+        sql = ('SELECT DISTINCT E.EMPRESA, E.NOMBRE FROM EMPRESA E, USUARIO_EMPRESA UE, USUARIO U '
+               'WHERE E.EMPRESA = UE.EMPRESA AND UE.USERIDC = U.USERIDC '
+               'AND U.USUARIO_ORACLE =  (CASE WHEN (SELECT U2.TODA_EMPRESA FROM USUARIO U2 WHERE U2.USUARIO_ORACLE = :id) = :aux THEN :id ELSE U.USUARIO_ORACLE END)')
+        cursor = cur_01.execute(sql, [id, aux])
+        c.close
+        row_headers = [x[0] for x in cursor.description]
+        array = cursor.fetchall()
+        empresas = []
+        for result in array:
+            empresas.append(dict(zip(row_headers, result)))
+        empresas_ordenadas = sorted(empresas, key=lambda k: k['NOMBRE'])
+        return json.dumps(empresas_ordenadas)
+    except Exception as ex:
+        raise Exception(ex)
+    return response_body
+
+
+@app.route('/branch/<id>/<en>')
+@jwt_required()
+@cross_origin()
+def branch(id,en):
+    try:
+        c = oracle.connection('stock', 'stock')
+        cur_01 = c.cursor()
+        id = str(upper(id))
+
+        sql = ('SELECT DISTINCT A.COD_AGENCIA, A.NOMBRE FROM TG_AGENCIA A, TG_USUARIO_X_AGENCIA B '
+               'WHERE A.EMPRESA=B.EMPRESA AND B.EMPRESA = :en '
+               'AND A.COD_AGENCIA = (CASE WHEN (SELECT UE.TODA_AGENCIA FROM USUARIO_EMPRESA UE WHERE UE.EMPRESA = :en AND UE.USERIDC = :id ) = :a THEN B.COD_AGENCIA ELSE A.COD_AGENCIA END) '
+               'AND B.USERIDC= (CASE WHEN (SELECT UE.TODA_AGENCIA FROM USUARIO_EMPRESA UE WHERE UE.EMPRESA = :en AND UE.USERIDC = :id ) = :a THEN :id ELSE B.USERIDC END) ')
+        cursor = cur_01.execute(sql, id=id, en=en, a='N')
+        c.close
+        row_headers = [x[0] for x in cursor.description]
+        array = cursor.fetchall()
+        agencias = []
+        for result in array:
+            agencias.append(dict(zip(row_headers, result)))
+        agencias_ordenadas = sorted(agencias, key=lambda k: k['NOMBRE'])
+        return json.dumps(agencias_ordenadas)
+    except Exception as ex:
+        raise Exception(ex)
+    return response_body
+
+
+@app.route("/logout",methods=["POST"])
+@cross_origin()
+def logout():
+    response = jsonify({"msg": "logout succesfull"})
+    unset_jwt_cookies(response)
+    return response
+
+
+# @login_manager.user_loader
+# def load_user(username):
+#     return ModelUser.get_by_id(username)
+
+# @app.route('/logout')
+# def logout():
+#     logout_user()
+#     return redirect(url_for('login'))
+
+# def status_401(error):
+#     return redirect(url_for('login'))
+# def status_404(error):
+#     return "<h1>Página no encontrada</h1>", 404
+
+
+# @app.route('/')
+# def index():
+#     return redirect(url_for('login'))
+
+
+# @app.route('/login', methods=['GET', 'POST'])
+# def login():
+#     if request.method == 'POST':
+#         data = request.get_json()
+#         usuario = data['username'].upper()
+#         password = data['password']
+#         print(usuario,password)
+#         user = User(usuario,password)
+#         logged_user=ModelUser.login(user)
+#         if logged_user != None:
+#             if logged_user.password:
+#                 login_user(logged_user)
+#                 return jsonify({'msg': 'User Logged'})                    #redirect(url_for('home'))
+#             else:
+#                 #flash("Invalid password...")
+#                 return jsonify({'msg': 'Invalid password...'})                           #render_template('auth/login.html')
+#         else:
+#             #flash("User not found...")
+#             return jsonify({'msg': 'User not found...'})                                                     #render_template('auth/login.html')
+#     else:
+#         return render_template('auth/login.html')
+#
+
+# @app.route('/home')
+# @login_required
+# def home():
+#     return render_template('home.html')
+
+
+########################################################################
+
+@app.route("/user/<id>", methods=['GET'])
+@jwt_required()
+def getUser(id):
+    c = oracle.connection('stock', 'stock')
+    cur_01 = c.cursor()
+    sql = ('SELECT * FROM usuario WHERE USUARIO_ORACLE = :id')
+    cursor = cur_01.execute(sql,[id])
+    row_headers = [x[0] for x in cursor.description]
+    print(row_headers)
+    array = cursor.fetchall()
+    c.close
+    usuario = []
+    for result in array:
+        usuario.append(dict(zip(row_headers, result)))
+    return json.dumps(usuario[0])
+    cur_01.execute(sql,[id])
+    c.commit()
+    cur_01.close()
+    c.close()
+    return jsonify({'msg': 'User updated'})
+
+
+@app.route("/users", methods=['GET', 'POST'])
+@jwt_required()
+def users():
+    if request.method == 'POST':
+        data = request.get_json()
+        usuario = data['username'].upper()
+        password = data['password']
+        email = data['email']
+        id = usuario[0:3]
+        empresa_actual = 20
+        agencia_actual = 30
+
+        c = oracle.connection('stock', 'stock')
+        cur_01 = c.cursor()
+        sql = (
+                'insert into usuario(USERIDC,USUARIO_ORACLE, E_MAIL, PASSWORD, EMPRESA_ACTUAL, AGENCIA_ACTUAL) '
+                'values(:id,:usuario,:email,:password, :empresa_actual, :agencia_actual)')
+
+        cur_01.execute(sql, [id, usuario, email, password, empresa_actual,agencia_actual])
+        c.commit()
+        c.close
+        return jsonify('received')
     else:
-        return render_template('auth/login.html')
-@app.route('/home')
-@login_required
-def home():
-    return render_template('home.html')
+        c = oracle.connection('stock', 'stock')
+        cur_01 = c.cursor()
+        sql = ('select ROWNUM, USUARIO_ORACLE, APELLIDO1, APELLIDO2, NOMBRE from usuario where rownum <= 10')
+        cursor = cur_01.execute(sql)
+        row_headers = [x[0] for x in cursor.description]
+        array = cursor.fetchall()
+        c.close
+        usuario = []
+        for result in array:
+            usuario.append(dict(zip(row_headers, result)))
+        return json.dumps(usuario)
+
+@app.route("/users/<id>", methods=['DELETE'])
+@jwt_required()
+def deleteUser(id):
+    c = oracle.connection('stock', 'stock')
+    cur_01 = c.cursor()
+    sql = ('delete from usuario where USUARIO_ORACLE = :id')
+    cur_01.execute(sql,[id])
+    c.commit()
+    cur_01.close()
+    c.close()
+    return jsonify({'msg': 'User deleted'})
+
+@app.route("/users/<id>", methods=['PUT'])
+@jwt_required()
+def updateUser(id):
+    usuario_oracle = str(upper(request.json['username']))
+    email = request.json['email']
+    password = request.json['password']
+    print(id,usuario_oracle,email,password)
+    c = oracle.connection('stock', 'stock')
+    cur_01 = c.cursor()
+    sql = ('UPDATE usuario SET USUARIO_ORACLE = :usuario_oracle, E_MAIL = :email, PASSWORD = :password where USUARIO_ORACLE = :id')
+    cur_01.execute(sql,[usuario_oracle,email,password, id])
+    c.commit()
+    cur_01.close()
+    c.close()
+    return jsonify({'msg': 'User updated'})
+
+####################################################################################
 
 if __name__ == '__main__':
     load_dotenv(find_dotenv())
-    csrf.init_app(app)
-    app.register_error_handler(401, status_401)
-    app.register_error_handler(404, status_404)
+    #csrf.init_app(app)
+    # app.register_error_handler(401, status_401)
+    # app.register_error_handler(404, status_404)
     app.run(host='0.0.0.0', port=5000)
 
