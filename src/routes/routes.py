@@ -1,13 +1,13 @@
 from flask import Blueprint, jsonify, request
 from datetime import datetime
-from src.models.users import Usuario, Empresa
-from src.models.tipo_comprobante import TipoComprobante
-from src.models.proveedores import Proveedor,TgModelo,TgModeloItem
-from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StOrdenCompraTracking, StPackinglist
-from src.models.productos import Producto
-from src.models.despiece import StDespiece
-from src.models.producto_despiece import StProductoDespiece
-from src.config.database import db
+from models.users import Usuario, Empresa
+from models.tipo_comprobante import TipoComprobante
+from models.proveedores import Proveedor,TgModelo,TgModeloItem
+from models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StOrdenCompraTracking, StPackinglist
+from models.productos import Producto
+from models.despiece import StDespiece
+from models.producto_despiece import StProductoDespiece
+from config.database import db
 import logging
 import datetime
 from datetime import datetime

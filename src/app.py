@@ -2,9 +2,9 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from flask_wtf.csrf import CSRFProtect
 from numpy.core.defchararray import upper
 
-from src import oracle
-from src.routes.web_services import web_services
-from src.routes.auth import auth
+import oracle
+from routes.web_services import web_services
+from routes.auth import auth
 from dotenv import load_dotenv, find_dotenv
 from models.ModelUser import ModelUser
 from models.entities.User import User
@@ -19,9 +19,9 @@ from datetime import datetime, timedelta, timezone
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager
 
 ###################################################
-from src.config.database import db
-from src.routes.routes import bp
-from src.routes.routes_custom import bpcustom
+from config.database import db
+from routes.routes import bp
+from routes.routes_custom import bpcustom
 import logging
 from sqlalchemy import create_engine
 ###################################################

@@ -1,6 +1,6 @@
-from src.function_jwt import validate_token, write_token
+from function_jwt import validate_token, write_token
 from flask import request, jsonify, Blueprint
-from src import oracle
+import oracle
 
 
 auth = Blueprint("auth", __name__)

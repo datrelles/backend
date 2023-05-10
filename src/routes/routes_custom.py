@@ -1,11 +1,18 @@
 from flask import Blueprint, jsonify, request
-from src.models.productos import Producto
-from src.models.proveedores import Proveedor, TgModeloItem
-from src.models.tipo_comprobante import TipoComprobante
-from src.models.producto_despiece import StProductoDespiece
-from src.models.despiece import StDespiece
+from models.productos import Producto
+from models.proveedores import Proveedor, TgModeloItem
+from models.tipo_comprobante import TipoComprobante
+from models.producto_despiece import StProductoDespiece
+from models.despiece import StDespiece
+from models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StOrdenCompraTracking,StPackinglist
+from config.database import db
+import datetime
+from datetime import datetime
+import logging
 
 bpcustom = Blueprint('routes_custom', __name__)
+
+logger = logging.getLogger(__name__)
 
 #CONSULTAS GET CON PARAMETROS
 
@@ -233,3 +240,191 @@ def obtener_estados_param():
         })
     return jsonify(serialized_estados)
 
+#METODOS GET CUSTOM PARA ORDENES DE COMPRA
+
+@bpcustom.route('/orden_compra_cab_param')
+def obtener_orden_compra_cab_param():
+
+    empresa = request.args.get('empresa', None)
+    cod_po = request.args.get('cod_po', None)
+
+    query=StOrdenCompraCab.query()
+    if empresa:
+        query = query.filter(StOrdenCompraCab.empresa == empresa)
+    if cod_po:
+        query = query.filter(StOrdenCompraCab.cod_po == cod_po)
+
+    cabeceras = query.all()
+    serialized_cabeceras = []
+    for cabecera in cabeceras:
+        empresa = cabecera.empresa if cabecera.empresa else ""
+        cod_po = cabecera.cod_po if cabecera.cod_po else ""
+        tipo_comprobante = cabecera.tipo_comprobante if cabecera.tipo_comprobante else ""
+        cod_proveedor = cabecera.cod_proveedor if cabecera.cod_proveedor else ""
+        nombre = cabecera.nombre if cabecera.nombre else ""
+        proforma = cabecera.proforma if cabecera.proforma else ""
+        invoice = cabecera.invoice if cabecera.invoice else ""
+        bl_no = cabecera.bl_no if cabecera.bl_no else ""
+        cod_po_padre = cabecera.cod_po_padre if cabecera.cod_po_padre else ""
+        usuario_crea = cabecera.usuario_crea if cabecera.usuario_crea else ""
+        fecha_crea = cabecera.fecha_crea if cabecera.fecha_crea else ""
+        usuario_modifica = cabecera.usuario_modifica if cabecera.usuario_modifica else ""
+        fecha_modifica = cabecera.fecha_modifica if cabecera.fecha_modifica else ""
+        cod_modelo = cabecera.cod_modelo if cabecera.cod_modelo else ""
+        cod_item = cabecera.cod_item if cabecera.cod_item else ""
+        serialized_cabeceras.append({
+            'empresa': empresa,
+            'cod_po': cod_po,
+            'tipo_combrobante': tipo_comprobante,
+            'cod_proveedor': cod_proveedor,
+            'nombre': nombre,
+            'proforma': proforma,
+            'invoice': invoice,
+            'bl_no': bl_no,
+            'cod_po_padre': cod_po_padre,
+            'usuario_crea': usuario_crea,
+            'fecha_crea': fecha_crea,
+            'usuario_modifica': usuario_modifica,
+            'fecha_modifica': fecha_modifica,
+            'cod_modelo': cod_modelo,
+            'cod_item': cod_item
+        })
+
+        return jsonify(serialized_cabeceras)
+    
+@bpcustom.route('/oden_compra_det_param')
+def obtener_orden_comrpa_det_param():
+
+    empresa = request.args.get('empresa', None)
+    cod_po = request.args.get('cod_po', None)
+
+    query = StOrdenCompraDet.query()
+    if empresa :
+        query = query.filter(StOrdenCompraDet.empresa == empresa)
+    if cod_po:
+        query = query.filter(StOrdenCompraDet.cod_po == cod_po)
+
+    detalles = query.all()
+    serialized_detalles = []
+    for detalle in detalles:
+        cod_po = detalle.cod_po if detalle.cod_po else ""
+        secuencia = detalle.secuencia if detalle.secuencia else ""
+        empresa = detalle.empresa if detalle.empresa else ""
+        cod_producto = detalle.cod_producto if detalle.cod_producto else ""
+        cod_producto_modelo = detalle.cod_producto_modelo if detalle.cod_producto_modelo else ""
+        nombre = detalle.nombre if detalle.nombre else ""
+        nombre_i = detalle.nombre_i if detalle.nombre_i else ""
+        nombre_c = detalle.nombre_c if detalle.nombre_c else ""
+        costo_sistema = detalle.costo_sistema if detalle.costo_sistema else ""
+        fob = detalle.fob if detalle.fob else ""
+        cantidad_pedido = detalle.cantidad_pedido if detalle.cantidad_pedido else ""
+        fob_total = fob * cantidad_pedido
+        saldo_producto = detalle.saldo_producto if detalle.saldo_producto else ""
+        unidad_medida = detalle.unidad_medida if detalle.unidad_medida else ""
+        usuario_crea = detalle.usuario_crea if detalle.usuario_crea else ""
+        fecha_crea = detalle.fecha_crea if detalle.fecha_crea else ""
+        usuario_modifica = detalle.usuario_modifica if detalle.usuario_modifica else ""
+        fecha_modifica = detalle.fecha_modifica if detalle.fecha_modifica else ""
+        serialized_detalles.append({
+            'cod_po': cod_po,
+            'secuencia': secuencia,
+            'empresa': empresa,
+            'cod_producto': cod_producto,
+            'cod_producto_modelo': cod_producto_modelo,
+            'nombre': nombre,
+            'nombre_ingles': nombre_i,
+            'nombre_china': nombre_c,
+            'costo_sistema': costo_sistema,
+            'fob': fob,
+            'fob_total': fob_total,
+            'cantidad_pedido': cantidad_pedido,
+            'saldo_producto': saldo_producto,
+            'unidad_medida': unidad_medida,
+            'usuario_crea': usuario_crea,
+            'fecha_crea': fecha_crea,
+            'usuario_modifica': usuario_modifica,
+            'fecha_modifica': fecha_modifica,
+        })
+    return jsonify(serialized_detalles)
+
+@bpcustom.route('/orden_compra_track_param')
+def obtener_orden_compra_track_param():
+
+    empresa = request.args.get('empresa', None)
+    cod_po = request.args.get('cod_po', None)
+
+    query = StOrdenCompraTracking.query()
+    if empresa:
+        query = query.filter(StOrdenCompraTracking.empresa == empresa)
+    if cod_po:
+        query = query.filter(StOrdenCompraTracking.cod_po == cod_po)
+
+    seguimientos = query.all()
+    serialized_seguimientos = []
+    for seguimiento in seguimientos:
+        cod_po = seguimiento.cod_po if seguimiento.cod_po else ""
+        empresa = seguimiento.empresa if seguimiento.empresa else ""
+        observaciones = seguimiento.observaciones if seguimiento.observaciones else ""
+        fecha_pedido = datetime.strftime(seguimiento.fecha_pedido,"%d/%m/%Y") if seguimiento.fecha_pedido else ""
+        fecha_transito = datetime.strftime(seguimiento.fecha_transito,"%d/%m/%Y") if seguimiento.fecha_transito else ""
+        fecha_puerto = datetime.strftime(seguimiento.fecha_puerto,"%d/%m/%Y") if seguimiento.fecha_puerto else ""
+        fecha_llegada = datetime.strftime(seguimiento.fecha_llegada,"%d/%m/%Y") if seguimiento.fecha_llegada else ""
+        estado = seguimiento.estado if seguimiento.estado else ""
+        buque = seguimiento.buque if seguimiento.buque else ""
+        naviera = seguimiento.naviera if seguimiento.naviera else ""
+        flete = seguimiento.flete if seguimiento.flete else ""
+        agente_aduanero = seguimiento.agente_aduanero if seguimiento.agente_aduanero else ""
+        puerto_origen = seguimiento.puerto_origen if seguimiento.puerto_origen else ""
+        usuario_crea = seguimiento.usuario_crea if seguimiento.usuario_crea else ""
+        fecha_crea = datetime.strftime(seguimiento.fecha_crea,"%d/%m/%Y") if seguimiento.fecha_crea else ""
+        usuario_modifica = seguimiento.usuario_modifica if seguimiento.usuario_modifica else ""
+        fecha_modifica = datetime.strftime(seguimiento.fecha_modifica,"%d/%m/%Y") if seguimiento.fecha_modifica else ""
+        serialized_seguimientos.append({
+            'cod_po': cod_po,
+            'empresa': empresa,
+            'observaciones': observaciones,
+            'fecha_pedido': fecha_pedido,
+            'fecha_transito': fecha_transito,
+            'fecha_puerto': fecha_puerto,
+            'fecha_llegada': fecha_llegada,
+            'estado': estado,
+            'buque': buque,
+            'naviera': naviera,
+            'flete': flete,
+            'agente_aduanero': agente_aduanero,
+            'puerto_origen': puerto_origen,
+            'usuario_crea': usuario_crea,
+            'fecha_crea': fecha_crea,
+            'usuario_modifica': usuario_modifica,
+            'fecha_modifica': fecha_modifica,
+        })
+    return jsonify(serialized_seguimientos)
+
+#METODO CUSTOM PARA ELIMINAR TODA LA ORDEN DE COMPRA
+
+@bpcustom.route('/eliminar_orden_compra_total/<cod_po>/<empresa>', methods=['DELETE'])
+def eliminar_orden_compra(cod_po, empresa):
+    try:
+        orden_cab = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po, empresa=empresa).first()
+        if not orden_cab:
+            return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
+
+        # Eliminar registros en StOrdenCompraDet
+        db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa).delete()
+
+        # Eliminar registros en StOrdenCompraTracking
+        db.session.query(StOrdenCompraTracking).filter_by(cod_po=cod_po, empresa=empresa).delete()
+
+        # Eliminar registros en StPackinglist
+        db.session.query(StPackinglist).filter_by(cod_po=cod_po, empresa=empresa).delete()
+
+        # Eliminar registro en StOrdenCompraCab
+        db.session.delete(orden_cab)
+
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Orden de compra eliminada exitosamente.'})
+    
+    except Exception as e:
+        logger.exception(f"Error al eliminar: {str(e)}")
+        return jsonify({'error': str(e)}), 500    
