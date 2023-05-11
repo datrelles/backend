@@ -38,6 +38,8 @@ class StOrdenCompraDet(Base):
     cod_producto = Column(VARCHAR(14))
     cod_producto_modelo = Column(CHAR(50))
     nombre = Column(CHAR(50))
+    nombre_i = Column(VARCHAR(200))
+    nombre_c = Column(VARCHAR(200))
     costo_sistema = Column(NUMBER(14, 2, True))
     fob = Column(NUMBER(14, 2, True))
     fob_total = Column(NUMBER(14, 2, True))
