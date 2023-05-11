@@ -292,7 +292,7 @@ def obtener_orden_compra_cab_param():
 
         return jsonify(serialized_cabeceras)
     
-@bpcustom.route('/oden_compra_det_param')
+@bpcustom.route('/orden_compra_det_param')
 def obtener_orden_comrpa_det_param():
 
     empresa = request.args.get('empresa', None)
