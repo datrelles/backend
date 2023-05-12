@@ -267,9 +267,9 @@ def obtener_orden_compra_cab_param():
         bl_no = cabecera.bl_no if cabecera.bl_no else ""
         cod_po_padre = cabecera.cod_po_padre if cabecera.cod_po_padre else ""
         usuario_crea = cabecera.usuario_crea if cabecera.usuario_crea else ""
-        fecha_crea = cabecera.fecha_crea if cabecera.fecha_crea else ""
+        fecha_crea = cabecera.fecha_crea.strftime("%d/%m/%Y") if cabecera.fecha_crea else ""
         usuario_modifica = cabecera.usuario_modifica if cabecera.usuario_modifica else ""
-        fecha_modifica = cabecera.fecha_modifica if cabecera.fecha_modifica else ""
+        fecha_modifica = cabecera.fecha_modifica.strftime("%d/%m/%Y") if cabecera.fecha_modifica else ""
         cod_modelo = cabecera.cod_modelo if cabecera.cod_modelo else ""
         cod_item = cabecera.cod_item if cabecera.cod_item else ""
         serialized_cabeceras.append({
@@ -289,8 +289,8 @@ def obtener_orden_compra_cab_param():
             'cod_modelo': cod_modelo,
             'cod_item': cod_item
         })
-
-        return jsonify(serialized_cabeceras)
+    
+    return jsonify(serialized_cabeceras)
     
 @bpcustom.route('/orden_compra_det_param')
 def obtener_orden_comrpa_det_param():
@@ -322,9 +322,9 @@ def obtener_orden_comrpa_det_param():
         saldo_producto = detalle.saldo_producto if detalle.saldo_producto else ""
         unidad_medida = detalle.unidad_medida if detalle.unidad_medida else ""
         usuario_crea = detalle.usuario_crea if detalle.usuario_crea else ""
-        fecha_crea = detalle.fecha_crea if detalle.fecha_crea else ""
+        fecha_crea = detalle.fecha_crea.strftime("%d/%m/%Y") if detalle.fecha_crea else ""
         usuario_modifica = detalle.usuario_modifica if detalle.usuario_modifica else ""
-        fecha_modifica = detalle.fecha_modifica if detalle.fecha_modifica else ""
+        fecha_modifica = detalle.fecha_modifica.strftime("%d/%m/%Y") if detalle.fecha_modifica else ""
         serialized_detalles.append({
             'cod_po': cod_po,
             'secuencia': secuencia,
