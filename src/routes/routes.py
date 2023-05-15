@@ -569,10 +569,10 @@ def actualizar_orden_compra_cab(cod_po,empresa):
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
-@bp.route('/orden_compra_det/<cod_po>/<empresa>', methods=['PUT'])
-def actualizar_orden_compra_det(cod_po,empresa):
+@bp.route('/orden_compra_det/<cod_po>/<empresa>/<secuencia>', methods=['PUT'])
+def actualizar_orden_compra_det(cod_po,empresa,secuencia):
     try:
-        orden = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po,empresa = empresa).first()
+        orden = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po,empresa = empresa,secuencia = secuencia).first()
         if not orden:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
 
