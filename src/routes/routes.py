@@ -688,29 +688,50 @@ def eliminar_orden_compra_cab(cod_po, empresa):
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
     
-@bp.route('/orden_compra/<cod_po>/<empresa>', methods=['DELETE'])
-def eliminar_orden_compra(cod_po, empresa):
+@bp.route('/orden_compra_det/<cod_po>/<empresa>', methods=['DELETE'])
+def eliminar_orden_compra_det(cod_po, empresa):
     try:
-        orden_cab = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po, empresa=empresa).first()
-        if not orden_cab:
-            return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
+        detalle = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa).first()
+        if not detalle:
+            return jsonify({'mensaje': 'Detalle de orden de compra no existe.'}), 404
 
-        # Eliminar registros en StOrdenCompraDet
-        db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa).delete()
-
-        # Eliminar registros en StOrdenCompraTracking
-        db.session.query(StOrdenCompraTracking).filter_by(cod_po=cod_po, empresa=empresa).delete()
-
-        # Eliminar registros en StPackinglist
-        db.session.query(StPackinglist).filter_by(cod_po=cod_po, empresa=empresa).delete()
-
-        # Eliminar registro en StOrdenCompraCab
-        db.session.delete(orden_cab)
-
+        db.session.delete(detalle)
         db.session.commit()
 
-        return jsonify({'mensaje': 'Orden de compra eliminada exitosamente.'})
-    
+        return jsonify({'mensaje': 'Detalle de orden de compra eliminada exitosamente.'})
+
     except Exception as e:
         logger.exception(f"Error al eliminar: {str(e)}")
-        return jsonify({'error': str(e)}), 500    
+        return jsonify({'error': str(e)}), 500
+    
+@bp.route('/orden_compra_tracking/<cod_po>/<empresa>', methods=['DELETE'])
+def eliminar_orden_compra_tracking(cod_po, empresa):
+    try:
+        tracking = db.session.query(StOrdenCompraTracking).filter_by(cod_po=cod_po, empresa=empresa).first()
+        if not tracking:
+            return jsonify({'mensaje': 'Tracking de orden de compra no existe.'}), 404
+
+        db.session.delete(tracking)
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Tracking de orden de compra eliminada exitosamente.'})
+
+    except Exception as e:
+        logger.exception(f"Error al eliminar: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    
+@bp.route('/orden_compra_packinglist/<cod_po>/<empresa>', methods=['DELETE'])
+def eliminar_orden_compra_packinglist(cod_po, empresa):
+    try:
+        packing = db.session.query(StPackinglist).filter_by(cod_po=cod_po, empresa=empresa).first()
+        if not packing:
+            return jsonify({'mensaje': 'Packinglist de orden de compra no existe.'}), 404
+
+        db.session.delete(packing)
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Packinglist de orden de compra eliminada exitosamente.'})
+
+    except Exception as e:
+        logger.exception(f"Error al eliminar: {str(e)}")
+        return jsonify({'error': str(e)}), 500
