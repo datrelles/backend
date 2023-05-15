@@ -688,10 +688,10 @@ def eliminar_orden_compra_cab(cod_po, empresa):
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
     
-@bp.route('/orden_compra_det/<cod_po>/<empresa>', methods=['DELETE'])
-def eliminar_orden_compra_det(cod_po, empresa):
+@bp.route('/orden_compra_det/<cod_po>/<empresa>/<secuencia>', methods=['DELETE'])
+def eliminar_orden_compra_det(cod_po, empresa, secuencia):
     try:
-        detalle = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa).first()
+        detalle = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa, secuencia = secuencia).first()
         if not detalle:
             return jsonify({'mensaje': 'Detalle de orden de compra no existe.'}), 404
 
