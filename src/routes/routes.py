@@ -1,16 +1,19 @@
 from flask import Blueprint, jsonify, request
 from datetime import datetime
-from models.users import Usuario, Empresa
-from models.tipo_comprobante import TipoComprobante
-from models.proveedores import Proveedor,TgModelo,TgModeloItem
-from models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StOrdenCompraTracking, StPackinglist
-from models.productos import Producto
-from models.despiece import StDespiece
-from models.producto_despiece import StProductoDespiece
-from config.database import db
+from src.models.users import Usuario, Empresa
+from src.models.tipo_comprobante import TipoComprobante
+from src.models.proveedores import Proveedor,TgModelo,TgModeloItem
+from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StOrdenCompraTracking, StPackinglist
+from src.models.productos import Producto
+from src.models.despiece import StDespiece
+from src.models.producto_despiece import StProductoDespiece
+from src.config.database import db
 import logging
 import datetime
 from datetime import datetime
+from flask_jwt_extended import jwt_required
+from flask_cors import cross_origin
+
 
 bp = Blueprint('routes', __name__)
 
@@ -130,6 +133,8 @@ def obtener_orden_compra_cab():
     return jsonify(serialized_ordenes_compra)
 
 @bp.route('/orden_compra_det')
+@jwt_required()
+@cross_origin()
 def obtener_orden_compra_det():
     query = StOrdenCompraDet.query()
     detalles = query.all()
@@ -423,7 +428,7 @@ def crear_orden_compra_cab():
     try:
         data = request.get_json()
         fecha_crea = datetime.strptime(data['fecha_crea'], '%d/%m/%Y').date()
-        fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
+        # fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
         orden = StOrdenCompraCab(
             empresa=data['empresa'],
             cod_po = data['cod_po'],
@@ -435,8 +440,8 @@ def crear_orden_compra_cab():
             cod_po_padre = data['cod_po_padre'],
             usuario_crea = data['usuario_crea'],
             fecha_crea = fecha_crea,
-            usuario_modifica = data['usuario_modifica'],
-            fecha_modifica = fecha_modifica,
+            # usuario_modifica = data['usuario_modifica'],
+            # fecha_modifica = fecha_modifica,
             cod_modelo = data['cod_modelo'],
             cod_item = data['cod_item'],
         )
