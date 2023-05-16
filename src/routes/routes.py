@@ -106,6 +106,8 @@ def obtener_orden_compra_cab():
         fecha_modifica = orden.fecha_modifica if orden.fecha_modifica else ""
         cod_modelo = orden.cod_modelo if orden.cod_modelo else ""
         cod_item = orden.cod_item if orden.cod_item else ""
+        bodega = orden.bodega if orden.bodega else ""
+        cod_agencia = orden.cod_agencia if orden.cod_agencia else ""
         serialized_ordenes_compra.append({
             'empresa': empresa,
             'cod_po': cod_po,
@@ -121,7 +123,9 @@ def obtener_orden_compra_cab():
             'usuario_modifica': usuario_modifica,
             'fecha_modifica': fecha_modifica,
             'cod_modelo': cod_modelo,
-            'cod_item': cod_item
+            'cod_item': cod_item,
+            'bodega': bodega,
+            'cod_agencia': cod_agencia
         })
     return jsonify(serialized_ordenes_compra)
 
@@ -423,6 +427,8 @@ def crear_orden_compra_cab():
         orden = StOrdenCompraCab(
             empresa=data['empresa'],
             cod_po = data['cod_po'],
+            bodega = data['bodega'],
+            cod_agencia = data['cod_agencia'],
             tipo_comprobante = data['tipo_comprobante'],
             cod_proveedor = data['cod_proveedor'],
             nombre = data['nombre'],

@@ -9,7 +9,7 @@ Base = declarative_base(metadata = db.metadata)
 class StOrdenCompraCab(Base):
     __tablename__ = 'st_orden_compra_cab'
 
-    empresa = Column(NUMBER(asdecimal=False), primary_key=True, nullable=False)
+    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
     cod_po = Column(VARCHAR(9), primary_key=True, nullable=False)
     tipo_comprobante = Column(VARCHAR(2), nullable=False)
     cod_proveedor = Column(VARCHAR(14))
@@ -24,6 +24,8 @@ class StOrdenCompraCab(Base):
     fecha_modifica = Column(DateTime)
     cod_modelo = Column(VARCHAR(8))
     cod_item = Column(VARCHAR(3))
+    bodega = Column(NUMBER(4),nullable=False)
+    cod_agencia = Column(NUMBER(4),nullable=False)
 
     @classmethod
     def query(cls):
