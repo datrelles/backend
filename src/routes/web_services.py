@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
-from function_jwt import validate_token
-import oracle
+from src.function_jwt import validate_token
+import src.oracle
 import json
 
 
