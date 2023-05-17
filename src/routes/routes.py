@@ -594,6 +594,8 @@ def actualizar_orden_compra_det(cod_po,empresa,secuencia):
         orden.cod_producto = data.get('cod_producto', orden.cod_producto)
         orden.cod_producto_modelo = data.get('cod_producto_modelo', orden.cod_producto_modelo)
         orden.nombre = data.get('nombre', orden.nombre)
+        orden.nombre_i = data.get('nombre_i',orden.nombre_i)
+        orden.nombre_c = data.get('nombre_c',orden.nombre_c)
         orden.costo_sistema = data.get('costo_sistema', orden.costo_sistema)
         orden.fob = data.get('fob', orden.fob)
         orden.fob_total = data.get('fob_total', orden.fob_total)
@@ -604,6 +606,9 @@ def actualizar_orden_compra_det(cod_po,empresa,secuencia):
         orden.fecha_crea = datetime.strptime(data.get('fecha_crea', str(orden.fecha_crea)), '%d/%m/%Y').date()
         orden.usuario_modifica = data.get('usuario_modifica', orden.usuario_modifica)
         orden.fecha_modifica = datetime.strptime(data.get('fecha_modifica', str(orden.fecha_modifica)), '%d/%m/%Y').date()
+
+        # Calcula el valor de fob_total
+        orden.fob_total = orden.fob * orden.cantidad_pedido
 
         db.session.commit()
 
