@@ -461,13 +461,16 @@ def crear_orden_compra_det():
         data = request.get_json()
         fecha_crea = datetime.strptime(data['fecha_crea'], '%d/%m/%Y').date()
         fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
+        secuencia = str(obtener_secuencia(data['cod_po']))
         detalle = StOrdenCompraDet(
             cod_po=data['cod_po'],
-            secuencia=data['secuencia'],
+            secuencia=secuencia,
             empresa=data['empresa'],
             cod_producto=data['cod_producto'],
             cod_producto_modelo=data['cod_producto_modelo'],
             nombre=data['nombre'],
+            nombre_i = data['nombre_i'],
+            nombre_c = data['nombre_c'],
             costo_sistema=data['costo_sistema'],
             fob=data['fob'],
             cantidad_pedido=data['cantidad_pedido'],
@@ -478,6 +481,7 @@ def crear_orden_compra_det():
             usuario_modifica=data['usuario_modifica'],
             fecha_modifica=fecha_modifica  ,
         )
+        detalle.fob_total = data['fob'] * data['cantidad_pedido']
         db.session.add(detalle)
         db.session.commit()
         return jsonify({'mensaje': 'Detalle de orden de compra creado exitosamente.'})
@@ -486,6 +490,32 @@ def crear_orden_compra_det():
         logger.exception(f"Error al consultar: {str(e)}")
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
+    
+def obtener_secuencia(cod_po):
+    # Verificar si el cod_po existe en la tabla StOrdenCompraCab
+    existe_cod_po_cab = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po).first()
+
+    if existe_cod_po_cab is not None:
+        print('EXISTE',existe_cod_po_cab.cod_po)
+        # Si el cod_po existe en la tabla StOrdenCompraCab, verificar si existe en la tabla StOrdenCompraDet
+        existe_cod_po_det = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po).first()
+
+        if existe_cod_po_det is not None:
+            print('EXISTE2',existe_cod_po_det.cod_po)
+            # Si el cod_po existe en la tabla StOrdenCompraDet, obtener el último número de secuencia
+            max_secuencia = db.session.query(func.max(StOrdenCompraDet.secuencia)).filter_by(cod_po=cod_po).scalar()
+            print('MAXIMO',max_secuencia)
+            nueva_secuencia = str(int(max_secuencia) + 1)
+            print('PROXIMO',nueva_secuencia)
+            return nueva_secuencia
+        else:
+            # Si el cod_po no existe en la tabla StOrdenCompraDet, generar secuencia desde 1
+            nueva_secuencia = '1'
+            print('Secuencia de inicio', nueva_secuencia)
+            return nueva_secuencia
+    else:
+        # Si el cod_po no existe en la tabla StOrdenCompraCab, mostrar mensaje de error
+        raise ValueError('La Orden de Compra no existe.')
     
 @bp.route('/packinglist', methods=['POST'])
 def crear_packinglist():
