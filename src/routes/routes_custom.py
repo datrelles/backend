@@ -9,6 +9,8 @@ from config.database import db
 import datetime
 from datetime import datetime
 import logging
+from flask_jwt_extended import jwt_required
+from flask_cors import cross_origin
 
 bpcustom = Blueprint('routes_custom', __name__)
 
@@ -17,6 +19,8 @@ logger = logging.getLogger(__name__)
 #CONSULTAS GET CON PARAMETROS
 
 @bpcustom.route('/productos_param') #sw para mostrar los productos por parametros
+@jwt_required()
+@cross_origin()
 def obtener_productos_param():
     cod_producto = request.args.get('cod_producto', None)
     empresa = request.args.get('empresa', None)
@@ -79,6 +83,8 @@ def obtener_productos_param():
     return jsonify(serialized_detalles)
 
 @bpcustom.route('/proveedores_param') #sw para mostrar los proveedores con ingreso de parametros de empresa,nombre y cod_proveedor
+@jwt_required()
+@cross_origin()
 def obtener_proveedores_param():
 
     cod_proveedor = request.args.get('cod_proveedor', None)
@@ -112,6 +118,8 @@ def obtener_proveedores_param():
     return jsonify(serialized_proveedores)
 
 @bpcustom.route('/tipo_comprobante_param')
+@jwt_required()
+@cross_origin()
 def obtener_tipo_comprobante_param():
 
     empresa = request.args.get('empresa', None)
@@ -142,6 +150,8 @@ def obtener_tipo_comprobante_param():
     return jsonify(serialized_comprobantes)
 
 @bpcustom.route('/prod_despiece_param')
+@jwt_required()
+@cross_origin()
 def obtener_prod_despiece_param():
 
     empresa = request.args.get('empresa',None)
@@ -176,6 +186,8 @@ def obtener_prod_despiece_param():
     return jsonify(serialized_prodespiece)
 
 @bpcustom.route('/nombre_productos_param')
+@jwt_required()
+@cross_origin()
 def obtener_nombre_productos_param():
 
     empresa = request.args.get('empresa',None)
@@ -205,6 +217,8 @@ def obtener_nombre_productos_param():
     return jsonify(serialized_nomproductos)
 
 @bpcustom.route('/estados_param')
+@jwt_required()
+@cross_origin()
 def obtener_estados_param():
 
     empresa = request.args.get('empresa', None)
@@ -243,6 +257,8 @@ def obtener_estados_param():
 #METODOS GET CUSTOM PARA ORDENES DE COMPRA
 
 @bpcustom.route('/orden_compra_cab_param')
+@jwt_required()
+@cross_origin()
 def obtener_orden_compra_cab_param():
 
     empresa = request.args.get('empresa', None)
@@ -293,6 +309,8 @@ def obtener_orden_compra_cab_param():
     return jsonify(serialized_cabeceras)
     
 @bpcustom.route('/orden_compra_det_param')
+@jwt_required()
+@cross_origin()
 def obtener_orden_comrpa_det_param():
 
     empresa = request.args.get('empresa', None)
@@ -348,6 +366,8 @@ def obtener_orden_comrpa_det_param():
     return jsonify(serialized_detalles)
 
 @bpcustom.route('/orden_compra_track_param')
+@jwt_required()
+@cross_origin()
 def obtener_orden_compra_track_param():
 
     empresa = request.args.get('empresa', None)
@@ -403,6 +423,8 @@ def obtener_orden_compra_track_param():
 #METODO CUSTOM PARA ELIMINAR TODA LA ORDEN DE COMPRA
 
 @bpcustom.route('/eliminar_orden_compra_total/<cod_po>/<empresa>', methods=['DELETE'])
+@jwt_required()
+@cross_origin()
 def eliminar_orden_compra(cod_po, empresa):
     try:
         orden_cab = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po, empresa=empresa).first()

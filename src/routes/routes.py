@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 #METODOS GET
 
 @bp.route('/usuarios')
+@jwt_required()
+@cross_origin()
 def obtener_usuarios():
     query = Usuario.query()
     usuarios = query.all()
@@ -45,6 +47,8 @@ def obtener_usuarios():
     return jsonify(serialized_usuarios)
 
 @bp.route('/empresas')
+@jwt_required()
+@cross_origin()
 def obtener_empresas():
     empresas = Empresa.query.all()
     #print(type(empresas))
@@ -55,6 +59,8 @@ def obtener_empresas():
     return jsonify(resultados)
 
 @bp.route('/tipo_comprobante')
+@jwt_required()
+@cross_origin()
 def obtener_tipo_comprobante():
     query = TipoComprobante.query()
     comprobantes = query.all()
@@ -69,6 +75,8 @@ def obtener_tipo_comprobante():
     return jsonify(serialized_comprobantes)
 
 @bp.route('/proveedores_ext')
+@jwt_required()
+@cross_origin()
 def obtener_proveedores_ext():
     query = db.session.query(Proveedor).join(ProveedorHor, Proveedor.cod_proveedor == ProveedorHor.cod_proveedorh).filter(ProveedorHor.cod_tipo_proveedorh == 'EXT')
     proveedores = query.all()
@@ -94,6 +102,8 @@ def obtener_proveedores_ext():
     return jsonify(serialized_proveedores)
 
 @bp.route('/proveedores_nac')
+@jwt_required()
+@cross_origin()
 def obtener_proveedores_nac():
     query = db.session.query(Proveedor).join(ProveedorHor, Proveedor.cod_proveedor == ProveedorHor.cod_proveedorh).filter(ProveedorHor.cod_tipo_proveedorh == 'NAC')
     proveedores = query.all()
@@ -119,6 +129,8 @@ def obtener_proveedores_nac():
     return jsonify(serialized_proveedores)
 
 @bp.route('/orden_compra_cab')
+@jwt_required()
+@cross_origin()
 def obtener_orden_compra_cab():
     query = StOrdenCompraCab.query()
     ordenes_compra = query.all()
@@ -213,6 +225,8 @@ def obtener_orden_compra_det():
     return jsonify(serialized_detalles)
 
 @bp.route('/productos')
+@jwt_required()
+@cross_origin()
 def obtener_productos():
     query = Producto.query()
     productos = query.all()
@@ -263,6 +277,8 @@ def obtener_productos():
     return jsonify(serialized_detalles)
 
 @bp.route('/estados')
+@jwt_required()
+@cross_origin()
 def obtener_estados():
     try:
         query = TgModeloItem.query()
@@ -294,6 +310,8 @@ def obtener_estados():
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/orden_compra_track')
+@jwt_required()
+@cross_origin()
 def obtener_orden_compra_track():
     try:
         query = StOrdenCompraTracking.query()
@@ -344,6 +362,8 @@ def obtener_orden_compra_track():
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/packinglist')
+@jwt_required()
+@cross_origin()
 def obtener_packinlist():
     try:
         query = StPackinglist.query()
@@ -384,6 +404,8 @@ def obtener_packinlist():
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/nombre_productos')
+@jwt_required()
+@cross_origin()
 def obtener_nombre_productos():
     try:
         query = StDespiece.query()
@@ -410,6 +432,8 @@ def obtener_nombre_productos():
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/prod_despiece')
+@jwt_required()
+@cross_origin()
 def obtener_producto_despiece():
     try:
         query = StProductoDespiece.query()
@@ -438,6 +462,8 @@ def obtener_producto_despiece():
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/tgmodelo')
+@jwt_required()
+@cross_origin()
 def obtener_tgmodelo():
     try:
         query = TgModelo.query()
@@ -460,6 +486,8 @@ def obtener_tgmodelo():
 #METODOS POST
 
 @bp.route('/orden_compra_cab', methods = ['POST'])
+@jwt_required()
+@cross_origin()
 def crear_orden_compra_cab():
     try:
         data = request.get_json()
@@ -492,6 +520,8 @@ def crear_orden_compra_cab():
 
 
 @bp.route('/orden_compra_det', methods=['POST'])
+@jwt_required()
+@cross_origin()
 def crear_orden_compra_det():
     try:
         data = request.get_json()
@@ -566,6 +596,8 @@ def obtener_secuencia(cod_po):
         raise ValueError('La Orden de Compra no existe.')
     
 @bp.route('/packinglist', methods=['POST'])
+@jwt_required()
+@cross_origin()
 def crear_packinglist():
     try:
         data = request.get_json()
@@ -595,6 +627,8 @@ def crear_packinglist():
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/orden_compra_track', methods=['POST'])
+@jwt_required()
+@cross_origin()
 def crear_orden_compra_track():
     try:
         data = request.get_json()
@@ -626,6 +660,8 @@ def crear_orden_compra_track():
 # METODOS UPDATE DE TABLAS DE ORDEN DE COMPRA
 
 @bp.route('/orden_compra_cab/<cod_po>/<empresa>', methods=['PUT'])
+@jwt_required()
+@cross_origin()
 def actualizar_orden_compra_cab(cod_po,empresa):
     try:
         orden = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po,empresa = empresa).first()
@@ -659,6 +695,8 @@ def actualizar_orden_compra_cab(cod_po,empresa):
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/orden_compra_det/<cod_po>/<empresa>/<secuencia>', methods=['PUT'])
+@jwt_required()
+@cross_origin()
 def actualizar_orden_compra_det(cod_po,empresa,secuencia):
     try:
         orden = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po,empresa = empresa,secuencia = secuencia).first()
@@ -699,6 +737,8 @@ def actualizar_orden_compra_det(cod_po,empresa,secuencia):
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/orden_compra_tracking/<cod_po>/<empresa>', methods=['PUT'])
+@jwt_required()
+@cross_origin()
 def actualizar_orden_compra_trancking(cod_po,empresa):
     try:
         tracking = db.session.query(StOrdenCompraTracking).filter_by(cod_po=cod_po, empresa=empresa).first()
@@ -736,6 +776,8 @@ def actualizar_orden_compra_trancking(cod_po,empresa):
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/orden_compra_packinglist/<cod_po>/<empresa>', methods=['PUT'])
+@jwt_required()
+@cross_origin()
 def actualizar_orden_compra_packinlist(cod_po,empresa):
     try:
         packinglist = db.session.query(StPackinglist).filter_by(cod_po=cod_po,empresa=empresa).first()
@@ -768,6 +810,8 @@ def actualizar_orden_compra_packinlist(cod_po,empresa):
 #METODOS DELETE PARA ORDENES DE COMPRA
 
 @bp.route('/orden_compra_cab/<cod_po>/<empresa>', methods=['DELETE'])
+@jwt_required()
+@cross_origin()
 def eliminar_orden_compra_cab(cod_po, empresa):
     try:
         orden = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po, empresa=empresa).first()
@@ -784,6 +828,8 @@ def eliminar_orden_compra_cab(cod_po, empresa):
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/orden_compra_det/<cod_po>/<empresa>/<secuencia>', methods=['DELETE'])
+@jwt_required()
+@cross_origin()
 def eliminar_orden_compra_det(cod_po, empresa, secuencia):
     try:
         detalle = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa, secuencia = secuencia).first()
@@ -800,6 +846,8 @@ def eliminar_orden_compra_det(cod_po, empresa, secuencia):
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/orden_compra_tracking/<cod_po>/<empresa>', methods=['DELETE'])
+@jwt_required()
+@cross_origin()
 def eliminar_orden_compra_tracking(cod_po, empresa):
     try:
         tracking = db.session.query(StOrdenCompraTracking).filter_by(cod_po=cod_po, empresa=empresa).first()
@@ -816,6 +864,8 @@ def eliminar_orden_compra_tracking(cod_po, empresa):
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/orden_compra_packinglist/<cod_po>/<empresa>', methods=['DELETE'])
+@jwt_required()
+@cross_origin()
 def eliminar_orden_compra_packinglist(cod_po, empresa):
     try:
         packing = db.session.query(StPackinglist).filter_by(cod_po=cod_po, empresa=empresa).first()
