@@ -153,6 +153,7 @@ def obtener_orden_compra_cab():
         cod_item = orden.cod_item if orden.cod_item else ""
         bodega = orden.bodega if orden.bodega else ""
         cod_agencia = orden.cod_agencia if orden.cod_agencia else ""
+        ciudad = orden.ciudad if orden.ciudad else ""
         serialized_ordenes_compra.append({
             'empresa': empresa,
             'cod_po': cod_po,
@@ -170,7 +171,8 @@ def obtener_orden_compra_cab():
             'cod_modelo': cod_modelo,
             'cod_item': cod_item,
             'bodega': bodega,
-            'cod_agencia': cod_agencia
+            'cod_agencia': cod_agencia,
+            'ciudad': ciudad
         })
     return jsonify(serialized_ordenes_compra)
 
@@ -508,6 +510,7 @@ def crear_orden_compra_cab():
             # fecha_modifica = fecha_modifica,
             cod_modelo = data['cod_modelo'],
             cod_item = data['cod_item'],
+            ciudad = data['ciudad'],
         )
         db.session.add(orden)
         db.session.commit()
@@ -684,6 +687,7 @@ def actualizar_orden_compra_cab(cod_po,empresa):
         orden.fecha_modifica = datetime.strptime(data.get('fecha_modifica', str(orden.fecha_modifica)), '%d/%m/%Y').date()
         orden.cod_modelo = data.get('cod_modelo', orden.cod_modelo)
         orden.cod_item = data.get('cod_item', orden.cod_item)
+        orden.ciudad = data.get('ciudad', orden.ciudad)
 
         db.session.commit()
 

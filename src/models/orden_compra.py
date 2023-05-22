@@ -26,6 +26,7 @@ class StOrdenCompraCab(Base):
     cod_item = Column(VARCHAR(3))
     bodega = Column(NUMBER(4),nullable=False)
     cod_agencia = Column(NUMBER(4),nullable=False)
+    ciudad = Column(VARCHAR(60))
 
     @classmethod
     def query(cls):
