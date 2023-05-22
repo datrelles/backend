@@ -1,5 +1,5 @@
 # coding: utf-8
-from sqlalchemy import CHAR, Column, DateTime, Index, VARCHAR, text
+from sqlalchemy import CHAR, Column, DateTime, Index, VARCHAR, text, Boolean
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from config.database import db
@@ -52,6 +52,7 @@ class StOrdenCompraDet(Base):
     fecha_crea = Column(DateTime)
     usuario_modifica = Column(VARCHAR(30))
     fecha_modifica = Column(DateTime)
+    exportar = Column(Boolean, default=True)
 
     @classmethod
     def query(cls):
@@ -69,7 +70,7 @@ class StOrdenCompraTracking(Base):
     fecha_puerto = Column(DateTime)
     fecha_llegada = Column(DateTime)
     fecha_en_bodega = Column(DateTime)
-    estado = Column(CHAR(30))
+    estado = Column(VARCHAR(30))
     buque = Column(VARCHAR(15))
     naviera = Column(VARCHAR(15))
     flete = Column(NUMBER(15, 0, False))

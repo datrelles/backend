@@ -85,3 +85,52 @@ class Proveedor(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
+
+class ProveedorHor(Base):
+    __tablename__ = 'proveedor_hor'
+
+    empresah = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
+    cod_proveedorh = Column(VARCHAR(14), primary_key=True, nullable=False)
+    activoh = Column(VARCHAR(1))
+    cod_tipo_proveedorh = Column(VARCHAR(3))
+    ruch = Column(VARCHAR(13))
+    contactoh = Column(VARCHAR(50))
+    cargoh = Column(VARCHAR(3))
+    direccion_calleh = Column(VARCHAR(50))
+    direccion_numeroh = Column(VARCHAR(20))
+    telefono1h = Column(VARCHAR(15))
+    faxh = Column(VARCHAR(15))
+    e_mailh = Column(VARCHAR(30))
+    casillah = Column(VARCHAR(10))
+    fecha_creacionh = Column(DateTime)
+    agenciah = Column(VARCHAR(2))
+    observacionesh = Column(VARCHAR(255))
+    useridch = Column(VARCHAR(3))
+
+class TcCoaProveedor(Base):
+    __tablename__ = 'tc_coa_proveedor'
+    __table_args__ = {'schema': 'contabilidad'}
+
+    ruc = Column(VARCHAR(13), primary_key=True)
+    nombre = Column(VARCHAR(100), nullable=False)
+    direccion = Column(VARCHAR(60))
+    direccion_nro = Column(VARCHAR(10))
+    ciudad_matriz = Column(VARCHAR(60))
+    cod_tipo_documento = Column(NUMBER(1, 0, False), nullable=False, index=True)
+    nombre_fantasia = Column(VARCHAR(50))
+    mail = Column(VARCHAR(60))
+    teledofo = Column(VARCHAR(14))
+    nro_autorizacion_contribuyente = Column(VARCHAR(10))
+    es_persona_natural = Column(NUMBER(1, 0, False))
+    es_titulo_superior = Column(NUMBER(1, 0, False))
+    es_contribuyente_especial = Column(NUMBER(1, 0, False))
+    es_lleva_contabilidad = Column(NUMBER(1, 0, False))
+    es_sujeto_retencion_renta = Column(NUMBER(1, 0, False))
+    telefono = Column(VARCHAR(14))
+    fecha_modifica = Column(DateTime)
+    useridc = Column(VARCHAR(3))
+    es_rise = Column(NUMBER(1, 0, False))
+    celular = Column(VARCHAR(14))
+    es_iva = Column(NUMBER(1, 0, False))
+    parte_rel = Column(VARCHAR(2), nullable=False, server_default=text("'NO' "))
+    cod_tipo_contribuyente = Column(NUMBER(2, 0, False), index=True)

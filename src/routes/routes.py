@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from datetime import datetime
 from src.models.users import Usuario, Empresa
 from src.models.tipo_comprobante import TipoComprobante
-from src.models.proveedores import Proveedor,TgModelo,TgModeloItem
+from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
 from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StOrdenCompraTracking, StPackinglist
 from src.models.productos import Producto
 from src.models.despiece import StDespiece
@@ -68,9 +68,9 @@ def obtener_tipo_comprobante():
         })
     return jsonify(serialized_comprobantes)
 
-@bp.route('/proveedores')
-def obtener_proveedores():
-    query = Proveedor.query()
+@bp.route('/proveedores_ext')
+def obtener_proveedores_ext():
+    query = db.session.query(Proveedor).join(ProveedorHor, Proveedor.cod_proveedor == ProveedorHor.cod_proveedorh).filter(ProveedorHor.cod_tipo_proveedorh == 'EXT')
     proveedores = query.all()
     serialized_proveedores = []
     for proveedor in proveedores:
@@ -79,11 +79,40 @@ def obtener_proveedores():
         nombre = proveedor.nombre if proveedor.nombre else ""
         direccion = proveedor.direccion if proveedor.direccion else ""
         telefono = proveedor.telefono if proveedor.telefono else ""
+        # Consulta adicional para obtener la ciudad del proveedor
+        ciudad_query = db.session.query(TcCoaProveedor.ciudad_matriz).filter(TcCoaProveedor.ruc == proveedor.cod_proveedor)
+        ciudad = ciudad_query.scalar()
         #cod_proveedores = [cod_proveedor.to_dict() for cod_proveedor in proveedor.cod_proveedores]
         serialized_proveedores.append({
             'empresa': empresa,
             'cod_proveedor': cod_proveedor,
             'nombre': nombre,
+            'ciudad': ciudad,
+            'direccion': direccion,
+            'telefono': telefono
+        })
+    return jsonify(serialized_proveedores)
+
+@bp.route('/proveedores_nac')
+def obtener_proveedores_nac():
+    query = db.session.query(Proveedor).join(ProveedorHor, Proveedor.cod_proveedor == ProveedorHor.cod_proveedorh).filter(ProveedorHor.cod_tipo_proveedorh == 'NAC')
+    proveedores = query.all()
+    serialized_proveedores = []
+    for proveedor in proveedores:
+        empresa = proveedor.empresa if proveedor.empresa else ""
+        cod_proveedor = proveedor.cod_proveedor if proveedor.cod_proveedor else ""
+        nombre = proveedor.nombre if proveedor.nombre else ""
+        direccion = proveedor.direccion if proveedor.direccion else ""
+        telefono = proveedor.telefono if proveedor.telefono else ""
+        # Consulta adicional para obtener la ciudad del proveedor
+        ciudad_query = db.session.query(TcCoaProveedor.ciudad_matriz).filter(TcCoaProveedor.ruc == proveedor.cod_proveedor)
+        ciudad = ciudad_query.scalar()
+        #cod_proveedores = [cod_proveedor.to_dict() for cod_proveedor in proveedor.cod_proveedores]
+        serialized_proveedores.append({
+            'empresa': empresa,
+            'cod_proveedor': cod_proveedor,
+            'nombre': nombre,
+            'ciudad': ciudad,
             'direccion': direccion,
             'telefono': telefono
         })
@@ -141,12 +170,15 @@ def obtener_orden_compra_det():
     detalles = query.all()
     serialized_detalles = []
     for detalle in detalles:
+        exportar = detalle.exportar
         cod_po = detalle.cod_po if detalle.cod_po else ""
         secuencia = detalle.secuencia if detalle.secuencia else ""
         empresa = detalle.empresa if detalle.empresa else ""
         cod_producto = detalle.cod_producto if detalle.cod_producto else ""
         cod_producto_modelo = detalle.cod_producto_modelo if detalle.cod_producto_modelo else ""
         nombre = detalle.nombre if detalle.nombre else ""
+        nombre_i = detalle.nombre_i if detalle.nombre_i else ""
+        nombre_c = detalle.nombre_c if detalle.nombre_c else ""
         costo_sistema = detalle.costo_sistema if detalle.costo_sistema else ""
         fob = detalle.fob if detalle.fob else ""
         cantidad_pedido = detalle.cantidad_pedido if detalle.cantidad_pedido else ""
@@ -158,12 +190,15 @@ def obtener_orden_compra_det():
         usuario_modifica = detalle.usuario_modifica if detalle.usuario_modifica else ""
         fecha_modifica = detalle.fecha_modifica if detalle.fecha_modifica else ""
         serialized_detalles.append({
+            'exportar': exportar,
             'cod_po': cod_po,
             'secuencia': secuencia,
             'empresa': empresa,
             'cod_producto': cod_producto,
             'cod_producto_modelo': cod_producto_modelo,
             'nombre': nombre,
+            'nombre_ingles': nombre_i,
+            'nombre_china': nombre_c,
             'costo_sistema': costo_sistema,
             'fob': fob,
             'fob_total': fob_total,
@@ -463,15 +498,28 @@ def crear_orden_compra_det():
         fecha_crea = datetime.strptime(data['fecha_crea'], '%d/%m/%Y').date()
         fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
         secuencia = str(obtener_secuencia(data['cod_po']))
+
+        # Consultar la tabla StDespiece para obtener los valores correspondientes
+        despiece = StProductoDespiece.query().filter_by(cod_producto=data['cod_producto']).first()
+        if despiece is not None:
+            nombre_busq = StDespiece.query().filter_by(cod_despiece =despiece.cod_despiece).first()
+            nombre = nombre_busq.nombre_e
+            print('*****',nombre)
+        else:
+            nombre_busq = Producto.query().filter_by(cod_producto = data['cod_producto']).first()
+            nombre = nombre_busq.nombre
+            print('#######',nombre)
+
         detalle = StOrdenCompraDet(
+            exportar=data['exportar'],
             cod_po=data['cod_po'],
             secuencia=secuencia,
             empresa=data['empresa'],
             cod_producto=data['cod_producto'],
             cod_producto_modelo=data['cod_producto_modelo'],
-            nombre=data['nombre'],
-            nombre_i = data['nombre_i'],
-            nombre_c = data['nombre_c'],
+            nombre=nombre if nombre else None,
+            nombre_i=nombre if nombre else None,
+            nombre_c=nombre if nombre else None,
             costo_sistema=data['costo_sistema'],
             fob=data['fob'],
             cantidad_pedido=data['cantidad_pedido'],
@@ -480,7 +528,7 @@ def crear_orden_compra_det():
             usuario_crea=data['usuario_crea'],
             fecha_crea=fecha_crea,
             usuario_modifica=data['usuario_modifica'],
-            fecha_modifica=fecha_modifica  ,
+            fecha_modifica=fecha_modifica,
         )
         detalle.fob_total = data['fob'] * data['cantidad_pedido']
         db.session.add(detalle)
@@ -489,7 +537,6 @@ def crear_orden_compra_det():
 
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
-        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
 def obtener_secuencia(cod_po):
@@ -504,7 +551,7 @@ def obtener_secuencia(cod_po):
         if existe_cod_po_det is not None:
             print('EXISTE2',existe_cod_po_det.cod_po)
             # Si el cod_po existe en la tabla StOrdenCompraDet, obtener el último número de secuencia
-            max_secuencia = db.session.query(func.max(StOrdenCompraDet.secuencia)).filter_by(cod_po=cod_po).scalar()
+            max_secuencia = db.session.query(func.max(StOrdenCompraDet.secuencia)).filter_by(cod_po=cod_po).distinct().scalar()
             print('MAXIMO',max_secuencia)
             nueva_secuencia = str(int(max_secuencia) + 1)
             print('PROXIMO',nueva_secuencia)
@@ -619,6 +666,7 @@ def actualizar_orden_compra_det(cod_po,empresa,secuencia):
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
 
         data = request.get_json()
+        orden.exportar = data.get('exportar',orden.exportar)
         orden.cod_po = data.get('cod_po', orden.cod_po)
         orden.secuencia = data.get('secuencia', orden.secuencia)
         orden.empresa = data.get('empresa', orden.empresa)
