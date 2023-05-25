@@ -107,6 +107,10 @@ class ProveedorHor(Base):
     observacionesh = Column(VARCHAR(255))
     useridch = Column(VARCHAR(3))
 
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
 class TcCoaProveedor(Base):
     __tablename__ = 'tc_coa_proveedor'
     __table_args__ = {'schema': 'contabilidad'}
@@ -134,3 +138,7 @@ class TcCoaProveedor(Base):
     es_iva = Column(NUMBER(1, 0, False))
     parte_rel = Column(VARCHAR(2), nullable=False, server_default=text("'NO' "))
     cod_tipo_contribuyente = Column(NUMBER(2, 0, False), index=True)
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)

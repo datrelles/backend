@@ -27,6 +27,7 @@ class StOrdenCompraCab(Base):
     bodega = Column(NUMBER(4),nullable=False)
     cod_agencia = Column(NUMBER(4),nullable=False)
     ciudad = Column(VARCHAR(60))
+    estado = Column(VARCHAR(100))
 
     @classmethod
     def query(cls):
@@ -54,6 +55,8 @@ class StOrdenCompraDet(Base):
     usuario_modifica = Column(VARCHAR(30))
     fecha_modifica = Column(DateTime)
     exportar = Column(Boolean, default=True)
+    nombre_mod_prov = Column(VARCHAR(50))
+    nombre_comercial = Column(VARCHAR(50))
 
     @classmethod
     def query(cls):

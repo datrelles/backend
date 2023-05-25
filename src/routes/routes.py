@@ -11,7 +11,7 @@ from src.config.database import db
 from sqlalchemy import func, text
 import logging
 import datetime
-from datetime import datetime
+from datetime import datetime,date
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 
@@ -139,6 +139,7 @@ def obtener_orden_compra_cab():
         empresa = orden.empresa if orden.empresa else ""
         cod_po = orden.cod_po if orden.cod_po else ""
         tipo_comprobante = orden.tipo_comprobante if orden.tipo_comprobante else ""
+        cod_agencia = orden.cod_agencia if orden.cod_agencia else ""
         cod_proveedor = orden.cod_proveedor if orden.cod_proveedor else ""
         nombre = orden.nombre if orden.nombre else ""
         proforma = orden.proforma if orden.proforma else ""
@@ -146,18 +147,19 @@ def obtener_orden_compra_cab():
         bl_no = orden.bl_no if orden.bl_no else ""
         cod_po_padre = orden.cod_po_padre if orden.cod_po_padre else ""
         usuario_crea = orden.usuario_crea if orden.usuario_crea else ""
-        fecha_crea = orden.fecha_crea if orden.fecha_crea else ""
+        fecha_crea = datetime.strftime(orden.fecha_crea,"%d/%m/%Y") if orden.fecha_crea else ""
         usuario_modifica = orden.usuario_modifica if orden.usuario_modifica else ""
-        fecha_modifica = orden.fecha_modifica if orden.fecha_modifica else ""
+        fecha_modifica = datetime.strftime(orden.fecha_modifica,"%d/%m/%Y") if orden.fecha_modifica else ""
         cod_modelo = orden.cod_modelo if orden.cod_modelo else ""
         cod_item = orden.cod_item if orden.cod_item else ""
         bodega = orden.bodega if orden.bodega else ""
-        cod_agencia = orden.cod_agencia if orden.cod_agencia else ""
         ciudad = orden.ciudad if orden.ciudad else ""
+        estado = orden.estado if orden.estado else ""
         serialized_ordenes_compra.append({
             'empresa': empresa,
             'cod_po': cod_po,
             'tipo_combrobante': tipo_comprobante,
+            'cod_agencia': cod_agencia,
             'cod_proveedor': cod_proveedor,
             'nombre': nombre,
             'proforma': proforma,
@@ -171,8 +173,8 @@ def obtener_orden_compra_cab():
             'cod_modelo': cod_modelo,
             'cod_item': cod_item,
             'bodega': bodega,
-            'cod_agencia': cod_agencia,
-            'ciudad': ciudad
+            'ciudad': ciudad,
+            'estado': estado
         })
     return jsonify(serialized_ordenes_compra)
 
@@ -184,7 +186,7 @@ def obtener_orden_compra_det():
     detalles = query.all()
     serialized_detalles = []
     for detalle in detalles:
-        exportar = detalle.exportar
+        exportar = detalle.exportar if detalle.exportar else ""
         cod_po = detalle.cod_po if detalle.cod_po else ""
         secuencia = detalle.secuencia if detalle.secuencia else ""
         empresa = detalle.empresa if detalle.empresa else ""
@@ -193,6 +195,8 @@ def obtener_orden_compra_det():
         nombre = detalle.nombre if detalle.nombre else ""
         nombre_i = detalle.nombre_i if detalle.nombre_i else ""
         nombre_c = detalle.nombre_c if detalle.nombre_c else ""
+        nombre_mod_prov = detalle.nombre_mod_prov if detalle.nombre_mod_prov else ""
+        nombre_comercial = detalle.nombre_comercial if detalle.nombre_comercial else ""
         costo_sistema = detalle.costo_sistema if detalle.costo_sistema else ""
         fob = detalle.fob if detalle.fob else ""
         cantidad_pedido = detalle.cantidad_pedido if detalle.cantidad_pedido else ""
@@ -200,9 +204,9 @@ def obtener_orden_compra_det():
         saldo_producto = detalle.saldo_producto if detalle.saldo_producto else ""
         unidad_medida = detalle.unidad_medida if detalle.unidad_medida else ""
         usuario_crea = detalle.usuario_crea if detalle.usuario_crea else ""
-        fecha_crea = detalle.fecha_crea if detalle.fecha_crea else ""
+        fecha_crea = datetime.strftime(detalle.fecha_crea,"%d/%m/%Y") if detalle.fecha_crea else ""
         usuario_modifica = detalle.usuario_modifica if detalle.usuario_modifica else ""
-        fecha_modifica = detalle.fecha_modifica if detalle.fecha_modifica else ""
+        fecha_modifica = datetime.strftime(detalle.fecha_modifica,"%d/%m/%Y") if detalle.fecha_modifica else ""
         serialized_detalles.append({
             'exportar': exportar,
             'cod_po': cod_po,
@@ -213,6 +217,8 @@ def obtener_orden_compra_det():
             'nombre': nombre,
             'nombre_ingles': nombre_i,
             'nombre_china': nombre_c,
+            'nombre_mod_prov': nombre_mod_prov,
+            'nombre_comercial':nombre_comercial,
             'costo_sistema': costo_sistema,
             'fob': fob,
             'fob_total': fob_total,
@@ -493,24 +499,36 @@ def obtener_tgmodelo():
 def crear_orden_compra_cab():
     try:
         data = request.get_json()
-        fecha_crea = datetime.strptime(data['fecha_crea'], '%d/%m/%Y').date()
-        # fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
+        fecha_crea = date.today()#funcion para que se asigne la fecha actual al momento de crear la oden de compra
+        fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
+
+        #busqueda para que se asigne de forma automatica la ciudad al buscarla por el cod_proveedor
+        busq_ciudad = TcCoaProveedor.query().filter_by(ruc=data['cod_proveedor']).first()
+        ciudad = busq_ciudad.ciudad_matriz
+
+        #busqueda para obtener el nombre del estado para la orden de compra
+        estado = TgModeloItem.query().filter_by(cod_modelo=data['cod_modelo'], cod_item=data['cod_item']).first()
+        estado_nombre = estado.nombre if estado else ''
+        # Obtener el código de comprobante utilizando la función obtener_codigo_comprobante
+        #cod_po_value = obtener_codigo_comprobante(data)
+
         orden = StOrdenCompraCab(
             empresa=data['empresa'],
-            cod_po = data['cod_po'],
-            bodega = data['bodega'],
-            cod_agencia = data['cod_agencia'],
-            tipo_comprobante = data['tipo_comprobante'],
-            cod_proveedor = data['cod_proveedor'],
-            nombre = data['nombre'],
-            cod_po_padre = data['cod_po_padre'],
-            usuario_crea = data['usuario_crea'],
-            fecha_crea = fecha_crea,
-            # usuario_modifica = data['usuario_modifica'],
-            # fecha_modifica = fecha_modifica,
-            cod_modelo = data['cod_modelo'],
-            cod_item = data['cod_item'],
-            ciudad = data['ciudad'],
+            cod_po=data['cod_po'],
+            bodega=data['bodega'],
+            cod_agencia=data['cod_agencia'],
+            tipo_comprobante=data['tipo_comprobante'],
+            cod_proveedor=data['cod_proveedor'],
+            nombre=data['nombre'],
+            cod_po_padre=data['cod_po_padre'],
+            usuario_crea=data['usuario_crea'],
+            fecha_crea=fecha_crea,
+            usuario_modifica=data['usuario_modifica'],
+            fecha_modifica=fecha_modifica,
+            cod_modelo=data['cod_modelo'],
+            cod_item=data['cod_item'],
+            ciudad = ciudad if ciudad else "",
+            estado = estado_nombre,
         )
         db.session.add(orden)
         db.session.commit()
@@ -537,11 +555,9 @@ def crear_orden_compra_det():
         if despiece is not None:
             nombre_busq = StDespiece.query().filter_by(cod_despiece =despiece.cod_despiece).first()
             nombre = nombre_busq.nombre_e
-            print('*****',nombre)
         else:
             nombre_busq = Producto.query().filter_by(cod_producto = data['cod_producto']).first()
             nombre = nombre_busq.nombre
-            print('#######',nombre)
 
         detalle = StOrdenCompraDet(
             exportar=data['exportar'],
@@ -553,6 +569,8 @@ def crear_orden_compra_det():
             nombre=nombre if nombre else None,
             nombre_i=nombre if nombre else None,
             nombre_c=nombre if nombre else None,
+            nombre_mod_prov = data['nombre_mod_prov'],
+            nombre_comercial = data['nombre_comercial'],
             costo_sistema=data['costo_sistema'],
             fob=data['fob'],
             cantidad_pedido=data['cantidad_pedido'],
@@ -567,7 +585,6 @@ def crear_orden_compra_det():
         db.session.add(detalle)
         db.session.commit()
         return jsonify({'mensaje': 'Detalle de orden de compra creado exitosamente.'})
-
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -675,6 +692,7 @@ def actualizar_orden_compra_cab(cod_po,empresa):
         orden.empresa = data.get('empresa', orden.empresa)
         orden.cod_po = data.get('cod_po', orden.cod_po)
         orden.tipo_comprobante = data.get('tipo_comprobante', orden.tipo_comprobante)
+        orden.cod_agencia = data.get('cod_agencia',orden.cod_agencia)
         orden.cod_proveedor = data.get('cod_proveedor', orden.cod_proveedor)
         orden.nombre = data.get('nombre', orden.nombre)
         orden.proforma = data.get('proforma', orden.proforma)
@@ -687,7 +705,9 @@ def actualizar_orden_compra_cab(cod_po,empresa):
         orden.fecha_modifica = datetime.strptime(data.get('fecha_modifica', str(orden.fecha_modifica)), '%d/%m/%Y').date()
         orden.cod_modelo = data.get('cod_modelo', orden.cod_modelo)
         orden.cod_item = data.get('cod_item', orden.cod_item)
+        orden.bodega = data.get('bodega', orden.bodega)
         orden.ciudad = data.get('ciudad', orden.ciudad)
+        orden.estado = data.get('estado', orden.estado)
 
         db.session.commit()
 
@@ -717,6 +737,8 @@ def actualizar_orden_compra_det(cod_po,empresa,secuencia):
         orden.nombre = data.get('nombre', orden.nombre)
         orden.nombre_i = data.get('nombre_i',orden.nombre_i)
         orden.nombre_c = data.get('nombre_c',orden.nombre_c)
+        orden.nombre_mod_prov = data.get('nombre_mod_prov', orden.nombre_mod_prov)
+        orden.nombre_comercial = data.get('nombre_comercial', orden.nombre_comercial)
         orden.costo_sistema = data.get('costo_sistema', orden.costo_sistema)
         orden.fob = data.get('fob', orden.fob)
         orden.fob_total = data.get('fob_total', orden.fob_total)

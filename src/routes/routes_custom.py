@@ -288,6 +288,8 @@ def obtener_orden_compra_cab_param():
         fecha_modifica = cabecera.fecha_modifica.strftime("%d/%m/%Y") if cabecera.fecha_modifica else ""
         cod_modelo = cabecera.cod_modelo if cabecera.cod_modelo else ""
         cod_item = cabecera.cod_item if cabecera.cod_item else ""
+        ciudad = cabecera.ciudad if cabecera.ciudad else ""
+        estado = cabecera.estado if cabecera.estado else ""
         serialized_cabeceras.append({
             'empresa': empresa,
             'cod_po': cod_po,
@@ -303,7 +305,9 @@ def obtener_orden_compra_cab_param():
             'usuario_modifica': usuario_modifica,
             'fecha_modifica': fecha_modifica,
             'cod_modelo': cod_modelo,
-            'cod_item': cod_item
+            'cod_item': cod_item,
+            'ciudad': ciudad,
+            'estado': estado
         })
     
     return jsonify(serialized_cabeceras)
@@ -333,6 +337,8 @@ def obtener_orden_comrpa_det_param():
         nombre = detalle.nombre if detalle.nombre else ""
         nombre_i = detalle.nombre_i if detalle.nombre_i else ""
         nombre_c = detalle.nombre_c if detalle.nombre_c else ""
+        nombre_mod_prov = detalle.nombre_mod_prov if detalle.nombre_mod_prov else ""
+        nombre_comercial = detalle.nombre_comercial if detalle.nombre_comercial else ""
         costo_sistema = detalle.costo_sistema if detalle.costo_sistema else ""
         fob = detalle.fob if detalle.fob else ""
         cantidad_pedido = detalle.cantidad_pedido if detalle.cantidad_pedido else ""
@@ -352,6 +358,8 @@ def obtener_orden_comrpa_det_param():
             'nombre': nombre,
             'nombre_ingles': nombre_i,
             'nombre_china': nombre_c,
+            'nombre_mod_prov': nombre_mod_prov,
+            'nombre_comercial': nombre_comercial,
             'costo_sistema': costo_sistema,
             'fob': fob,
             'fob_total': fob_total,
