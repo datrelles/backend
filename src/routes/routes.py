@@ -548,7 +548,7 @@ def crear_orden_compra_det():
         data = request.get_json()
         fecha_crea = datetime.strptime(data['fecha_crea'], '%d/%m/%Y').date()
         fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
-        secuencia = str(obtener_secuencia(data['cod_po']))
+        secuencia = obtener_secuencia(data['cod_po'])
 
         # Consultar la tabla StDespiece para obtener los valores correspondientes
         despiece = StProductoDespiece.query().filter_by(cod_producto=data['cod_producto']).first()
@@ -585,6 +585,7 @@ def crear_orden_compra_det():
         db.session.add(detalle)
         db.session.commit()
         return jsonify({'mensaje': 'Detalle de orden de compra creado exitosamente.'})
+
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -603,12 +604,12 @@ def obtener_secuencia(cod_po):
             # Si el cod_po existe en la tabla StOrdenCompraDet, obtener el último número de secuencia
             max_secuencia = db.session.query(func.max(StOrdenCompraDet.secuencia)).filter_by(cod_po=cod_po).distinct().scalar()
             print('MAXIMO',max_secuencia)
-            nueva_secuencia = str(int(max_secuencia) + 1)
+            nueva_secuencia = int(max_secuencia) + 1
             print('PROXIMO',nueva_secuencia)
             return nueva_secuencia
         else:
             # Si el cod_po no existe en la tabla StOrdenCompraDet, generar secuencia desde 1
-            nueva_secuencia = '1'
+            nueva_secuencia = 1
             print('Secuencia de inicio', nueva_secuencia)
             return nueva_secuencia
     else:

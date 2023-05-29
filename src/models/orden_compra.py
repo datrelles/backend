@@ -37,7 +37,7 @@ class StOrdenCompraDet(Base):
     __tablename__ = 'st_orden_compra_det'
 
     cod_po = Column(VARCHAR(9), primary_key=True, nullable=False)
-    secuencia = Column(VARCHAR(10), primary_key=True, nullable=False)
+    secuencia = Column(NUMBER(6), primary_key=True, nullable=False)
     empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
     cod_producto = Column(VARCHAR(14))
     cod_producto_modelo = Column(CHAR(50))
