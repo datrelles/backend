@@ -41,7 +41,7 @@ class StOrdenCompraDet(Base):
     empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
     cod_producto = Column(VARCHAR(14))
     cod_producto_modelo = Column(CHAR(50))
-    nombre = Column(CHAR(50))
+    nombre = Column(VARCHAR(200))
     nombre_i = Column(VARCHAR(200))
     nombre_c = Column(VARCHAR(200))
     costo_sistema = Column(NUMBER(14, 2, True))
