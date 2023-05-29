@@ -263,12 +263,18 @@ def obtener_orden_compra_cab_param():
 
     empresa = request.args.get('empresa', None)
     cod_po = request.args.get('cod_po', None)
+    fecha_inicio = request.args.get('fecha_inicio', None)  # Nueva fecha de inicio
+    fecha_fin = request.args.get('fecha_fin', None)  # Nueva fecha de fin
 
-    query=StOrdenCompraCab.query()
+    query = StOrdenCompraCab.query()
     if empresa:
         query = query.filter(StOrdenCompraCab.empresa == empresa)
     if cod_po:
         query = query.filter(StOrdenCompraCab.cod_po == cod_po)
+    if fecha_inicio and fecha_fin:
+        fecha_inicio = datetime.strptime(fecha_inicio, '%d/%m/%Y').date()
+        fecha_fin = datetime.strptime(fecha_fin, '%d/%m/%Y').date()
+        query = query.filter(StOrdenCompraCab.fecha_crea.between(fecha_inicio, fecha_fin))
 
     cabeceras = query.all()
     serialized_cabeceras = []
