@@ -550,52 +550,41 @@ def crear_orden_compra_det():
         fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
         secuencia = str(obtener_secuencia(data['cod_po']))
 
-        detalles = data['detalles']
-        serialized_detalles = []
+        # Consultar la tabla StDespiece para obtener los valores correspondientes
+        despiece = StProductoDespiece.query().filter_by(cod_producto=data['cod_producto']).first()
+        if despiece is not None:
+            nombre_busq = StDespiece.query().filter_by(cod_despiece =despiece.cod_despiece).first()
+            nombre = nombre_busq.nombre_e
+        else:
+            nombre_busq = Producto.query().filter_by(cod_producto = data['cod_producto']).first()
+            nombre = nombre_busq.nombre
 
-        for detalle_data in detalles:
-            secuencia = str(obtener_secuencia(data['cod_po']))
-
-            # Consultar la tabla StDespiece para obtener los valores correspondientes
-            despiece = StProductoDespiece.query().filter_by(cod_producto=detalle_data['cod_producto']).first()
-            if despiece is not None:
-                nombre_busq = StDespiece.query().filter_by(cod_despiece=despiece.cod_despiece).first()
-                nombre = nombre_busq.nombre_e
-            else:
-                nombre_busq = Producto.query().filter_by(cod_producto=detalle_data['cod_producto']).first()
-                nombre = nombre_busq.nombre
-
-            detalle = StOrdenCompraDet(
-                exportar=detalle_data['exportar'],
-                cod_po=detalle_data['cod_po'],
-                secuencia=secuencia,
-                empresa=detalle_data['empresa'],
-                cod_producto=detalle_data['cod_producto'],
-                cod_producto_modelo=detalle_data['cod_producto_modelo'],
-                nombre=nombre if nombre else None,
-                nombre_i=nombre if nombre else None,
-                nombre_c=nombre if nombre else None,
-                nombre_mod_prov=detalle_data['nombre_mod_prov'],
-                nombre_comercial=detalle_data['nombre_comercial'],
-                costo_sistema=detalle_data['costo_sistema'],
-                fob=detalle_data['fob'],
-                cantidad_pedido=detalle_data['cantidad_pedido'],
-                saldo_producto=detalle_data['saldo_producto'],
-                unidad_medida=detalle_data['unidad_medida'],
-                usuario_crea=detalle_data['usuario_crea'],
-                fecha_crea=fecha_crea,
-                usuario_modifica=detalle_data['usuario_modifica'],
-                fecha_modifica=fecha_modifica,
-            )
-
-            detalle.fob_total = detalle_data['fob'] * detalle_data['cantidad_pedido']
-            serialized_detalles.append(detalle)
-
-        db.session.add_all(serialized_detalles)
+        detalle = StOrdenCompraDet(
+            exportar=data['exportar'],
+            cod_po=data['cod_po'],
+            secuencia=secuencia,
+            empresa=data['empresa'],
+            cod_producto=data['cod_producto'],
+            cod_producto_modelo=data['cod_producto_modelo'],
+            nombre=nombre if nombre else None,
+            nombre_i=nombre if nombre else None,
+            nombre_c=nombre if nombre else None,
+            nombre_mod_prov = data['nombre_mod_prov'],
+            nombre_comercial = data['nombre_comercial'],
+            costo_sistema=data['costo_sistema'],
+            fob=data['fob'],
+            cantidad_pedido=data['cantidad_pedido'],
+            saldo_producto=data['saldo_producto'],
+            unidad_medida=data['unidad_medida'],
+            usuario_crea=data['usuario_crea'],
+            fecha_crea=fecha_crea,
+            usuario_modifica=data['usuario_modifica'],
+            fecha_modifica=fecha_modifica,
+        )
+        detalle.fob_total = data['fob'] * data['cantidad_pedido']
+        db.session.add(detalle)
         db.session.commit()
-
-        return jsonify({'mensaje': 'Detalles de orden de compra creados exitosamente.'})
-
+        return jsonify({'mensaje': 'Detalle de orden de compra creado exitosamente.'})
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
         return jsonify({'error': str(e)}), 500
