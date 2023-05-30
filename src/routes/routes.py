@@ -509,12 +509,13 @@ def crear_orden_compra_cab():
         #busqueda para obtener el nombre del estado para la orden de compra
         estado = TgModeloItem.query().filter_by(cod_modelo=data['cod_modelo'], cod_item=data['cod_item']).first()
         estado_nombre = estado.nombre if estado else ''
-        # Obtener el código de comprobante utilizando la función obtener_codigo_comprobante
-        #cod_po_value = obtener_codigo_comprobante(data)
+       
+        # Generate the cod_po using the asigna_cod_comprobante function
+        cod_po = asigna_cod_comprobante(data['empresa'], data['tipo_comprobante'], data['cod_agencia'])
 
         orden = StOrdenCompraCab(
             empresa=data['empresa'],
-            cod_po=data['cod_po'],
+            cod_po=cod_po,
             bodega=data['bodega'],
             cod_agencia=data['cod_agencia'],
             tipo_comprobante=data['tipo_comprobante'],
@@ -534,10 +535,36 @@ def crear_orden_compra_cab():
         db.session.commit()
         return jsonify({'mensaje': 'Cabecera de orden de compra creado exitosamente.'})
 
+    except ValueError as ve:
+        # Capturar y manejar el error específico de ValueError
+        error_message = str(ve)
+        return jsonify({'error': error_message}), 500
+
     except Exception as e:
-        logger.exception(f"Error al consultar: {str(e)}")
-        #logging.error('Ocurrio un error: %s',e)
-        return jsonify({'error': str(e)}), 500
+        # Manejar otros errores y proporcionar un mensaje personalizado
+        error_message = f"Se produjo un error: {str(e)}"
+        return jsonify({'error': error_message}), 500
+    
+def asigna_cod_comprobante(p_cod_empresa, p_cod_tipo_comprobante, p_cod_agencia):
+    # Realizar las operaciones de base de datos necesarias para generar el código comprobante
+    # Ejecutar consultas SQL sin formato usando la función `texto` de SQLAlchemy
+      
+    # Encuentra el registro en la tabla 'orden'
+    sql = text("SELECT * FROM contabilidad.orden WHERE empresa=:empresa AND bodega=:bodega AND tipo_comprobante=:tipo_comprobante")
+    orden = db.engine.execute(sql, empresa=p_cod_empresa, bodega=p_cod_agencia, tipo_comprobante=p_cod_tipo_comprobante).fetchone()
+    
+    if orden is None:
+        # Generar una excepción si no se encuentra el registro
+        raise ValueError('Secuencia de comprobante no existe')
+    
+    # Actualizar la secuencia comprobante
+    sql = text("UPDATE contabilidad.orden SET numero_comprobante=numero_comprobante+1 WHERE empresa=:empresa AND bodega=:bodega AND tipo_comprobante=:tipo_comprobante")
+    db.engine.execute(sql, empresa=p_cod_empresa, bodega=p_cod_agencia, tipo_comprobante=p_cod_tipo_comprobante)
+    
+    # Generar el código comprobante
+    comprobante_code = orden.sigla_comprobante + str(orden.numero_comprobante + 1).zfill(6)
+    
+    return comprobante_code
 
 
 @bp.route('/orden_compra_det', methods=['POST'])
