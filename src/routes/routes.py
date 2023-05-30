@@ -1,13 +1,13 @@
 from flask import Blueprint, jsonify, request
 from datetime import datetime
-from src.models.users import Usuario, Empresa
-from src.models.tipo_comprobante import TipoComprobante
-from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
-from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StOrdenCompraTracking, StPackinglist
-from src.models.productos import Producto
-from src.models.despiece import StDespiece
-from src.models.producto_despiece import StProductoDespiece
-from src.config.database import db,engine,session
+from models.users import Usuario, Empresa
+from models.tipo_comprobante import TipoComprobante
+from models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
+from models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StOrdenCompraTracking, StPackinglist
+from models.productos import Producto
+from models.despiece import StDespiece
+from models.producto_despiece import StProductoDespiece
+from config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer
 import logging
 import datetime
@@ -551,7 +551,7 @@ def asigna_cod_comprobante(p_cod_empresa, p_cod_tipo_comprobante, p_cod_agencia)
       
     # Encuentra el registro en la tabla 'orden'
     sql = text("SELECT * FROM contabilidad.orden WHERE empresa=:empresa AND bodega=:bodega AND tipo_comprobante=:tipo_comprobante")
-    orden = db.engine.execute(sql, empresa=p_cod_empresa, bodega=p_cod_agencia, tipo_comprobante=p_cod_tipo_comprobante).fetchone()
+    orden = session.execute(sql, {'empresa': p_cod_empresa, 'bodega': p_cod_agencia, 'tipo_comprobante':p_cod_tipo_comprobante}).fetchone()
     
     if orden is None:
         # Generar una excepción si no se encuentra el registro
@@ -559,7 +559,7 @@ def asigna_cod_comprobante(p_cod_empresa, p_cod_tipo_comprobante, p_cod_agencia)
     
     # Actualizar la secuencia comprobante
     sql = text("UPDATE contabilidad.orden SET numero_comprobante=numero_comprobante+1 WHERE empresa=:empresa AND bodega=:bodega AND tipo_comprobante=:tipo_comprobante")
-    db.engine.execute(sql, empresa=p_cod_empresa, bodega=p_cod_agencia, tipo_comprobante=p_cod_tipo_comprobante)
+    session.execute(sql, {'empresa': p_cod_empresa, 'bodega': p_cod_agencia, 'tipo_comprobante':p_cod_tipo_comprobante})
     
     # Generar el código comprobante
     comprobante_code = orden.sigla_comprobante + str(orden.numero_comprobante + 1).zfill(6)
