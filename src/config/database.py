@@ -1,5 +1,7 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 import os
 import datetime
 
@@ -12,3 +14,8 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['DATETIME_FORMAT'] = datetime_format
 
 db = SQLAlchemy(app)
+
+engine = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])
+
+Session = sessionmaker(bind=engine)
+session = Session()
