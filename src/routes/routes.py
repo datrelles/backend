@@ -7,8 +7,8 @@ from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StOrdenC
 from src.models.productos import Producto
 from src.models.despiece import StDespiece
 from src.models.producto_despiece import StProductoDespiece
-from src.config.database import db
-from sqlalchemy import func, text
+from src.config.database import db,engine,session
+from sqlalchemy import func, text,bindparam,Integer
 import logging
 import datetime
 from datetime import datetime,date
