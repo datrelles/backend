@@ -548,22 +548,28 @@ def crear_orden_compra_cab():
 def asigna_cod_comprobante(p_cod_empresa, p_cod_tipo_comprobante, p_cod_agencia):
     # Realizar las operaciones de base de datos necesarias para generar el código comprobante
     # Ejecutar consultas SQL sin formato usando la función `texto` de SQLAlchemy
-      
+
     # Encuentra el registro en la tabla 'orden'
     sql = text("SELECT * FROM contabilidad.orden WHERE empresa=:empresa AND bodega=:bodega AND tipo_comprobante=:tipo_comprobante")
-    orden = session.execute(sql, {'empresa': p_cod_empresa, 'bodega': p_cod_agencia, 'tipo_comprobante':p_cod_tipo_comprobante}).fetchone()
-    
+    result = db.session.execute(sql, {'empresa': p_cod_empresa, 'bodega': p_cod_agencia, 'tipo_comprobante': p_cod_tipo_comprobante})
+    orden = result.fetchone()
+
     if orden is None:
         # Generar una excepción si no se encuentra el registro
         raise ValueError('Secuencia de comprobante no existe')
-    
+
     # Actualizar la secuencia comprobante
     sql = text("UPDATE contabilidad.orden SET numero_comprobante=numero_comprobante+1 WHERE empresa=:empresa AND bodega=:bodega AND tipo_comprobante=:tipo_comprobante")
-    session.execute(sql, {'empresa': p_cod_empresa, 'bodega': p_cod_agencia, 'tipo_comprobante':p_cod_tipo_comprobante})
-    
+    db.session.execute(sql, {'empresa': p_cod_empresa, 'bodega': p_cod_agencia, 'tipo_comprobante': p_cod_tipo_comprobante})
+
+    # Acceder a los valores de las columnas por su nombre
+    sigla_comprobante = orden['sigla_comprobante']
+    numero_comprobante = orden['numero_comprobante']
+
     # Generar el código comprobante
-    comprobante_code = orden.sigla_comprobante + str(orden.numero_comprobante + 1).zfill(6)
-    
+    comprobante_code = sigla_comprobante + str(numero_comprobante + 1).zfill(6)
+    print(comprobante_code)
+
     return comprobante_code
 
 
