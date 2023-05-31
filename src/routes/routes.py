@@ -552,7 +552,9 @@ def asigna_cod_comprobante(p_cod_empresa, p_cod_tipo_comprobante, p_cod_agencia)
     # Encuentra el registro en la tabla 'orden'
     sql = text("SELECT * FROM contabilidad.orden WHERE empresa=:empresa AND bodega=:bodega AND tipo_comprobante=:tipo_comprobante")
     result = db.session.execute(sql, {'empresa': p_cod_empresa, 'bodega': p_cod_agencia, 'tipo_comprobante': p_cod_tipo_comprobante})
+    print(result)
     orden = result.fetchone()
+    print(orden)
 
     if orden is None:
         # Generar una excepción si no se encuentra el registro
@@ -562,11 +564,12 @@ def asigna_cod_comprobante(p_cod_empresa, p_cod_tipo_comprobante, p_cod_agencia)
     sql = text("UPDATE contabilidad.orden SET numero_comprobante=numero_comprobante+1 WHERE empresa=:empresa AND bodega=:bodega AND tipo_comprobante=:tipo_comprobante")
     db.session.execute(sql, {'empresa': p_cod_empresa, 'bodega': p_cod_agencia, 'tipo_comprobante': p_cod_tipo_comprobante})
 
-    # Acceder a los valores de las columnas por su nombre
-    sigla_comprobante = orden['sigla_comprobante']
-    numero_comprobante = orden['numero_comprobante']
+    print(sql)
+    # Acceder a los valores de las columnas por su índice en la tupla
+    sigla_comprobante = orden[3]
+    numero_comprobante = orden[4]
 
-    # Generar el código comprobante
+    # Convertir el número de comprobante a cadena de texto y generar el código comprobante
     comprobante_code = sigla_comprobante + str(numero_comprobante + 1).zfill(6)
     print(comprobante_code)
 
