@@ -188,6 +188,7 @@ def obtener_orden_compra_det():
     for detalle in detalles:
         exportar = detalle.exportar if detalle.exportar else ""
         cod_po = detalle.cod_po if detalle.cod_po else ""
+        tipo_comprobante = detalle.tipo_comprobante if detalle.tipo_comprobante else ""
         secuencia = detalle.secuencia if detalle.secuencia else ""
         empresa = detalle.empresa if detalle.empresa else ""
         cod_producto = detalle.cod_producto if detalle.cod_producto else ""
@@ -210,6 +211,7 @@ def obtener_orden_compra_det():
         serialized_detalles.append({
             'exportar': exportar,
             'cod_po': cod_po,
+            'tipo_comprobante': tipo_comprobante, 
             'secuencia': secuencia,
             'empresa': empresa,
             'cod_producto': cod_producto,
@@ -327,12 +329,14 @@ def obtener_orden_compra_track():
         serialized_seguimientos = []
         for seguimiento in seguimientos:
             cod_po = seguimiento.cod_po if seguimiento.cod_po else ""
+            tipo_comprobante = seguimiento.tipo_comprobante if seguimiento.tipo_comprobante else ""
             empresa = seguimiento.empresa if seguimiento.empresa else ""
             observaciones = seguimiento.observaciones if seguimiento.observaciones else ""
             fecha_pedido = datetime.strftime(seguimiento.fecha_pedido,"%d/%m/%Y") if seguimiento.fecha_pedido else ""
             fecha_transito = datetime.strftime(seguimiento.fecha_transito,"%d/%m/%Y") if seguimiento.fecha_transito else ""
             fecha_puerto = datetime.strftime(seguimiento.fecha_puerto,"%d/%m/%Y") if seguimiento.fecha_puerto else ""
             fecha_llegada = datetime.strftime(seguimiento.fecha_llegada,"%d/%m/%Y") if seguimiento.fecha_llegada else ""
+            fecha_en_bodega = seguimiento.fecha_en_bodega if seguimiento.fecha_en_bodega else ""
             estado = seguimiento.estado if seguimiento.estado else ""
             buque = seguimiento.buque if seguimiento.buque else ""
             naviera = seguimiento.naviera if seguimiento.naviera else ""
@@ -345,12 +349,14 @@ def obtener_orden_compra_track():
             fecha_modifica = datetime.strftime(seguimiento.fecha_modifica,"%d/%m/%Y") if seguimiento.fecha_modifica else ""
             serialized_seguimientos.append({
                 'cod_po': cod_po,
+                'tipo_comprobante': tipo_comprobante,
                 'empresa': empresa,
                 'observaciones': observaciones,
                 'fecha_pedido': fecha_pedido,
                 'fecha_transito': fecha_transito,
                 'fecha_puerto': fecha_puerto,
                 'fecha_llegada': fecha_llegada,
+                'feche_en_bodega': fecha_en_bodega,
                 'estado': estado,
                 'buque': buque,
                 'naviera': naviera,
@@ -379,6 +385,7 @@ def obtener_packinlist():
         serialized_packing = []
         for packing in packings:
             cod_po = packing.cod_po if packing.cod_po else ""
+            tipo_comprobante = packing.tipo_comprobante if packing.tipo_comprobante else ""
             empresa = packing.empresa if packing.empresa else ""
             secuencia = packing.secuencia if packing.secuencia else ""
             cod_producto = packing.cod_producto if packing.cod_producto else ""
@@ -387,11 +394,12 @@ def obtener_packinlist():
             cod_producto_modelo = packing.cod_producto_modelo if packing.cod_producto_modelo else ""
             unidad_medida = packing.unidad_medida if packing.unidad_medida else ""
             usuario_crea = packing.usuario_crea if packing.usuario_crea else ""
-            fecha_crea = packing.fecha_crea if packing.fecha_crea else ""
+            fecha_crea = datetime.strftime(packing.fecha_crea,"%d/%m/%Y") if packing.fecha_crea else ""
             usuario_modifica = packing.usuario_modifica if packing.usuario_modifica else ""
-            fecha_modifica = packing.fecha_modifica if packing.fecha_modifica else ""
+            fecha_modifica = datetime.strftime(packing.fecha_modifica,"%d/%m/%Y") if packing.fecha_modifica else ""
             serialized_packing.append({
                 'cod_po': cod_po,
+                'tipo_comprobante': tipo_comprobante,
                 'empresa': empresa,
                 'secuencia': secuencia,
                 'cod_producto': cod_producto,
@@ -582,12 +590,12 @@ def asigna_cod_comprobante(p_cod_empresa, p_cod_tipo_comprobante, p_cod_agencia)
 def crear_orden_compra_det():
     try:
         data = request.get_json()
-        fecha_crea = datetime.strptime(data['fecha_crea'], '%d/%m/%Y').date()
+        fecha_crea = date.today()#funcion para que se asigne la fecha actual al momento de crear el detalle de la oden de compra
         fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
         secuencia = obtener_secuencia(data['cod_po'])
 
         # Consultar la tabla StDespiece para obtener los valores correspondientes
-        despiece = StProductoDespiece.query().filter_by(cod_producto=data['cod_producto']).first()
+        despiece = StProductoDespiece.query().filter_by(cod_producto=data['cod_producto'], empresa = data['empresa']).first() #usar la empresa
         if despiece is not None:
             nombre_busq = StDespiece.query().filter_by(cod_despiece =despiece.cod_despiece).first()
             nombre = nombre_busq.nombre_e
@@ -598,6 +606,7 @@ def crear_orden_compra_det():
         detalle = StOrdenCompraDet(
             exportar=data['exportar'],
             cod_po=data['cod_po'],
+            tipo_comprobante = data['tipo_comprobante'],
             secuencia=secuencia,
             empresa=data['empresa'],
             cod_producto=data['cod_producto'],
@@ -612,9 +621,9 @@ def crear_orden_compra_det():
             cantidad_pedido=data['cantidad_pedido'],
             saldo_producto=data['saldo_producto'],
             unidad_medida=data['unidad_medida'],
-            usuario_crea=data['usuario_crea'],
+            usuario_crea=data['usuario_crea'].upper(),
             fecha_crea=fecha_crea,
-            usuario_modifica=data['usuario_modifica'],
+            usuario_modifica=data['usuario_modifica'].upper(),
             fecha_modifica=fecha_modifica,
         )
         detalle.fob_total = data['fob'] * data['cantidad_pedido']
@@ -658,10 +667,11 @@ def obtener_secuencia(cod_po):
 def crear_packinglist():
     try:
         data = request.get_json()
-        fecha_crea = datetime.strptime(data['fecha_crea'], '%d/%m/%Y').date()
+        fecha_crea = date.today()
         fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
         packinlist = StPackinglist(
             cod_po = data['cod_po'],
+            tipo_comprobante = data['tipo_comprobante'],
             empresa = data['empresa'],
             secuencia = data['secuencia'],
             cod_producto = data['cod_producto'],
@@ -669,9 +679,9 @@ def crear_packinglist():
             fob = data['fob'],
             cod_producto_modelo = data['cod_producto_modelo'],
             unidad_medida = data['unidad_medida'],
-            usuario_crea = data['usuario_crea'],
+            usuario_crea = data['usuario_crea'].upper(),
             fecha_crea = fecha_crea,
-            usuario_modifica = data['usuario_modifica'],
+            usuario_modifica = data['usuario_modifica'].upper(),
             fecha_modifica = fecha_modifica
         )
         db.session.add(packinlist)
@@ -694,9 +704,12 @@ def crear_orden_compra_track():
         fecha_puerto = datetime.strptime(data['fecha_puerto'], '%d/%m/%Y').date() 
         fecha_llegada = datetime.strptime(data['fecha_llegada'], '%d/%m/%Y').date() 
         fecha_en_bodega = datetime.strptime(data['fecha_en_bodega'], '%d/%m/%Y').date() 
+        fecha_crea = date.today() #funcion para que se asigne la fecha actual al momento de crear el detalle de la oden de compra
+        fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
         tracking = StOrdenCompraTracking(
             cod_po = data['cod_po'],
             empresa = data['empresa'],
+            tipo_comprobante = data['tipo_comprobante'],
             observaciones = data['observaciones'],
             fecha_pedido = fecha_pedido,
             fecha_transito = fecha_transito,
@@ -704,6 +717,16 @@ def crear_orden_compra_track():
             fecha_llegada = fecha_llegada,
             fecha_en_bodega = fecha_en_bodega,
             estado = data['estado'],
+            buque = data['buque'],
+            naviera = data['naviera'],
+            flete = data['flete'],
+            agente_aduanero = data['agente_aduanero'],
+            puerto_origen = data['puerto_origen'],
+            usuario_crea = data['usuario_crea'].upper(),
+            fecha_crea = fecha_crea,
+            usuario_modifica = data['usuario_modifica'].upper(),
+            fecha_modifica = fecha_modifica
+
         )
         db.session.add(tracking)
         db.session.commit()
@@ -716,12 +739,12 @@ def crear_orden_compra_track():
 
 # METODOS UPDATE DE TABLAS DE ORDEN DE COMPRA
 
-@bp.route('/orden_compra_cab/<cod_po>/<empresa>', methods=['PUT'])
+@bp.route('/orden_compra_cab/<cod_po>/<empresa>/<tipo_comprobante>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
-def actualizar_orden_compra_cab(cod_po,empresa):
+def actualizar_orden_compra_cab(cod_po,empresa,tipo_comprobante):
     try:
-        orden = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po,empresa = empresa).first()
+        orden = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po,empresa = empresa, tipo_comprobante = tipo_comprobante).first()
         if not orden:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
 
@@ -736,9 +759,9 @@ def actualizar_orden_compra_cab(cod_po,empresa):
         orden.invoice = data.get('invoice', orden.invoice)
         orden.bl_no = data.get('bl_no', orden.bl_no)
         orden.cod_po_padre = data.get('cod_po_padre', orden.cod_po_padre)
-        orden.usuario_crea = data.get('usuario_crea', orden.usuario_crea)
+        orden.usuario_crea = data.get('usuario_crea', orden.usuario_crea).upper()
         orden.fecha_crea = datetime.strptime(data.get('fecha_crea', str(orden.fecha_crea)), '%d/%m/%Y').date()
-        orden.usuario_modifica = data.get('usuario_modifica', orden.usuario_modifica)
+        orden.usuario_modifica = data.get('usuario_modifica', orden.usuario_modifica).upper()
         orden.fecha_modifica = datetime.strptime(data.get('fecha_modifica', str(orden.fecha_modifica)), '%d/%m/%Y').date()
         orden.cod_modelo = data.get('cod_modelo', orden.cod_modelo)
         orden.cod_item = data.get('cod_item', orden.cod_item)
@@ -755,25 +778,35 @@ def actualizar_orden_compra_cab(cod_po,empresa):
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
-@bp.route('/orden_compra_det/<cod_po>/<empresa>/<secuencia>', methods=['PUT'])
+@bp.route('/orden_compra_det/<cod_po>/<empresa>/<secuencia>/<tipo_comprobante>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
-def actualizar_orden_compra_det(cod_po,empresa,secuencia):
+def actualizar_orden_compra_det(cod_po,empresa,secuencia,tipo_comprobante):
     try:
-        orden = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po,empresa = empresa,secuencia = secuencia).first()
+        orden = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po,empresa = empresa,secuencia = secuencia, tipo_comprobante = tipo_comprobante).first()
         if not orden:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
-
+        
         data = request.get_json()
+        # Consultar la tabla StDespiece para obtener los valores correspondientes
+        despiece = StProductoDespiece.query().filter_by(cod_producto=data['cod_producto'], empresa = data['empresa']).first() #usar la empresa
+        if despiece is not None:
+            nombre_busq = StDespiece.query().filter_by(cod_despiece =despiece.cod_despiece).first()
+            nombre = nombre_busq.nombre_e
+        else:
+            nombre_busq = Producto.query().filter_by(cod_producto = data['cod_producto']).first()
+            nombre = nombre_busq.nombre
+
         orden.exportar = data.get('exportar',orden.exportar)
         orden.cod_po = data.get('cod_po', orden.cod_po)
+        orden.tipo_comprobante = data.get('tipo_comprobante',orden.tipo_comprobante)
         orden.secuencia = data.get('secuencia', orden.secuencia)
         orden.empresa = data.get('empresa', orden.empresa)
         orden.cod_producto = data.get('cod_producto', orden.cod_producto)
         orden.cod_producto_modelo = data.get('cod_producto_modelo', orden.cod_producto_modelo)
-        orden.nombre = data.get('nombre', orden.nombre)
-        orden.nombre_i = data.get('nombre_i',orden.nombre_i)
-        orden.nombre_c = data.get('nombre_c',orden.nombre_c)
+        orden.nombre = nombre if nombre else None
+        orden.nombre_i = nombre if nombre else None
+        orden.nombre_c = nombre if nombre else None
         orden.nombre_mod_prov = data.get('nombre_mod_prov', orden.nombre_mod_prov)
         orden.nombre_comercial = data.get('nombre_comercial', orden.nombre_comercial)
         orden.costo_sistema = data.get('costo_sistema', orden.costo_sistema)
@@ -782,9 +815,8 @@ def actualizar_orden_compra_det(cod_po,empresa,secuencia):
         orden.cantidad_pedido = data.get('cantidad_pedido', orden.cantidad_pedido)
         orden.saldo_producto = data.get('saldo_producto', orden.saldo_producto)
         orden.unidad_medida = data.get('unidad_medida', orden.unidad_medida)
-        orden.usuario_crea = data.get('usuario_crea', orden.usuario_crea)
-        orden.fecha_crea = datetime.strptime(data.get('fecha_crea', str(orden.fecha_crea)), '%d/%m/%Y').date()
-        orden.usuario_modifica = data.get('usuario_modifica', orden.usuario_modifica)
+        orden.usuario_crea = data.get('usuario_crea', orden.usuario_crea).upper()
+        orden.usuario_modifica = data.get('usuario_modifica', orden.usuario_modifica).upper()
         orden.fecha_modifica = datetime.strptime(data.get('fecha_modifica', str(orden.fecha_modifica)), '%d/%m/%Y').date()
 
         # Calcula el valor de fob_total
@@ -799,18 +831,20 @@ def actualizar_orden_compra_det(cod_po,empresa,secuencia):
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
-@bp.route('/orden_compra_tracking/<cod_po>/<empresa>', methods=['PUT'])
+@bp.route('/orden_compra_tracking/<cod_po>/<empresa>/<tipo_comprobante>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
-def actualizar_orden_compra_trancking(cod_po,empresa):
+def actualizar_orden_compra_trancking(cod_po,empresa,tipo_comprobante):
     try:
-        tracking = db.session.query(StOrdenCompraTracking).filter_by(cod_po=cod_po, empresa=empresa).first()
-        print('AQUIIIIIIIIII', tracking)
+        tracking = db.session.query(StOrdenCompraTracking).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante = tipo_comprobante).first()
         if not tracking:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
         
+        fecha_modifica = date.today()
+        
         data = request.get_json()
         tracking.cod_po = data.get('cod_po', tracking.cod_po)
+        tracking.tipo_comprobante = data.get('tipo_comprobante', tracking.tipo_comprobante)
         tracking.empresa = data.get('empresa', tracking.empresa)
         tracking.observaciones = data.get('observaciones', tracking.observaciones)
         tracking.fecha_pedido = datetime.strptime(data.get('fecha_pedido', str(tracking.fecha_pedido)), '%d/%m/%Y').date()
@@ -824,10 +858,9 @@ def actualizar_orden_compra_trancking(cod_po,empresa):
         tracking.flete = data.get('flete', tracking.flete)
         tracking.agente_aduanero = data.get('agente_aduanero', tracking.agente_aduanero)
         tracking.puerto_origen = data.get('puerto_origen', tracking.puerto_origen)
-        tracking.usuario_crea = data.get('usuario_crea', tracking.usuario_crea)
         tracking.fecha_crea = datetime.strptime(data.get('fecha_crea', str(tracking.fecha_crea)), '%d/%m/%Y').date()
-        tracking.usuario_modifica = data.get('usuario_modifica', tracking.usuario_modifica)
-        tracking.fecha_modifica = datetime.strptime(data.get('fecha_modifica', str(tracking.fecha_modifica)), '%d/%m/%Y').date()
+        tracking.usuario_modifica = data.get('usuario_modifica', tracking.usuario_modifica).upper()
+        tracking.fecha_modifica = fecha_modifica
 
         db.session.commit()
 
@@ -856,9 +889,9 @@ def actualizar_orden_compra_packinlist(cod_po,empresa):
         packinglist.fob = data.get('fob', packinglist.fob)
         packinglist.cod_producto_modelo = data.get('cod_producto_modelo', packinglist.cod_producto_modelo)
         packinglist.unidad_medida = data.get('unidad_medida', packinglist.unidad_medida)
-        packinglist.usuario_crea = data.get('usuario_crea', packinglist.usuario_crea)
+        packinglist.usuario_crea = data.get('usuario_crea', packinglist.usuario_crea).upper()
         packinglist.fecha_crea = datetime.strptime(data.get('fecha_crea', str(packinglist.fecha_crea)), '%d/%m/%Y').date()
-        packinglist.usuario_modifica = data.get('usuario_modifica', packinglist.usuario_modifica)
+        packinglist.usuario_modifica = data.get('usuario_modifica', packinglist.usuario_modifica).upper()
         packinglist.fecha_modifica = datetime.strptime(data.get('fecha_modifica', str(packinglist.fecha_modifica)), '%d/%m/%Y').date()
 
         db.session.commit()
@@ -872,12 +905,12 @@ def actualizar_orden_compra_packinlist(cod_po,empresa):
     
 #METODOS DELETE PARA ORDENES DE COMPRA
 
-@bp.route('/orden_compra_cab/<cod_po>/<empresa>', methods=['DELETE'])
+@bp.route('/orden_compra_cab/<cod_po>/<empresa>/<tipo_comprobante>', methods=['DELETE'])
 @jwt_required()
 @cross_origin()
-def eliminar_orden_compra_cab(cod_po, empresa):
+def eliminar_orden_compra_cab(cod_po, empresa,tipo_comprobante):
     try:
-        orden = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po, empresa=empresa).first()
+        orden = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po, empresa=empresa,tipo_comprobante=tipo_comprobante).first()
         if not orden:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
 
@@ -890,12 +923,12 @@ def eliminar_orden_compra_cab(cod_po, empresa):
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
     
-@bp.route('/orden_compra_det/<cod_po>/<empresa>/<secuencia>', methods=['DELETE'])
+@bp.route('/orden_compra_det/<cod_po>/<empresa>/<secuencia>/<tipo_comprobante>', methods=['DELETE'])
 @jwt_required()
 @cross_origin()
-def eliminar_orden_compra_det(cod_po, empresa, secuencia):
+def eliminar_orden_compra_det(cod_po, empresa, secuencia,tipo_comprobante):
     try:
-        detalle = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa, secuencia = secuencia).first()
+        detalle = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa, secuencia = secuencia, tipo_comprobante = tipo_comprobante).first()
         if not detalle:
             return jsonify({'mensaje': 'Detalle de orden de compra no existe.'}), 404
 
@@ -908,12 +941,12 @@ def eliminar_orden_compra_det(cod_po, empresa, secuencia):
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
     
-@bp.route('/orden_compra_tracking/<cod_po>/<empresa>', methods=['DELETE'])
+@bp.route('/orden_compra_tracking/<cod_po>/<empresa>/<tipo_comprobante>', methods=['DELETE'])
 @jwt_required()
 @cross_origin()
-def eliminar_orden_compra_tracking(cod_po, empresa):
+def eliminar_orden_compra_tracking(cod_po, empresa, tipo_comprobante):
     try:
-        tracking = db.session.query(StOrdenCompraTracking).filter_by(cod_po=cod_po, empresa=empresa).first()
+        tracking = db.session.query(StOrdenCompraTracking).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante=tipo_comprobante).first()
         if not tracking:
             return jsonify({'mensaje': 'Tracking de orden de compra no existe.'}), 404
 
@@ -926,12 +959,12 @@ def eliminar_orden_compra_tracking(cod_po, empresa):
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
     
-@bp.route('/orden_compra_packinglist/<cod_po>/<empresa>', methods=['DELETE'])
+@bp.route('/orden_compra_packinglist/<cod_po>/<empresa>/<tipo_comprobante>', methods=['DELETE'])
 @jwt_required()
 @cross_origin()
-def eliminar_orden_compra_packinglist(cod_po, empresa):
+def eliminar_orden_compra_packinglist(cod_po, empresa, tipo_comprobante):
     try:
-        packing = db.session.query(StPackinglist).filter_by(cod_po=cod_po, empresa=empresa).first()
+        packing = db.session.query(StPackinglist).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante = tipo_comprobante).first()
         if not packing:
             return jsonify({'mensaje': 'Packinglist de orden de compra no existe.'}), 404
 

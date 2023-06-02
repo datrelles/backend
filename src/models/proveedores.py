@@ -142,3 +142,29 @@ class TcCoaProveedor(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
+    
+class TgAgencia(Base):
+    __tablename__ = 'tg_agencia'
+    __table_args__ = (
+        Index('quest_sx_38357d985bf9341e8d', 'cod_agencia', 'empresa'),
+        {'schema': 'computo'}
+    )
+
+    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
+    cod_agencia = Column(NUMBER(4, 0, False), primary_key=True, nullable=False, index=True)
+    nombre = Column(VARCHAR(50), nullable=False, index=True)
+    cod_categoria_zona = Column(VARCHAR(2))
+    empresa_zona = Column(NUMBER(2, 0, False))
+    secuencia_zona = Column(NUMBER(6, 0, False))
+    cod_nivel_zona = Column(VARCHAR(8))
+    codigo_zona = Column(VARCHAR(14))
+    direccion = Column(VARCHAR(200))
+    observaciones = Column(VARCHAR(200))
+    telefono1 = Column(VARCHAR(15))
+    telefono2 = Column(VARCHAR(15))
+    ruc = Column(VARCHAR(20))
+    activo = Column(VARCHAR(1))
+    cod_grupo_agencia = Column(VARCHAR(3))
+    cod_sitio = Column(VARCHAR(3), nullable=False)
+    es_autorizado_sri = Column(NUMBER(1, 0, False), nullable=False, server_default=text("0 "))
+    tipo_relacion_polcre = Column(VARCHAR(1), nullable=False, server_default=text("'N' "))

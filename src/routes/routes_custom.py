@@ -263,6 +263,7 @@ def obtener_orden_compra_cab_param():
 
     empresa = request.args.get('empresa', None)
     cod_po = request.args.get('cod_po', None)
+    tipo_comprobante = request.args.get('tipo_comprobante', None)
     fecha_inicio = request.args.get('fecha_inicio', None)  # Nueva fecha de inicio
     fecha_fin = request.args.get('fecha_fin', None)  # Nueva fecha de fin
 
@@ -271,6 +272,8 @@ def obtener_orden_compra_cab_param():
         query = query.filter(StOrdenCompraCab.empresa == empresa)
     if cod_po:
         query = query.filter(StOrdenCompraCab.cod_po == cod_po)
+    if tipo_comprobante:
+        query = query.filter(StOrdenCompraCab.tipo_comprobante == tipo_comprobante)
     if fecha_inicio and fecha_fin:
         fecha_inicio = datetime.strptime(fecha_inicio, '%d/%m/%Y').date()
         fecha_fin = datetime.strptime(fecha_fin, '%d/%m/%Y').date()
@@ -325,17 +328,21 @@ def obtener_orden_comrpa_det_param():
 
     empresa = request.args.get('empresa', None)
     cod_po = request.args.get('cod_po', None)
+    tipo_comprobante = request.args.get('tipo_comprobante', None)
 
     query = StOrdenCompraDet.query()
     if empresa :
         query = query.filter(StOrdenCompraDet.empresa == empresa)
     if cod_po:
         query = query.filter(StOrdenCompraDet.cod_po == cod_po)
+    if tipo_comprobante:
+        query = query.filter(StOrdenCompraDet.tipo_comprobante == tipo_comprobante)
 
     detalles = query.all()
     serialized_detalles = []
     for detalle in detalles:
         cod_po = detalle.cod_po if detalle.cod_po else ""
+        tipo_comprobante = detalle.tipo_comprobante if detalle.tipo_comprobante else ""
         secuencia = detalle.secuencia if detalle.secuencia else ""
         empresa = detalle.empresa if detalle.empresa else ""
         cod_producto = detalle.cod_producto if detalle.cod_producto else ""
@@ -357,6 +364,7 @@ def obtener_orden_comrpa_det_param():
         fecha_modifica = detalle.fecha_modifica.strftime("%d/%m/%Y") if detalle.fecha_modifica else ""
         serialized_detalles.append({
             'cod_po': cod_po,
+            'tipo_comprobante': tipo_comprobante,
             'secuencia': secuencia,
             'empresa': empresa,
             'cod_producto': cod_producto,
@@ -386,17 +394,21 @@ def obtener_orden_compra_track_param():
 
     empresa = request.args.get('empresa', None)
     cod_po = request.args.get('cod_po', None)
+    tipo_comprobante = request.args.get(tipo_comprobante, None)
 
     query = StOrdenCompraTracking.query()
     if empresa:
         query = query.filter(StOrdenCompraTracking.empresa == empresa)
     if cod_po:
         query = query.filter(StOrdenCompraTracking.cod_po == cod_po)
+    if tipo_comprobante:
+        query = query.filter(StOrdenCompraTracking.tipo_comprobante == tipo_comprobante)
 
     seguimientos = query.all()
     serialized_seguimientos = []
     for seguimiento in seguimientos:
         cod_po = seguimiento.cod_po if seguimiento.cod_po else ""
+        tipo_comprobante = seguimiento.tipo_comprobante if seguimiento.tipo_comprobante else ""
         empresa = seguimiento.empresa if seguimiento.empresa else ""
         observaciones = seguimiento.observaciones if seguimiento.observaciones else ""
         fecha_pedido = datetime.strftime(seguimiento.fecha_pedido,"%d/%m/%Y") if seguimiento.fecha_pedido else ""
@@ -415,6 +427,7 @@ def obtener_orden_compra_track_param():
         fecha_modifica = datetime.strftime(seguimiento.fecha_modifica,"%d/%m/%Y") if seguimiento.fecha_modifica else ""
         serialized_seguimientos.append({
             'cod_po': cod_po,
+            'tipo_comprobante': tipo_comprobante,
             'empresa': empresa,
             'observaciones': observaciones,
             'fecha_pedido': fecha_pedido,
@@ -436,23 +449,23 @@ def obtener_orden_compra_track_param():
 
 #METODO CUSTOM PARA ELIMINAR TODA LA ORDEN DE COMPRA
 
-@bpcustom.route('/eliminar_orden_compra_total/<cod_po>/<empresa>', methods=['DELETE'])
+@bpcustom.route('/eliminar_orden_compra_total/<cod_po>/<empresa>/<tipo_comprobante>', methods=['DELETE'])
 @jwt_required()
 @cross_origin()
-def eliminar_orden_compra(cod_po, empresa):
+def eliminar_orden_compra(cod_po, empresa, tipo_comprobante):
     try:
-        orden_cab = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po, empresa=empresa).first()
+        orden_cab = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante = tipo_comprobante).first()
         if not orden_cab:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
 
         # Eliminar registros en StOrdenCompraDet
-        db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa).delete()
+        db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante = tipo_comprobante).delete()
 
         # Eliminar registros en StOrdenCompraTracking
-        db.session.query(StOrdenCompraTracking).filter_by(cod_po=cod_po, empresa=empresa).delete()
+        db.session.query(StOrdenCompraTracking).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante = tipo_comprobante).delete()
 
         # Eliminar registros en StPackinglist
-        db.session.query(StPackinglist).filter_by(cod_po=cod_po, empresa=empresa).delete()
+        db.session.query(StPackinglist).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante = tipo_comprobante).delete()
 
         # Eliminar registro en StOrdenCompraCab
         db.session.delete(orden_cab)
