@@ -591,46 +591,65 @@ def crear_orden_compra_det():
     try:
         data = request.get_json()
         fecha_crea = date.today()#funcion para que se asigne la fecha actual al momento de crear el detalle de la oden de compra
-        fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
-        secuencia = obtener_secuencia(data['cod_po'])
+        fecha_modifica = date.today()
 
-        # Consultar la tabla StDespiece para obtener los valores correspondientes
-        despiece = StProductoDespiece.query().filter_by(cod_producto=data['cod_producto'], empresa = data['empresa']).first() #usar la empresa
-        if despiece is not None:
-            nombre_busq = StDespiece.query().filter_by(cod_despiece =despiece.cod_despiece).first()
-            nombre = nombre_busq.nombre_e
+        cod_po_no_existe = [] #Lista para almacenar los cod_po qe no existen
+
+        for order in data['orders']:
+            cod_po = order['cod_po']
+            cod_producto = order['cod_producto']
+
+            #Verificar si el producto existe en la tabla de Productos
+            query = Producto.query().filter_by(cod_producto = cod_producto).first()
+            if query:
+                secuencia = obtener_secuencia(order['cod_po'])
+
+                # Consultar la tabla StDespiece para obtener los valores correspondientes
+                despiece = StProductoDespiece.query().filter_by(cod_producto=order['cod_producto'], empresa = order['empresa']).first() #usar la empresa
+                if despiece is not None:
+                    nombre_busq = StDespiece.query().filter_by(cod_despiece =despiece.cod_despiece).first()
+                    nombre = nombre_busq.nombre_e
+                    nombre_i = nombre_busq.nombre_i
+                    nombre_c = nombre_busq.nombre_c
+                else:
+                    nombre_busq = Producto.query().filter_by(cod_producto = order['cod_producto']).first()
+                    nombre = nombre_busq.nombre
+
+                detalle = StOrdenCompraDet(
+                    exportar=order['exportar'],
+                    cod_po=cod_po,
+                    tipo_comprobante = order['tipo_comprobante'],
+                    secuencia=secuencia,
+                    empresa=order['empresa'],
+                    cod_producto=order['cod_producto'],
+                    cod_producto_modelo=order['cod_producto_modelo'],
+                    nombre=nombre if nombre else None,
+                    nombre_i=nombre_i if nombre_i else None,
+                    nombre_c=nombre_c if nombre_c else None,
+                    nombre_mod_prov = order['nombre_mod_prov'],
+                    nombre_comercial = order['nombre_comercial'],
+                    costo_sistema=order['costo_sistema'],
+                    fob=order['fob'],
+                    cantidad_pedido=order['cantidad_pedido'],
+                    saldo_producto=order['saldo_producto'],
+                    unidad_medida=order['unidad_medida'],
+                    usuario_crea=order['usuario_crea'].upper(),
+                    fecha_crea=fecha_crea,
+                    usuario_modifica=order['usuario_modifica'].upper(),
+                    fecha_modifica=fecha_modifica,
+                )
+                detalle.fob_total = order['fob'] * order['cantidad_pedido']
+                db.session.add(detalle)
+                db.session.commit()
+                secuencia = obtener_secuencia(order['cod_po'])
+            else:
+                cod_po_no_existe.append(cod_producto)
+        if cod_po_no_existe:
+            return jsonify({'mensaje': 'Productos no generados.', 'cod_producto_no_existe': cod_po_no_existe})
         else:
-            nombre_busq = Producto.query().filter_by(cod_producto = data['cod_producto']).first()
-            nombre = nombre_busq.nombre
-
-        detalle = StOrdenCompraDet(
-            exportar=data['exportar'],
-            cod_po=data['cod_po'],
-            tipo_comprobante = data['tipo_comprobante'],
-            secuencia=secuencia,
-            empresa=data['empresa'],
-            cod_producto=data['cod_producto'],
-            cod_producto_modelo=data['cod_producto_modelo'],
-            nombre=nombre if nombre else None,
-            nombre_i=nombre if nombre else None,
-            nombre_c=nombre if nombre else None,
-            nombre_mod_prov = data['nombre_mod_prov'],
-            nombre_comercial = data['nombre_comercial'],
-            costo_sistema=data['costo_sistema'],
-            fob=data['fob'],
-            cantidad_pedido=data['cantidad_pedido'],
-            saldo_producto=data['saldo_producto'],
-            unidad_medida=data['unidad_medida'],
-            usuario_crea=data['usuario_crea'].upper(),
-            fecha_crea=fecha_crea,
-            usuario_modifica=data['usuario_modifica'].upper(),
-            fecha_modifica=fecha_modifica,
-        )
-        detalle.fob_total = data['fob'] * data['cantidad_pedido']
-        db.session.add(detalle)
-        db.session.commit()
-        return jsonify({'mensaje': 'Detalle de orden de compra creado exitosamente.'})
-
+            return jsonify({'mensaje': 'Detalle(s) de orden de compra creados exitosamente'})
+            
+        
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
         return jsonify({'error': str(e)}), 500
