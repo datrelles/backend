@@ -353,6 +353,8 @@ def obtener_orden_comrpa_det_param():
         nombre_mod_prov = detalle.nombre_mod_prov if detalle.nombre_mod_prov else ""
         nombre_comercial = detalle.nombre_comercial if detalle.nombre_comercial else ""
         costo_sistema = detalle.costo_sistema if detalle.costo_sistema else ""
+        costo_cotizado = detalle.costo_cotizado if detalle.costo_cotizado else ""
+        fecha_costo = detalle.fecha_costo if detalle.fecha_costo else ""
         fob = detalle.fob if detalle.fob else ""
         cantidad_pedido = detalle.cantidad_pedido if detalle.cantidad_pedido else ""
         fob_total = fob * cantidad_pedido
@@ -375,6 +377,8 @@ def obtener_orden_comrpa_det_param():
             'nombre_mod_prov': nombre_mod_prov,
             'nombre_comercial': nombre_comercial,
             'costo_sistema': costo_sistema,
+            'costo_cotizado': costo_cotizado,
+            'fecha_costo': fecha_costo,
             'fob': fob,
             'fob_total': fob_total,
             'cantidad_pedido': cantidad_pedido,

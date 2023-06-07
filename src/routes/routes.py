@@ -199,6 +199,8 @@ def obtener_orden_compra_det():
         nombre_mod_prov = detalle.nombre_mod_prov if detalle.nombre_mod_prov else ""
         nombre_comercial = detalle.nombre_comercial if detalle.nombre_comercial else ""
         costo_sistema = detalle.costo_sistema if detalle.costo_sistema else ""
+        costo_cotizado = detalle.costo_cotizado if detalle.costo_cotizado else ""
+        fecha_costo = detalle.fecha_costo if detalle.fecha_costo else ""
         fob = detalle.fob if detalle.fob else ""
         cantidad_pedido = detalle.cantidad_pedido if detalle.cantidad_pedido else ""
         fob_total = fob * cantidad_pedido
@@ -222,6 +224,8 @@ def obtener_orden_compra_det():
             'nombre_mod_prov': nombre_mod_prov,
             'nombre_comercial':nombre_comercial,
             'costo_sistema': costo_sistema,
+            'costo_cotizado': costo_cotizado,
+            'fecha_costo': fecha_costo,
             'fob': fob,
             'fob_total': fob_total,
             'cantidad_pedido': cantidad_pedido,
@@ -657,7 +661,7 @@ def crear_orden_compra_det():
         if cod_po_no_existe:
             return jsonify({'mensaje': 'Productos no generados.', 'cod_producto_no_existe': cod_po_no_existe})
         else:
-            return jsonify({'mensaje': 'Detalle(s) de orden de compra creados exitosamente'})
+            return jsonify({'mensaje': 'Detalle(s) de orden de compra creados exitosamente', 'cod_po': cod_po})
             
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
@@ -821,9 +825,13 @@ def actualizar_orden_compra_det(cod_po,empresa,secuencia,tipo_comprobante):
         if despiece is not None:
             nombre_busq = StDespiece.query().filter_by(cod_despiece =despiece.cod_despiece).first()
             nombre = nombre_busq.nombre_e
+            nombre_i = nombre_busq.nombre_i
+            nombre_c = nombre_busq.nombre_c
         else:
             nombre_busq = Producto.query().filter_by(cod_producto = data['cod_producto']).first()
             nombre = nombre_busq.nombre
+            nombre_i = nombre_busq.nombre
+            nombre_c = nombre_busq.nombre
 
         orden.exportar = data.get('exportar',orden.exportar)
         orden.cod_po = data.get('cod_po', orden.cod_po)
@@ -833,8 +841,8 @@ def actualizar_orden_compra_det(cod_po,empresa,secuencia,tipo_comprobante):
         orden.cod_producto = data.get('cod_producto', orden.cod_producto)
         orden.cod_producto_modelo = data.get('cod_producto_modelo', orden.cod_producto_modelo)
         orden.nombre = nombre if nombre else None
-        orden.nombre_i = nombre if nombre else None
-        orden.nombre_c = nombre if nombre else None
+        orden.nombre_i = nombre_i if nombre_i else None
+        orden.nombre_c = nombre_c if nombre_c else None
         orden.nombre_mod_prov = data.get('nombre_mod_prov', orden.nombre_mod_prov)
         orden.nombre_comercial = data.get('nombre_comercial', orden.nombre_comercial)
         orden.costo_sistema = data.get('costo_sistema', orden.costo_sistema)
@@ -849,6 +857,11 @@ def actualizar_orden_compra_det(cod_po,empresa,secuencia,tipo_comprobante):
 
         # Calcula el valor de fob_total
         orden.fob_total = orden.fob * orden.cantidad_pedido
+
+        if 'costo_cotizado' in data:
+            orden.costo_cotizado = data['costo_corizado']
+            if orden.costo_cotizado is not None:
+                orden.fecha_costo = date.today()
 
         db.session.commit()
 
