@@ -72,6 +72,8 @@ class StOrdenCompraDet(Base):
     exportar = Column(Boolean, default=True)
     nombre_mod_prov = Column(VARCHAR(50))
     nombre_comercial = Column(VARCHAR(50))
+    costo_cotizado = Column(NUMBER(14, 2, True))
+    fecha_costo = Column(DateTime)
 
     @classmethod
     def query(cls):
