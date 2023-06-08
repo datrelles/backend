@@ -1,13 +1,19 @@
+import requests
+import atexit
+from apscheduler.schedulers.background import BackgroundScheduler
+import datetime as dt
+
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_wtf.csrf import CSRFProtect
 from numpy.core.defchararray import upper
+from requests.auth import HTTPBasicAuth
 
 import oracle
 from routes.web_services import web_services
 from routes.auth import auth
 from dotenv import load_dotenv, find_dotenv
-from models.ModelUser import ModelUser
-from models.entities.User import User
+from src.models.ModelUser import ModelUser
+from src.models.entities.User import User
 from flask_login import LoginManager, login_user,logout_user, login_required
 from os import getenv
 import dotenv
@@ -19,9 +25,9 @@ from datetime import datetime, timedelta, timezone
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager
 
 ###################################################
-from config.database import db
-from routes.routes import bp
-from routes.routes_custom import bpcustom
+from src.config.database import db
+from src.routes.routes import bp
+from src.routes.routes_custom import bpcustom
 import logging
 from sqlalchemy import create_engine
 ###################################################
@@ -30,9 +36,9 @@ dotenv.load_dotenv()
 
 app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = "please-remember-me"
-app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=1)
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=2)
 app.config['CORS_HEADERS'] = 'Content-Type'
-
+scheduler = BackgroundScheduler()
 ###################################################
 os.environ["NLS_LANG"] = ".UTF8"
 app.config['SQLALCHEMY_DATABASE_URI'] = 'oracle+cx_oracle://stock:stock@192.168.51.73:1521/mlgye01?encoding=utf-8'
@@ -48,7 +54,6 @@ jwt = JWTManager(app)
 CORS(app)
 app.secret_key = getenv("SECRET_KEY")
 login_manager = LoginManager(app)
-csrf = CSRFProtect()
 
 app.register_blueprint(auth, url_prefix="/")
 app.register_blueprint(web_services, url_prefix="/api")
@@ -66,6 +71,7 @@ def create_token():
         sql = """SELECT USUARIO_ORACLE, PASSWORD, NOMBRE FROM USUARIO 
                 WHERE USUARIO_ORACLE = '{}'""".format(user.upper())
         cursor.execute(sql)
+        db.close
         row = cursor.fetchone()
         if row != None:
             isCorrect = User.check_password(row[1],password)
@@ -94,7 +100,7 @@ def refresh_expiring_jwts(response):
                 response.data = json.dumps(data)
         return response
     except (RuntimeError, KeyError):
-        # Case where there is not a valid JWT. Just return the original respone
+        # Case where there is not a valid JWT. Just return the original response
         return response
 
 @app.route('/profile')
@@ -227,10 +233,11 @@ def getUser(id):
     cur_01 = c.cursor()
     sql = ('SELECT * FROM usuario WHERE USUARIO_ORACLE = :id')
     cursor = cur_01.execute(sql,[id])
+    c.close
     row_headers = [x[0] for x in cursor.description]
     print(row_headers)
     array = cursor.fetchall()
-    c.close
+
     usuario = []
     for result in array:
         usuario.append(dict(zip(row_headers, result)))
@@ -305,7 +312,122 @@ def updateUser(id):
     c.close()
     return jsonify({'msg': 'User updated'})
 
+##########################################################################################################################################################
+
+def consume_api_mantenimiento_auto():
+    # Make a request to the API.
+    today = dt.date.today()
+    yesterday = today - dt.timedelta(days=1)
+    yesterday = yesterday.strftime("%Y-%m-%d")
+    response = requests.get(
+        "https://api.jelou.ai/v1/company/405/reports/145/rows?startAt=" + yesterday + "T00:00:01.007-05:00&endAt=" + yesterday + "T23:59:59.007-05:00&limit=500&page=1",
+        auth=HTTPBasicAuth(getenv("API_USER"), getenv("API_PASS")))
+    data = response.json()
+    rows = data['rows']
+    c = oracle.connection('stock', 'stock')
+    cursor = c.cursor()
+
+    for row in rows:
+        codigo_taller = int(row["codigoTaller"])
+        mantenimiento_prox = int(row["mantenimientoProx"])
+        nombre_mantenimiento = row["nombreMantenimiento"]
+        nombre_garantia = row["nombreGarantia"]
+        nombre_taller = row.get("nombreTaller", " ")
+        telefono_garantia = row.get("telefonoGarantia", None)
+        chasis = row["chasis"]
+        mantenimiento_actual = int(row["mantenimientoActual"])
+        placa = row["placa"]
+        legal_id = row["legalId"]
+        created_at = row["createdAt"]
+        updated_at = row["updatedAt"]
+        empresa = '20'
+
+        query = "INSERT INTO ST_WS_MANTENIMIENTOS (codigo_taller, mantenimiento_prox, nombre_mantenimiento, nombre_garantia, chasis, mantenimiento_actual, placa, legal_id, fecha_crea, fecha_mod, empresa, nombre_taller, telefono_garantia) VALUES (:codigo_taller, :mantenimiento_prox, :nombre_mantenimiento, :nombre_garantia, :chasis, :mantenimiento_actual, :placa, :legal_id, TO_DATE(:created_at, 'DD/MM/YYYY HH24:MI'), TO_DATE(:updated_at, 'DD/MM/YYYY HH24:MI'), :empresa, :nombre_taller, :telefono_garantia)"
+
+        try:
+            cursor.execute(query, {
+            "codigo_taller": codigo_taller,
+            "mantenimiento_prox": mantenimiento_prox,
+            "nombre_mantenimiento": nombre_mantenimiento.upper(),
+            "nombre_garantia": nombre_garantia.upper(),
+            "chasis": chasis.upper(),
+            "mantenimiento_actual": mantenimiento_actual,
+            "placa": placa.upper(),
+            "legal_id": legal_id.upper(),
+            "created_at": created_at,
+            "updated_at": updated_at,
+            "empresa": empresa,
+            "nombre_taller": nombre_taller.upper(),
+            "telefono_garantia": telefono_garantia
+        })
+            c.commit()
+
+        except c.Error as error:
+            print("Error inserting row ", codigo_taller, " ", created_at, " :",error)
+    c.close()
+    return jsonify({'msg': 'Test'})
+
+def consume_api_repuestos_auto():
+
+    today = dt.date.today()
+    yesterday = today - dt.timedelta(days=1)
+    yesterday = yesterday.strftime("%Y-%m-%d")
+    response = requests.get("https://api.jelou.ai/v1/company/405/reports/137/rows?startAt="+yesterday+"T00:00:01.007-05:00&endAt="+yesterday+"T23:59:59.007-05:00&limit=500&page=1",
+                            auth=HTTPBasicAuth(getenv("API_USER"),getenv("API_PASS")))
+    data = response.json()
+    rows = data['rows']
+    c = oracle.connection('stock', 'stock')
+    cursor = c.cursor()
+
+    for row in rows:
+        user_id = int(row["userId"])
+        full_name = row["fullName"]
+        city = row["city"]
+        phone = row["phone"]
+        trademark = row.get("trademark", " ")
+        model = row.get("model", None)
+        color = row.get("color", None)
+        detail = row.get("detail", None)
+        status = row.get("status", " ")
+        observation = row.get("observation", " ")
+        fecha_crea = row["createdAt"]
+        fecha_mod = row["updatedAt"]
+        empresa = '20'
+
+        query = "INSERT INTO ST_WS_REPUESTOS (user_id, full_name, city, phone, trademark, model, color, detail, status, observation, fecha_crea, fecha_mod, empresa ) VALUES (:user_id, :full_name, :city, :phone, :trademark, :model, :color, :detail, :status, :observation, TO_DATE(:fecha_crea, 'DD/MM/YYYY HH24:MI'), TO_DATE(:fecha_mod, 'DD/MM/YYYY HH24:MI'), :empresa)"
+
+        try:
+            cursor.execute(query, {
+            "user_id": user_id,
+            "full_name": full_name.upper(),
+            "city": city.upper(),
+            "phone": phone,
+            "trademark": trademark.upper(),
+            "model": model.upper(),
+            "color": color.upper(),
+            "detail": detail.upper(),
+            "status": status.upper(),
+            "observation": observation.upper(),
+            "fecha_crea": fecha_crea,
+            "fecha_mod": fecha_mod,
+            "empresa": empresa,
+        })
+            c.commit()
+
+        except c.Error as error:
+            print("Error inserting row ", user_id, " ", fecha_crea, " :",error)
+    c.close()
+    return jsonify({'msg': 'Test'})
+
 ####################################################################################
+
+scheduler.add_job(func=consume_api_repuestos_auto, trigger="cron", hour="16", minute="0")
+scheduler.add_job(func=consume_api_mantenimiento_auto, trigger="cron", hour="16", minute="1")
+
+scheduler.start()
+
+# Shut down the scheduler when exiting the app
+atexit.register(lambda: scheduler.shutdown())
 
 if __name__ == '__main__':
     load_dotenv(find_dotenv())

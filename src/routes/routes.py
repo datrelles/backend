@@ -1,13 +1,13 @@
 from flask import Blueprint, jsonify, request
 from datetime import datetime
-from models.users import Usuario, Empresa
-from models.tipo_comprobante import TipoComprobante
-from models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
-from models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StOrdenCompraTracking, StPackinglist
-from models.productos import Producto
-from models.despiece import StDespiece
-from models.producto_despiece import StProductoDespiece
-from config.database import db,engine,session
+from src.models.users import Usuario, Empresa
+from src.models.tipo_comprobante import TipoComprobante
+from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
+from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StOrdenCompraTracking, StPackinglist
+from src.models.productos import Producto
+from src.models.despiece import StDespiece
+from src.models.producto_despiece import StProductoDespiece
+from src.config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer
 import logging
 import datetime
@@ -176,6 +176,7 @@ def obtener_orden_compra_cab():
             'ciudad': ciudad,
             'estado': estado
         })
+
     return jsonify(serialized_ordenes_compra)
 
 @bp.route('/orden_compra_det')
@@ -545,7 +546,7 @@ def crear_orden_compra_cab():
         )
         db.session.add(orden)
         db.session.commit()
-        return jsonify({'mensaje': 'Cabecera de orden de compra creado exitosamente.'})
+        return jsonify({'mensaje': cod_po})
 
     except ValueError as ve:
         # Capturar y manejar el error específico de ValueError

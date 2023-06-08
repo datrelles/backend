@@ -3,7 +3,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, Index, VARCHAR, text
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
-from config.database import db
+from src.config.database import db
 
 Base = declarative_base(metadata = db.metadata)
 
