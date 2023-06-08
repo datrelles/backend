@@ -357,7 +357,10 @@ def obtener_orden_comrpa_det_param():
         fecha_costo = detalle.fecha_costo if detalle.fecha_costo else ""
         fob = detalle.fob if detalle.fob else ""
         cantidad_pedido = detalle.cantidad_pedido if detalle.cantidad_pedido else ""
-        fob_total = fob * cantidad_pedido
+        if fob and cantidad_pedido:
+            fob_total = fob * cantidad_pedido
+        else:
+            fob_total = None
         saldo_producto = detalle.saldo_producto if detalle.saldo_producto else ""
         unidad_medida = detalle.unidad_medida if detalle.unidad_medida else ""
         usuario_crea = detalle.usuario_crea if detalle.usuario_crea else ""

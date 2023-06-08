@@ -600,12 +600,16 @@ def crear_orden_compra_det():
 
         empresa = data['empresa']
         cod_po = data['cod_po']
-        usuario_crea=data['usuario_crea'],
+        usuario_crea=data['usuario_crea'].upper()
+        
+        # Verificar si el usuario existe en la base de datos
+        usuario = Usuario.query().filter_by(usuario_oracle=usuario_crea).first()
+        if not usuario:
+            return jsonify({'mensaje': 'El usuario no existe.'}), 404
 
-        cod_po_no_existe = [] #Lista para almacenar los cod_po qe no existen
+        cod_po_no_existe = [] #Lista para almacenar los codigo de productos que no existen
         print(data)
         for order in data['orders']:
-            #cod_po = order['COD_PO']
             print(order)
             cod_producto = order['COD_PRODUCTO']
 
@@ -647,7 +651,7 @@ def crear_orden_compra_det():
                     cantidad_pedido=order['PEDIDO'],
                     #saldo_producto=order['SALDO_PRODUCTO'] if order['SALDO_PRODUCTO'] else order['PEDIDO'],
                     unidad_medida=unidad_medida,
-                    usuario_crea=str(usuario_crea).upper(),
+                    usuario_crea=usuario_crea,
                     fecha_crea=fecha_crea,
                     #usuario_modifica=order['usuario_modifica'].upper(),
                     #fecha_modifica=fecha_modifica,
@@ -821,7 +825,7 @@ def actualizar_orden_compra_det(cod_po,empresa,secuencia,tipo_comprobante):
         
         data = request.get_json()
         # Consultar la tabla StDespiece para obtener los valores correspondientes
-        despiece = StProductoDespiece.query().filter_by(cod_producto=data['cod_producto'], empresa = data['empresa']).first() #usar la empresa
+        '''despiece = StProductoDespiece.query().filter_by(cod_producto=data['cod_producto'], empresa = data['empresa']).first() #usar la empresa
         if despiece is not None:
             nombre_busq = StDespiece.query().filter_by(cod_despiece =despiece.cod_despiece).first()
             nombre = nombre_busq.nombre_e
@@ -831,24 +835,24 @@ def actualizar_orden_compra_det(cod_po,empresa,secuencia,tipo_comprobante):
             nombre_busq = Producto.query().filter_by(cod_producto = data['cod_producto']).first()
             nombre = nombre_busq.nombre
             nombre_i = nombre_busq.nombre
-            nombre_c = nombre_busq.nombre
-
-        orden.exportar = data.get('exportar',orden.exportar)
-        orden.cod_po = data.get('cod_po', orden.cod_po)
-        orden.tipo_comprobante = data.get('tipo_comprobante',orden.tipo_comprobante)
+            nombre_c = nombre_busq.nombre'''
+        
+        #orden.exportar = data.get('exportar',orden.exportar)
+        #orden.cod_po = data.get('cod_po', orden.cod_po)
+        #orden.tipo_comprobante = data.get('tipo_comprobante',orden.tipo_comprobante)
         orden.secuencia = data.get('secuencia', orden.secuencia)
         orden.empresa = data.get('empresa', orden.empresa)
         orden.cod_producto = data.get('cod_producto', orden.cod_producto)
         orden.cod_producto_modelo = data.get('cod_producto_modelo', orden.cod_producto_modelo)
-        orden.nombre = nombre if nombre else None
-        orden.nombre_i = nombre_i if nombre_i else None
-        orden.nombre_c = nombre_c if nombre_c else None
+        #orden.nombre = nombre if nombre else None
+        #orden.nombre_i = nombre_i if nombre_i else None
+        #orden.nombre_c = nombre_c if nombre_c else None
         orden.nombre_mod_prov = data.get('nombre_mod_prov', orden.nombre_mod_prov)
         orden.nombre_comercial = data.get('nombre_comercial', orden.nombre_comercial)
         orden.costo_sistema = data.get('costo_sistema', orden.costo_sistema)
         orden.fob = data.get('fob', orden.fob)
         orden.fob_total = data.get('fob_total', orden.fob_total)
-        orden.cantidad_pedido = data.get('cantidad_pedido', orden.cantidad_pedido)
+        #orden.cantidad_pedido = data.get('cantidad_pedido', orden.cantidad_pedido)
         orden.saldo_producto = data.get('saldo_producto', orden.saldo_producto)
         orden.unidad_medida = data.get('unidad_medida', orden.unidad_medida)
         orden.usuario_crea = data.get('usuario_crea', orden.usuario_crea).upper()
@@ -856,10 +860,10 @@ def actualizar_orden_compra_det(cod_po,empresa,secuencia,tipo_comprobante):
         orden.fecha_modifica = datetime.strptime(data.get('fecha_modifica', str(orden.fecha_modifica)), '%d/%m/%Y').date()
 
         # Calcula el valor de fob_total
-        orden.fob_total = orden.fob * orden.cantidad_pedido
+        orden.fob_total = orden.fob * float(orden.cantidad_pedido)
 
         if 'costo_cotizado' in data:
-            orden.costo_cotizado = data['costo_corizado']
+            orden.costo_cotizado = data['costo_cotizado']
             if orden.costo_cotizado is not None:
                 orden.fecha_costo = date.today()
 
