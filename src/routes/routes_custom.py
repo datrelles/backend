@@ -432,6 +432,9 @@ def obtener_orden_compra_track_param():
         fecha_crea = datetime.strftime(seguimiento.fecha_crea,"%d/%m/%Y") if seguimiento.fecha_crea else ""
         usuario_modifica = seguimiento.usuario_modifica if seguimiento.usuario_modifica else ""
         fecha_modifica = datetime.strftime(seguimiento.fecha_modifica,"%d/%m/%Y") if seguimiento.fecha_modifica else ""
+        fecha_estimada_produccion = datetime.strftime(seguimiento.fecha_estimada_produccion,"%d/%m/%Y") if seguimiento.fecha_estimada_produccion else ""
+        fecha_estimada_puerto = datetime.strftime(seguimiento.fecha_estimada_puerto,"%d/%m/%Y") if seguimiento.fecha_estimada_puerto else ""
+        fecha_estimada_llegada = datetime.strftime(seguimiento.fecha_estimada_llegada,"%d/%m/%Y") if seguimiento.fecha_estimada_llegada else ""
         serialized_seguimientos.append({
             'cod_po': cod_po,
             'tipo_comprobante': tipo_comprobante,
@@ -451,6 +454,9 @@ def obtener_orden_compra_track_param():
             'fecha_crea': fecha_crea,
             'usuario_modifica': usuario_modifica,
             'fecha_modifica': fecha_modifica,
+            'fecha_estimada_produccion': fecha_estimada_produccion,
+            'fecha_estimada_puerto': fecha_estimada_puerto,
+            'fecha_estimada_llegada': fecha_estimada_llegada,
         })
     return jsonify(serialized_seguimientos)
 

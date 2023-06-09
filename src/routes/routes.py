@@ -7,6 +7,7 @@ from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StOrdenC
 from src.models.productos import Producto
 from src.models.despiece import StDespiece
 from src.models.producto_despiece import StProductoDespiece
+from src.models.unidad_importacion import StUnidadImportacion
 from src.config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer
 import logging
@@ -352,6 +353,9 @@ def obtener_orden_compra_track():
             fecha_crea = datetime.strftime(seguimiento.fecha_crea,"%d/%m/%Y") if seguimiento.fecha_crea else ""
             usuario_modifica = seguimiento.usuario_modifica if seguimiento.usuario_modifica else ""
             fecha_modifica = datetime.strftime(seguimiento.fecha_modifica,"%d/%m/%Y") if seguimiento.fecha_modifica else ""
+            fecha_estimada_produccion = datetime.strftime(seguimiento.fecha_estimada_produccion,"%d/%m/%Y") if seguimiento.fecha_estimada_produccion else ""
+            fecha_estimada_puerto = datetime.strftime(seguimiento.fecha_estimada_puerto,"%d/%m/%Y") if seguimiento.fecha_estimada_puerto else ""
+            fecha_estimada_llegada = datetime.strftime(seguimiento.fecha_estimada_llegada,"%d/%m/%Y") if seguimiento.fecha_estimada_llegada else ""
             serialized_seguimientos.append({
                 'cod_po': cod_po,
                 'tipo_comprobante': tipo_comprobante,
@@ -372,6 +376,9 @@ def obtener_orden_compra_track():
                 'fecha_crea': fecha_crea,
                 'usuario_modifica': usuario_modifica,
                 'fecha_modifica': fecha_modifica,
+                'fecha_estimada_produccion': fecha_estimada_produccion,
+                'fecha_estimada_puerto': fecha_estimada_puerto,
+                'fecha_estimada_llegada': fecha_estimada_llegada,
             })
         return jsonify(serialized_seguimientos)
 
@@ -609,17 +616,19 @@ def crear_orden_compra_det():
             return jsonify({'mensaje': 'El usuario no existe.'}), 404
 
         cod_po_no_existe = [] #Lista para almacenar los codigo de productos que no existen
+        unidad_medida_no_existe = [] #Lista para almacenar las unidades mal ingresadas
         print(data)
         for order in data['orders']:
             print(order)
             cod_producto = order['COD_PRODUCTO']
+            unidad_medida = order['UNIDAD_MEDIDA']
 
             #Verificar si el producto existe en la tabla de Productos
             query = Producto.query().filter_by(cod_producto = cod_producto).first()
-            if query:
+            query_umedida = StUnidadImportacion.query().filter_by(cod_unidad = unidad_medida).first()
+            if query and query_umedida:
                 secuencia = obtener_secuencia(cod_po)
                 costo_sistema = query.costo
-                unidad_medida = query.cod_unidad
 
                 # Consultar la tabla StDespiece para obtener los valores correspondientes
                 despiece = StProductoDespiece.query().filter_by(cod_producto=order['COD_PRODUCTO'], empresa = empresa).first() #usar la empresa
@@ -662,11 +671,17 @@ def crear_orden_compra_det():
                 db.session.commit()
                 #secuencia = obtener_secuencia(order['COD_PO'])
             else:
-                cod_po_no_existe.append(cod_producto)
+                if query is None:
+                    cod_po_no_existe.append(cod_producto)
+                else:
+                    unidad_medida_no_existe.append(unidad_medida)
         if cod_po_no_existe:
             return jsonify({'mensaje': 'Productos no generados.', 'cod_producto_no_existe': cod_po_no_existe})
+        if unidad_medida_no_existe:
+            return jsonify({'mensaje': 'Unidades de Medida no existen.', 'unidad_medida_no_existe': unidad_medida_no_existe})
         else:
             return jsonify({'mensaje': 'Detalle(s) de orden de compra creados exitosamente', 'cod_po': cod_po})
+            
             
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
@@ -743,6 +758,9 @@ def crear_orden_compra_track():
         fecha_en_bodega = datetime.strptime(data['fecha_en_bodega'], '%d/%m/%Y').date() 
         fecha_crea = date.today() #funcion para que se asigne la fecha actual al momento de crear el detalle de la oden de compra
         fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
+        fecha_estimada_produccion = datetime.strptime(data['fecha_estimada_produccion'], '%d/%m/%Y').date()
+        fecha_estimada_puerto = datetime.strptime(data['fecha_estimada_puerto'], '%d/%m/%Y').date()
+        fecha_estimada_llegada = datetime.strptime(data['fecha_estimada_llegada'], '%d/%m/%Y').date()
         tracking = StOrdenCompraTracking(
             cod_po = data['cod_po'],
             empresa = data['empresa'],
@@ -762,8 +780,10 @@ def crear_orden_compra_track():
             usuario_crea = data['usuario_crea'].upper(),
             fecha_crea = fecha_crea,
             usuario_modifica = data['usuario_modifica'].upper(),
-            fecha_modifica = fecha_modifica
-
+            fecha_modifica = fecha_modifica,
+            fecha_estimada_produccion = fecha_estimada_produccion,
+            fecha_estimada_puerto = fecha_estimada_puerto,
+            fecha_estimada_llegada = fecha_estimada_llegada,
         )
         db.session.add(tracking)
         db.session.commit()
@@ -907,6 +927,9 @@ def actualizar_orden_compra_trancking(cod_po,empresa,tipo_comprobante):
         tracking.fecha_crea = datetime.strptime(data.get('fecha_crea', str(tracking.fecha_crea)), '%d/%m/%Y').date()
         tracking.usuario_modifica = data.get('usuario_modifica', tracking.usuario_modifica).upper()
         tracking.fecha_modifica = fecha_modifica
+        tracking.fecha_estimada_produccion = datetime.strptime(data.get('fecha_estimada_produccion', str(tracking.fecha_estimada_produccion)), '%d/%m/%Y').date()
+        tracking.fecha_estimada_puerto = datetime.strptime(data.get('fecha_estimada_puerto', str(tracking.fecha_estimada_puerto)), '%d/%m/%Y').date()
+        tracking.fecha_estimada_llegada = datetime.strptime(data.get('fecha_estimada_llegada', str(tracking.fecha_estimada_llegada)), '%d/%m/%Y').date()
 
         db.session.commit()
 

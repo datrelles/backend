@@ -102,6 +102,9 @@ class StOrdenCompraTracking(Base):
     fecha_crea = Column(DateTime)
     usuario_modifica = Column(VARCHAR(30))
     fecha_modifica = Column(DateTime)
+    fecha_estimada_produccion = Column(DateTime)
+    fecha_estimada_puerto = Column(DateTime)
+    fecha_estimada_llegada = Column(DateTime)
 
     @classmethod
     def query(cls):
