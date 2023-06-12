@@ -1,5 +1,5 @@
 from .entities.User import User
-import src.oracle
+import oracle
 
 
 class ModelUser():

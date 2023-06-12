@@ -1,11 +1,11 @@
 from flask import Blueprint, jsonify, request
-from src.models.productos import Producto
-from src.models.proveedores import Proveedor, TgModeloItem
-from src.models.tipo_comprobante import TipoComprobante
-from src.models.producto_despiece import StProductoDespiece
-from src.models.despiece import StDespiece
-from src.models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StOrdenCompraTracking,StPackinglist
-from src.config.database import db
+from models.productos import Producto
+from models.proveedores import Proveedor, TgModeloItem
+from models.tipo_comprobante import TipoComprobante
+from models.producto_despiece import StProductoDespiece
+from models.despiece import StDespiece
+from models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StOrdenCompraTracking,StPackinglist
+from config.database import db
 import datetime
 from datetime import datetime
 import logging

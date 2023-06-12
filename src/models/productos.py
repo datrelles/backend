@@ -2,7 +2,7 @@
 from sqlalchemy import Column, DateTime, Index, VARCHAR, text
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
-from src.config.database import db
+from config.database import db
 
 Base = declarative_base(metadata = db.metadata)
 

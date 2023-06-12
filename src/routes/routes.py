@@ -1,21 +1,20 @@
 from flask import Blueprint, jsonify, request
 from datetime import datetime
-from src.models.users import Usuario, Empresa
-from src.models.tipo_comprobante import TipoComprobante
-from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
-from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StOrdenCompraTracking, StPackinglist
-from src.models.productos import Producto
-from src.models.despiece import StDespiece
-from src.models.producto_despiece import StProductoDespiece
-from src.models.unidad_importacion import StUnidadImportacion
-from src.config.database import db,engine,session
+from models.users import Usuario, Empresa
+from models.tipo_comprobante import TipoComprobante
+from models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
+from models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StOrdenCompraTracking, StPackinglist
+from models.productos import Producto
+from models.despiece import StDespiece
+from models.producto_despiece import StProductoDespiece
+from models.unidad_importacion import StUnidadImportacion
+from config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer
 import logging
 import datetime
 from datetime import datetime,date
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
-
 
 bp = Blueprint('routes', __name__)
 
@@ -835,66 +834,57 @@ def actualizar_orden_compra_cab(cod_po,empresa,tipo_comprobante):
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
-@bp.route('/orden_compra_det/<cod_po>/<empresa>/<secuencia>/<tipo_comprobante>', methods=['PUT'])
+@bp.route('/orden_compra_det/<cod_po>/<empresa>/<tipo_comprobante>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
-def actualizar_orden_compra_det(cod_po,empresa,secuencia,tipo_comprobante):
+def actualizar_orden_compra_det(cod_po, empresa, tipo_comprobante):
     try:
-        orden = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po,empresa = empresa,secuencia = secuencia, tipo_comprobante = tipo_comprobante).first()
+        print(cod_po, empresa, tipo_comprobante)
+        orden = db.session.query(StOrdenCompraDet).filter(StOrdenCompraDet.cod_po == cod_po, StOrdenCompraDet.empresa == empresa, StOrdenCompraDet.tipo_comprobante == tipo_comprobante).all()
+        print(orden)
         if not orden:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
         
         data = request.get_json()
-        # Consultar la tabla StDespiece para obtener los valores correspondientes
-        '''despiece = StProductoDespiece.query().filter_by(cod_producto=data['cod_producto'], empresa = data['empresa']).first() #usar la empresa
-        if despiece is not None:
-            nombre_busq = StDespiece.query().filter_by(cod_despiece =despiece.cod_despiece).first()
-            nombre = nombre_busq.nombre_e
-            nombre_i = nombre_busq.nombre_i
-            nombre_c = nombre_busq.nombre_c
-        else:
-            nombre_busq = Producto.query().filter_by(cod_producto = data['cod_producto']).first()
-            nombre = nombre_busq.nombre
-            nombre_i = nombre_busq.nombre
-            nombre_c = nombre_busq.nombre'''
+        cod_producto_no_existe = []
+        usuario_modifica = data['usuario_modifica'].upper()
+        fecha_modifica = date.today()
+
+        for order in data['orders']:
+            query = StOrdenCompraDet.query().filter_by(cod_producto=order['cod_producto']).first()
+            print(query)
+            if query:
+                query.cod_producto = order.get('cod_producto', query.cod_producto)
+                query.cod_producto_modelo = order.get('cod_producto_modelo', query.cod_producto_modelo)
+                query.nombre_mod_prov = order.get('nombre_mod_prov', query.nombre_mod_prov)
+                query.nombre_comercial = order.get('nombre_comercial', query.nombre_comercial)
+                query.costo_sistema = order.get('costo_sistema', query.costo_sistema)
+                query.fob = order.get('fob', query.fob)
+                query.fob_total = order.get('fob_total', query.fob_total)
+                query.cantidad_pedido = order.get('cantidad_pedido', query.cantidad_pedido)
+                query.saldo_producto = order.get('saldo_producto', query.saldo_producto)
+                query.usuario_modifica = usuario_modifica
+                query.fecha_modifica = fecha_modifica
+
+                # Calcula el valor de fob_total
+                query.fob_total = (query.fob or 0) * float(query.cantidad_pedido or 0)
+
+                if 'costo_cotizado' in order:
+                    query.costo_cotizado = order['costo_cotizado']
+                    if query.costo_cotizado is not None:
+                        query.fecha_costo = date.today()
+                
+                db.session.commit()
+            else:
+                cod_producto_no_existe.append(order['cod_producto'])
         
-        #orden.exportar = data.get('exportar',orden.exportar)
-        #orden.cod_po = data.get('cod_po', orden.cod_po)
-        #orden.tipo_comprobante = data.get('tipo_comprobante',orden.tipo_comprobante)
-        orden.secuencia = data.get('secuencia', orden.secuencia)
-        orden.empresa = data.get('empresa', orden.empresa)
-        orden.cod_producto = data.get('cod_producto', orden.cod_producto)
-        orden.cod_producto_modelo = data.get('cod_producto_modelo', orden.cod_producto_modelo)
-        #orden.nombre = nombre if nombre else None
-        #orden.nombre_i = nombre_i if nombre_i else None
-        #orden.nombre_c = nombre_c if nombre_c else None
-        orden.nombre_mod_prov = data.get('nombre_mod_prov', orden.nombre_mod_prov)
-        orden.nombre_comercial = data.get('nombre_comercial', orden.nombre_comercial)
-        orden.costo_sistema = data.get('costo_sistema', orden.costo_sistema)
-        orden.fob = data.get('fob', orden.fob)
-        orden.fob_total = data.get('fob_total', orden.fob_total)
-        #orden.cantidad_pedido = data.get('cantidad_pedido', orden.cantidad_pedido)
-        orden.saldo_producto = data.get('saldo_producto', orden.saldo_producto)
-        orden.unidad_medida = data.get('unidad_medida', orden.unidad_medida)
-        orden.usuario_crea = data.get('usuario_crea', orden.usuario_crea).upper()
-        orden.usuario_modifica = data.get('usuario_modifica', orden.usuario_modifica).upper()
-        orden.fecha_modifica = datetime.strptime(data.get('fecha_modifica', str(orden.fecha_modifica)), '%d/%m/%Y').date()
-
-        # Calcula el valor de fob_total
-        orden.fob_total = orden.fob * float(orden.cantidad_pedido)
-
-        if 'costo_cotizado' in data:
-            orden.costo_cotizado = data['costo_cotizado']
-            if orden.costo_cotizado is not None:
-                orden.fecha_costo = date.today()
-
-        db.session.commit()
-
-        return jsonify({'mensaje': 'Detalle de Orden de compra actualizada exitosamente.'})
+        if cod_producto_no_existe:
+            return jsonify({'mensaje': 'Productos no Actualizados.', 'cod_producto_no_existe': cod_producto_no_existe})
+        else:
+            return jsonify({'mensaje': 'Detalle(s) de orden de compra actualizados exitosamente', 'cod_po': cod_po})
     
     except Exception as e:
         logger.exception(f"Error al actualizar: {str(e)}")
-        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/orden_compra_tracking/<cod_po>/<empresa>/<tipo_comprobante>', methods=['PUT'])

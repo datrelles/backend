@@ -3,8 +3,8 @@ from sqlalchemy import Column, DateTime, ForeignKey, Index, VARCHAR
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.orm import relationship,deferred
 from sqlalchemy.ext.declarative import declarative_base
-from src.config.database import db
-from src.models.users import Empresa
+from config.database import db
+from models.users import Empresa
 
 Base = declarative_base(metadata = db.metadata)
 #metadata = Base.metadata
