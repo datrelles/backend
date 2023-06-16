@@ -4,12 +4,21 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import os
 import datetime
+from os import getenv
+import dotenv
 
 datetime_format = '%d%m%y'
 
 app = Flask(__name__)
-os.environ["NLS_LANG"] = ".UTF8"
-app.config['SQLALCHEMY_DATABASE_URI'] = 'oracle+cx_oracle://stock:stock@192.168.51.73:1521/mlgye01?encoding=utf8'
+# Configuración de la base de datos
+db_username = os.getenv('USERORA')
+db_password = os.getenv('PASSWORD')
+db_host = os.getenv('IP')
+db_port = os.getenv('PORT')
+db_sid = os.getenv('SID')
+
+db_uri = f"oracle+cx_oracle://{db_username}:{db_password}@{db_host}:{db_port}/{db_sid}?encoding=utf-8"
+app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['DATETIME_FORMAT'] = datetime_format
 

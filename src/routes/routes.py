@@ -12,6 +12,7 @@ from config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer
 import logging
 import datetime
+import requests
 from datetime import datetime,date
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
@@ -204,7 +205,7 @@ def obtener_orden_compra_det():
         fecha_costo = detalle.fecha_costo if detalle.fecha_costo else ""
         fob = detalle.fob if detalle.fob else ""
         cantidad_pedido = detalle.cantidad_pedido if detalle.cantidad_pedido else ""
-        fob_total = fob * cantidad_pedido
+        fob_total = detalle.fob_total if detalle.fob_total else ""
         saldo_producto = detalle.saldo_producto if detalle.saldo_producto else ""
         unidad_medida = detalle.unidad_medida if detalle.unidad_medida else ""
         usuario_crea = detalle.usuario_crea if detalle.usuario_crea else ""
@@ -649,7 +650,7 @@ def crear_orden_compra_det():
                     secuencia=secuencia,
                     empresa=empresa,
                     cod_producto=order['COD_PRODUCTO'],
-                    cod_producto_modelo=order['COD_MODELO'],
+                    cod_producto_modelo=obtener_cod_producto_modelo(empresa,cod_producto),
                     nombre=nombre if nombre else None,
                     nombre_i=nombre_i if nombre_i else None,
                     nombre_c=nombre_c if nombre_c else None,
@@ -711,6 +712,26 @@ def obtener_secuencia(cod_po):
     else:
         # Si el cod_po no existe en la tabla StOrdenCompraCab, mostrar mensaje de error
         raise ValueError('La Orden de Compra no existe.')
+    
+#Funcion para obtener el cod_producto_modelo segun el cod_producto
+def obtener_cod_producto_modelo(empresa, cod_producto):
+    try:
+        query = text("""
+            select substr(substr(ks_reporte.tipo_modelo_cat(a.empresa, a.cod_producto),INSTR(ks_reporte.tipo_modelo_cat(a.empresa, a.cod_producto),CHR(9))+1),1,instr(substr(ks_reporte.tipo_modelo_cat(a.empresa, a.cod_producto),INSTR(ks_reporte.tipo_modelo_cat(a.empresa, a.cod_producto),CHR(9))+1),CHR(9))-1) modelo
+            from producto a
+            where empresa = :empresa and a.cod_producto = :cod_producto
+        """)
+        result = db.session.execute(query, {"empresa": empresa, "cod_producto": cod_producto})
+        row = result.fetchone()
+        print(row)
+        if row:
+            return row[0]
+        return None
+
+    except Exception as e:
+        # Manejar errores
+        print('Error:', e)
+        raise
     
 @bp.route('/packinglist', methods=['POST'])
 @jwt_required()
@@ -1035,3 +1056,119 @@ def eliminar_orden_compra_packinglist(cod_po, empresa, tipo_comprobante):
     except Exception as e:
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
+    
+@bp.route('/orden_compra_total', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def crear_orden_compra_total():
+    try:
+        data = request.get_json()
+        fecha_crea = date.today()
+
+        # Obtener la ciudad del proveedor
+        busq_ciudad = TcCoaProveedor.query().filter_by(ruc=data['cabecera']['cod_proveedor']).first()
+        ciudad = busq_ciudad.ciudad_matriz if busq_ciudad else ''
+
+        # Obtener el nombre del estado
+        estado = TgModeloItem.query().filter_by(cod_modelo=data['cabecera']['cod_modelo'], cod_item=data['cabecera']['cod_item']).first()
+        estado_nombre = estado.nombre if estado else ''
+
+        # Generar el código de la cabecera
+        cod_po = asigna_cod_comprobante(data['cabecera']['empresa'], data['cabecera']['tipo_comprobante'], data['cabecera']['cod_agencia'])
+
+        # Crear la cabecera de la orden de compra
+        cabecera = StOrdenCompraCab(
+            empresa=data['cabecera']['empresa'],
+            cod_po=cod_po,
+            bodega=data['cabecera']['bodega'],
+            cod_agencia=data['cabecera']['cod_agencia'],
+            tipo_comprobante=data['cabecera']['tipo_comprobante'],
+            cod_proveedor=data['cabecera']['cod_proveedor'],
+            nombre=data['cabecera']['nombre'],
+            cod_po_padre=data['cabecera']['cod_po_padre'],
+            usuario_crea=data['cabecera']['usuario_crea'].upper(),
+            fecha_crea=fecha_crea,
+            usuario_modifica=data['cabecera']['usuario_modifica'].upper(),
+            fecha_modifica=datetime.strptime(data['cabecera']['fecha_modifica'], '%d/%m/%Y').date(),
+            cod_modelo=data['cabecera']['cod_modelo'],
+            cod_item=data['cabecera']['cod_item'],
+            ciudad=ciudad,
+            estado=estado_nombre,
+        )
+        db.session.add(cabecera)
+        db.session.commit()
+
+        # Agregar el código de la cabecera a cada detalle
+        for detalle in data['detalles']:
+            detalle['cod_po'] = cod_po
+
+        # Crear los detalles de la orden de compra
+        cod_po_no_existe = []
+        unidad_medida_no_existe = []
+
+        for detalle in data['detalles']:
+            cod_producto = detalle['COD_PRODUCTO']
+            unidad_medida = detalle['UNIDAD_MEDIDA']
+
+            # Verificar si el producto y la unidad de medida existen
+            query_producto = Producto.query().filter_by(cod_producto=cod_producto).first()
+            query_unidad_medida = StUnidadImportacion.query().filter_by(cod_unidad=unidad_medida).first()
+
+            if query_producto and query_unidad_medida:
+                secuencia = obtener_secuencia(cod_po)
+                costo_sistema = query_producto.costo
+
+                # Obtener los nombres correspondientes del despiece o el producto
+                despiece = StProductoDespiece.query().filter_by(cod_producto=cod_producto, empresa=data['cabecera']['empresa']).first()
+                if despiece:
+                    nombre_busq = StDespiece.query().filter_by(cod_despiece=despiece.cod_despiece).first()
+                    nombre = nombre_busq.nombre_e
+                    nombre_i = nombre_busq.nombre_i
+                    nombre_c = nombre_busq.nombre_c
+                else:
+                    nombre_busq = Producto.query().filter_by(cod_producto=cod_producto).first()
+                    nombre = nombre_busq.nombre
+                    nombre_i = nombre_busq.nombre
+                    nombre_c = nombre_busq.nombre
+
+                detalle_orden = StOrdenCompraDet(
+                    exportar=detalle['AGRUPADO'],
+                    cod_po=cod_po,
+                    tipo_comprobante='PO',
+                    secuencia=secuencia,
+                    empresa=data['cabecera']['empresa'],
+                    cod_producto=cod_producto,
+                    cod_producto_modelo=obtener_cod_producto_modelo(data['cabecera']['empresa'], cod_producto),
+                    nombre=nombre if nombre else None,
+                    nombre_i=nombre_i if nombre_i else None,
+                    nombre_c=nombre_c if nombre_c else None,
+                    nombre_mod_prov=detalle['NOMBRE_PROVEEDOR'],
+                    nombre_comercial=detalle['NOMBRE_COMERCIAL'],
+                    costo_sistema=costo_sistema if costo_sistema else 0,
+                    cantidad_pedido=detalle['PEDIDO'],
+                    unidad_medida=unidad_medida,
+                    usuario_crea=data['cabecera']['usuario_crea'].upper(),
+                    fecha_crea=fecha_crea,
+                )
+                db.session.add(detalle_orden)
+                db.session.commit()
+            else:
+                if not query_producto:
+                    cod_po_no_existe.append(cod_producto)
+                else:
+                    unidad_medida_no_existe.append(unidad_medida)
+
+        if cod_po_no_existe:
+            return jsonify({'mensaje': 'Productos no generados.', 'cod_producto_no_existe': cod_po_no_existe})
+        if unidad_medida_no_existe:
+            return jsonify({'mensaje': 'Unidades de Medida no existen.', 'unidad_medida_no_existe': unidad_medida_no_existe})
+
+        return jsonify({'mensaje': 'Orden de compra creada exitosamente', 'cod_po': cod_po})
+
+    except ValueError as ve:
+        error_message = str(ve)
+        return jsonify({'error': error_message}), 500
+
+    except Exception as e:
+        error_message = f"Se produjo un error: {str(e)}"
+        return jsonify({'error': error_message}), 500

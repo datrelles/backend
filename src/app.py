@@ -7,6 +7,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from flask_wtf.csrf import CSRFProtect
 from numpy.core.defchararray import upper
 from requests.auth import HTTPBasicAuth
+#from flask_crontab import crontab
 
 import oracle
 from routes.web_services import web_services
@@ -30,6 +31,8 @@ from routes.routes import bp
 from routes.routes_custom import bpcustom
 import logging
 from sqlalchemy import create_engine
+from models.orden_compra import StOrdenCompraCab
+from datetime import date
 ###################################################
 
 dotenv.load_dotenv()
@@ -41,12 +44,37 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 scheduler = BackgroundScheduler()
 ###################################################
 os.environ["NLS_LANG"] = ".UTF8"
-app.config['SQLALCHEMY_DATABASE_URI'] = 'oracle+cx_oracle://stock:stock@192.168.51.73:1521/mlgye01?encoding=utf-8'
+# Configuración de la base de datos
+db_username = os.getenv('USERORA')
+db_password = os.getenv('PASSWORD')
+db_host = os.getenv('IP')
+db_port = os.getenv('PORT')
+db_sid = os.getenv('SID')
+
+db_uri = f"oracle+cx_oracle://{db_username}:{db_password}@{db_host}:{db_port}/{db_sid}?encoding=utf-8"
+app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
 app.register_blueprint(bp)
 app.register_blueprint(bpcustom)
+
+'''# Configuración de flask-crontab
+crontab = Crontab(app)
+
+@crontab.job(minute="0", hour="0")  # Ejecutar todos los días a las 00:00
+def actualizar_estados_ordenes():
+    # Obtener todas las órdenes de compra
+    ordenes = StOrdenCompraCab.query.all()
+
+    for orden in ordenes:
+        if orden.fecha_puerto and orden.fecha_puerto.date() <= date.today():
+            # Actualizar el estado de la orden a "En puerto"
+            orden.estado = "En puerto"
+        elif orden.fecha_llegada and orden.fecha_llegada.date() <= date.today():
+            # Actualizar el estado de la orden a "Llegada"
+            orden.estado = "Llegada"'''
+
 
 #############################################################################
 
