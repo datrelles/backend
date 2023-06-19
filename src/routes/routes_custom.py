@@ -401,7 +401,7 @@ def obtener_orden_compra_track_param():
 
     empresa = request.args.get('empresa', None)
     cod_po = request.args.get('cod_po', None)
-    tipo_comprobante = request.args.get(tipo_comprobante, None)
+    tipo_comprobante = request.args.get('tipo_comprobante', None)
 
     query = StOrdenCompraTracking.query()
     if empresa:
