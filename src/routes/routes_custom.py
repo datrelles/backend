@@ -6,6 +6,7 @@ from models.producto_despiece import StProductoDespiece
 from models.despiece import StDespiece
 from models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StOrdenCompraTracking,StPackinglist
 from config.database import db
+from sqlalchemy import and_
 import datetime
 from datetime import datetime
 import logging
@@ -490,3 +491,27 @@ def eliminar_orden_compra(cod_po, empresa, tipo_comprobante):
     except Exception as e:
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500    
+    
+@bpcustom.route('/producto_modelo')
+@jwt_required()
+@cross_origin()
+def obtener_producto_modelo():
+    query = db.session.query(Producto).filter(
+        and_(
+            Producto.empresa == 20,
+            Producto.es_grupo_modelo == 1,
+            Producto.activo == "S"
+        )
+    )
+    productos = query.all()
+    serialized_producto = []
+    for producto in productos:
+        cod_producto = producto.cod_producto if producto.cod_producto else ""
+        nombre = producto.nombre if producto.nombre else ""
+        cod_producto_modelo = producto.cod_producto_modelo if producto.cod_producto_modelo else ""
+        serialized_producto.append({
+            'cod_producto': cod_producto,
+            'nombre': nombre,
+            'cod_producto_modelo': cod_producto_modelo
+        })
+    return jsonify(serialized_producto)
