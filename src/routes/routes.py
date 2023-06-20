@@ -620,7 +620,7 @@ def crear_orden_compra_det():
         print(data)
         for order in data['orders']:
             print(order)
-            cod_producto = order['COD_PRODUCTO']
+            cod_producto = order['COD_PRODUCTO'].strip()
             unidad_medida = order['UNIDAD_MEDIDA']
 
             #Verificar si el producto existe en la tabla de Productos
@@ -875,8 +875,8 @@ def actualizar_orden_compra_det(cod_po, empresa, tipo_comprobante):
             query = StOrdenCompraDet.query().filter_by(cod_producto=order['cod_producto']).first()
             print(query)
             if query:
-                query.cod_producto = order.get('cod_producto', query.cod_producto)
-                query.cod_producto_modelo = order.get('cod_producto_modelo', query.cod_producto_modelo)
+                query.cod_producto = order.get('cod_producto', query.cod_producto).strip()
+                query.cod_producto_modelo = order.get('cod_producto_modelo', query.cod_producto_modelo).strip()
                 query.nombre_mod_prov = order.get('nombre_mod_prov', query.nombre_mod_prov)
                 query.nombre_comercial = order.get('nombre_comercial', query.nombre_comercial)
                 query.costo_sistema = order.get('costo_sistema', query.costo_sistema)
@@ -1107,7 +1107,7 @@ def crear_orden_compra_total():
         unidad_medida_no_existe = []
 
         for detalle in data['detalles']:
-            cod_producto = detalle['COD_PRODUCTO']
+            cod_producto = detalle['COD_PRODUCTO'].strip()
             unidad_medida = detalle['UNIDAD_MEDIDA']
 
             # Verificar si el producto y la unidad de medida existen

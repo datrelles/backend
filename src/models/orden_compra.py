@@ -55,7 +55,7 @@ class StOrdenCompraDet(Base):
     secuencia = Column(NUMBER(6, 0, False), primary_key=True, nullable=False)
     empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
     cod_producto = Column(VARCHAR(14))
-    cod_producto_modelo = Column(CHAR(50))
+    cod_producto_modelo = Column(VARCHAR(14))
     nombre = Column(VARCHAR(200))
     costo_sistema = Column(NUMBER(14, 2, True))
     fob = Column(NUMBER(14, 2, True))
