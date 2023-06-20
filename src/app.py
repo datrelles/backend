@@ -13,8 +13,8 @@ import oracle
 from routes.web_services import web_services
 from routes.auth import auth
 from dotenv import load_dotenv, find_dotenv
-from models.ModelUser import ModelUser
-from models.entities.User import User
+from src.models.ModelUser import ModelUser
+from src.models.entities.User import User
 from flask_login import LoginManager, login_user,logout_user, login_required
 from os import getenv
 import dotenv
@@ -26,12 +26,11 @@ from datetime import datetime, timedelta, timezone
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager
 
 ###################################################
-from config.database import db
-from routes.routes import bp
-from routes.routes_custom import bpcustom
-import logging
+from src.config.database import db
+from src.routes.routes import bp
+from src.routes.routes_custom import bpcustom
 from sqlalchemy import create_engine
-from models.orden_compra import StOrdenCompraCab
+from src.models.orden_compra import StOrdenCompraCab
 from datetime import date
 ###################################################
 
@@ -45,12 +44,11 @@ scheduler = BackgroundScheduler()
 ###################################################
 os.environ["NLS_LANG"] = ".UTF8"
 # Configuración de la base de datos
-db_username = os.getenv('USERORA')
-db_password = os.getenv('PASSWORD')
-db_host = os.getenv('IP')
-db_port = os.getenv('PORT')
-db_sid = os.getenv('SID')
-
+db_username = getenv("USERORA")
+db_password = getenv("PASSWORD")
+db_host = getenv("IP")
+db_port = getenv("PORT")
+db_sid = getenv("SID")
 db_uri = f"oracle+cx_oracle://{db_username}:{db_password}@{db_host}:{db_port}/{db_sid}?encoding=utf-8"
 app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False

@@ -11,11 +11,11 @@ datetime_format = '%d%m%y'
 
 app = Flask(__name__)
 # Configuración de la base de datos
-db_username = os.getenv('USERORA')
-db_password = os.getenv('PASSWORD')
-db_host = os.getenv('IP')
-db_port = os.getenv('PORT')
-db_sid = os.getenv('SID')
+db_username = getenv("USERORA")
+db_password = getenv("PASSWORD")
+db_host = getenv("IP")
+db_port = getenv("PORT")
+db_sid = getenv("SID")
 
 db_uri = f"oracle+cx_oracle://{db_username}:{db_password}@{db_host}:{db_port}/{db_sid}?encoding=utf-8"
 app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
