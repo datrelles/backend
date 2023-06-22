@@ -1056,8 +1056,8 @@ def crear_orden_compra_total():
         ciudad = busq_ciudad.ciudad_matriz if busq_ciudad else ''
 
         # Obtener el nombre del estado
-        estado = TgModeloItem.query().filter_by(cod_modelo=data['cabecera']['cod_modelo'], cod_item=data['cabecera']['cod_item']).first()
-        estado_nombre = estado.nombre if estado else ''
+        #estado = TgModeloItem.query().filter_by(cod_modelo=data['cabecera']['cod_modelo'], cod_item=data['cabecera']['cod_item']).first()
+        #estado_nombre = estado.nombre if estado else ''
 
         # Generar el código de la cabecera
         cod_po = asigna_cod_comprobante(data['cabecera']['empresa'], data['cabecera']['tipo_comprobante'], data['cabecera']['cod_agencia'])
@@ -1079,7 +1079,6 @@ def crear_orden_compra_total():
             cod_modelo=data['cabecera']['cod_modelo'],
             cod_item=data['cabecera']['cod_item'],
             ciudad=ciudad,
-            estado=estado_nombre,
         )
         db.session.add(cabecera)
         db.session.commit()
