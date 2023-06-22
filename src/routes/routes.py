@@ -748,13 +748,12 @@ def crear_packinglist():
         data = request.get_json()
         fecha_crea = date.today()
         fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
-        for packing in data['packings']:
-            cod_po = packing['cod_po'],
+        empresa = data['empresa']
+        cod_po = data['cod_po']
+        usuario_crea=data['usuario_crea'].upper()
 
+        for packing in data['packings']:
             packinlist = StPackinglist(
-                cod_po = packing['cod_po'],
-                tipo_comprobante = packing['tipo_comprobante'],
-                empresa = packing['empresa'],
                 secuencia = packing['secuencia'],
                 cod_producto = packing['cod_producto'],
                 cantidad = packing['cantidad'],
@@ -1149,11 +1148,11 @@ def crear_orden_compra_total():
                     unidad_medida_no_existe.append(unidad_medida)
 
         if cod_po_no_existe:
-            return jsonify({'mensaje': 'Productos no generados.', 'cod_producto_no_existe': cod_po_no_existe})
+            return jsonify({'mensaje': 'Productos no generados.', 'cod_producto_no_existe': cod_po_no_existe, 'cod_po': cod_po})
         if unidad_medida_no_existe:
-            return jsonify({'mensaje': 'Unidades de Medida no existen.', 'unidad_medida_no_existe': unidad_medida_no_existe})
+            return jsonify({'mensaje': 'Unidades de Medida no existen.', 'unidad_medida_no_existe': unidad_medida_no_existe, 'cod_po': cod_po})
         if cod_modelo_no_existe:
-            return jsonify({'mensaje': 'Modelo de moto no existe.', 'cod_producto_modelo_no_existe': cod_modelo_no_existe})
+            return jsonify({'mensaje': 'Modelo de moto no existe.', 'cod_producto_modelo_no_existe': cod_modelo_no_existe, 'cod_po': cod_po})
 
         return jsonify({'mensaje': 'Orden de compra creada exitosamente', 'cod_po': cod_po})
 
