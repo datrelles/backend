@@ -35,7 +35,6 @@ class StOrdenCompraCab(Base):
     bodega = Column(NUMBER(4, 0, False))
     cod_agencia = Column(NUMBER(4, 0, False))
     ciudad = Column(VARCHAR(60))
-    estado = Column(VARCHAR(100))
     buque = Column(VARCHAR(15))
     naviera = Column(VARCHAR(15))
     flete = Column(NUMBER(15, 0, False))

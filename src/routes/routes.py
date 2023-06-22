@@ -155,7 +155,6 @@ def obtener_orden_compra_cab():
         cod_item = orden.cod_item if orden.cod_item else ""
         bodega = orden.bodega if orden.bodega else ""
         ciudad = orden.ciudad if orden.ciudad else ""
-        estado = orden.estado if orden.estado else ""
         buque = orden.buque if orden.buque else ""
         naviera = orden.naviera if orden.naviera else ""
         flete = orden.flete if orden.flete else ""
@@ -183,7 +182,6 @@ def obtener_orden_compra_cab():
             'cod_item': cod_item,
             'bodega': bodega,
             'ciudad': ciudad,
-            'estado': estado,
             'buque' : buque,
             'naviera': naviera,
             'flete': flete,
@@ -522,8 +520,8 @@ def crear_orden_compra_cab():
         ciudad = busq_ciudad.ciudad_matriz
 
         #busqueda para obtener el nombre del estado para la orden de compra
-        estado = TgModeloItem.query().filter_by(cod_modelo=data['cod_modelo'], cod_item=data['cod_item']).first()
-        estado_nombre = estado.nombre if estado else ''
+        #estado = TgModeloItem.query().filter_by(cod_modelo=data['cod_modelo'], cod_item=data['cod_item']).first()
+        #estado_nombre = estado.nombre if estado else ''
        
         # Generate the cod_po using the asigna_cod_comprobante function
         cod_po = asigna_cod_comprobante(data['empresa'], data['tipo_comprobante'], data['cod_agencia'])
@@ -544,7 +542,6 @@ def crear_orden_compra_cab():
             cod_modelo=data['cod_modelo'],
             cod_item=data['cod_item'],
             ciudad = ciudad if ciudad else "",
-            estado = estado_nombre,
             buque = data['buque'],
             naviera = data['naviera'],
             flete = data['flete'],
@@ -751,23 +748,26 @@ def crear_packinglist():
         data = request.get_json()
         fecha_crea = date.today()
         fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
-        packinlist = StPackinglist(
-            cod_po = data['cod_po'],
-            tipo_comprobante = data['tipo_comprobante'],
-            empresa = data['empresa'],
-            secuencia = data['secuencia'],
-            cod_producto = data['cod_producto'],
-            cantidad = data['cantidad'],
-            fob = data['fob'],
-            cod_producto_modelo = data['cod_producto_modelo'],
-            unidad_medida = data['unidad_medida'],
-            usuario_crea = data['usuario_crea'].upper(),
-            fecha_crea = fecha_crea,
-            usuario_modifica = data['usuario_modifica'].upper(),
-            fecha_modifica = fecha_modifica
-        )
-        db.session.add(packinlist)
-        db.session.commit()
+        for packing in data['packings']:
+            cod_po = packing['cod_po'],
+
+            packinlist = StPackinglist(
+                cod_po = packing['cod_po'],
+                tipo_comprobante = packing['tipo_comprobante'],
+                empresa = packing['empresa'],
+                secuencia = packing['secuencia'],
+                cod_producto = packing['cod_producto'],
+                cantidad = packing['cantidad'],
+                fob = packing['fob'],
+                cod_producto_modelo = packing['cod_producto_modelo'],
+                unidad_medida = packing['unidad_medida'],
+                usuario_crea = packing['usuario_crea'].upper(),
+                fecha_crea = fecha_crea,
+                usuario_modifica = packing['usuario_modifica'].upper(),
+                fecha_modifica = fecha_modifica
+            )
+            db.session.add(packinlist)
+            db.session.commit()
         return jsonify({'mensaje': 'Packinglist de orden de compra creado exitosamente.'})
 
     except Exception as e:
@@ -810,17 +810,23 @@ def crear_orden_compra_track():
 @bp.route('/orden_compra_cab/<cod_po>/<empresa>/<tipo_comprobante>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
-def actualizar_orden_compra_cab(cod_po,empresa,tipo_comprobante):
+def actualizar_orden_compra_cab(cod_po, empresa, tipo_comprobante):
     try:
-        orden = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po,empresa = empresa, tipo_comprobante = tipo_comprobante).first()
+        orden = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante=tipo_comprobante).first()
         if not orden:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
 
         data = request.get_json()
-        #orden.empresa = data.get('empresa', orden.empresa)
-        #orden.cod_po = data.get('cod_po', orden.cod_po)
-        #orden.tipo_comprobante = data.get('tipo_comprobante', orden.tipo_comprobante)
-        #orden.cod_agencia = data.get('cod_agencia',orden.cod_agencia)
+
+        if 'fecha_estimada_produccion' in data:
+            orden.fecha_estimada_produccion = datetime.strptime(data['fecha_estimada_produccion'], '%d/%m/%Y').date()
+
+        if 'fecha_estimada_puerto' in data:
+            orden.fecha_estimada_puerto = datetime.strptime(data['fecha_estimada_puerto'], '%d/%m/%Y').date()
+
+        if 'fecha_estimada_llegada' in data:
+            orden.fecha_estimada_llegada = datetime.strptime(data['fecha_estimada_llegada'], '%d/%m/%Y').date()
+
         orden.cod_proveedor = data.get('cod_proveedor', orden.cod_proveedor)
         orden.nombre = data.get('nombre', orden.nombre)
         orden.proforma = data.get('proforma', orden.proforma)
@@ -828,29 +834,23 @@ def actualizar_orden_compra_cab(cod_po,empresa,tipo_comprobante):
         orden.bl_no = data.get('bl_no', orden.bl_no)
         orden.cod_po_padre = data.get('cod_po_padre', orden.cod_po_padre)
         orden.usuario_crea = data.get('usuario_crea', orden.usuario_crea).upper()
-        #orden.fecha_crea = datetime.strptime(data.get('fecha_crea', str(orden.fecha_crea)), '%d/%m/%Y').date()
         orden.usuario_modifica = data.get('usuario_modifica', orden.usuario_modifica).upper()
         orden.fecha_modifica = date.today()
         orden.cod_modelo = data.get('cod_modelo', orden.cod_modelo)
         orden.cod_item = data.get('cod_item', orden.cod_item)
         orden.bodega = data.get('bodega', orden.bodega)
         orden.ciudad = data.get('ciudad', orden.ciudad)
-        orden.estado = data.get('estado', orden.estado)
         orden.buque = data.get('buque', orden.buque)
         orden.naviera = data.get('naviera', orden.naviera)
         orden.flete = data.get('flete', orden.flete)
         orden.agente_aduanero = data.get('agente_aduanero', orden.agente_aduanero)
-        orden.fecha_estimada_produccion = datetime.strptime(data.get('fecha_estimada_produccion'), '%d/%m/%Y').date()
-        orden.fecha_estimada_puerto = datetime.strptime(data.get('fecha_estimada_puerto'), '%d/%m/%Y').date()
-        orden.fecha_estimada_llegada = datetime.strptime(data.get('fecha_estimada_llegada'), '%d/%m/%Y').date()
 
         db.session.commit()
 
         return jsonify({'mensaje': 'Orden de compra actualizada exitosamente.'})
-    
+
     except Exception as e:
-        logger.exception(f"Error al actualizar: {str(e)}")
-        #logging.error('Ocurrio un error: %s',e)
+        logger.exception(f"Error al actualizar la orden de compra: {str(e)}")
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/orden_compra_det/<cod_po>/<empresa>/<tipo_comprobante>', methods=['PUT'])

@@ -299,7 +299,6 @@ def obtener_orden_compra_cab_param():
         cod_modelo = cabecera.cod_modelo if cabecera.cod_modelo else ""
         cod_item = cabecera.cod_item if cabecera.cod_item else ""
         ciudad = cabecera.ciudad if cabecera.ciudad else ""
-        estado = cabecera.estado if cabecera.estado else ""
         serialized_cabeceras.append({
             'empresa': empresa,
             'cod_po': cod_po,
@@ -316,8 +315,7 @@ def obtener_orden_compra_cab_param():
             'fecha_modifica': fecha_modifica,
             'cod_modelo': cod_modelo,
             'cod_item': cod_item,
-            'ciudad': ciudad,
-            'estado': estado
+            'ciudad': ciudad
         })
     
     return jsonify(serialized_cabeceras)
