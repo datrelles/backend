@@ -53,26 +53,25 @@ class StEmbarquesBl(Base):
     def query(cls):
         return db.session.query(cls)
     
-class StTracking(Base):
-    __tablename__ = 'st_tracking'
+class StTrackingBl(Base):
+    __tablename__ = 'st_tracking_bl'
     __table_args__ = (
-        Index('idx_st_tracking_st_ord_ccab', 'cod_po', 'tipo_comprobante', 'empresa'),
-        Index('idx1_tracking_tg_modelo_item', 'empresa', 'cod_modelo', 'cod_item'),
+        Index('idx4_track_bl_st_embarque', 'cod_bl_house', 'empresa'),
+        Index('idx1_track_bl_tg_modelo_item', 'cod_item', 'cod_modelo', 'empresa'),
         {'schema': 'stock'}
     )
 
-    cod_po = Column(VARCHAR(9), primary_key=True, nullable=False)
-    tipo_comprobante = Column(VARCHAR(2), primary_key=True, nullable=False)
-    secuencia = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
-    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
-    cod_modelo = Column(VARCHAR(8))
-    cod_item = Column(VARCHAR(3))
+    cod_bl_house = Column(VARCHAR(30), primary_key=True, nullable=False)
+    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False, index=True)
+    secuencial = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
     observaciones = Column(CHAR(150))
-    fecha = Column(DateTime)
+    cod_modelo = Column(VARCHAR(8))
     usuario_crea = Column(VARCHAR(30))
     fecha_crea = Column(DateTime)
     usuario_modifica = Column(VARCHAR(30))
     fecha_modifica = Column(DateTime)
+    fecha = Column(DateTime)
+    cod_item = Column(VARCHAR(3))
 
     @classmethod
     def query(cls):

@@ -8,6 +8,7 @@ from models.productos import Producto
 from models.despiece import StDespiece
 from models.producto_despiece import StProductoDespiece
 from models.unidad_importacion import StUnidadImportacion
+from models.embarque_bl import StEmbarquesBl,StTrackingBl
 from config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer
 import logging
@@ -488,6 +489,35 @@ def obtener_tgmodelo():
         logger.exception(f"Error al consultar: {str(e)}")
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
+    
+@bp.route('/embarque')
+@jwt_required()
+@cross_origin()
+def obtener_embarques():
+    try:
+        query = StEmbarquesBl.query()
+        embarques = query.all()
+        serialized_embarques = []
+        for embarque in embarques:
+            empresa = embarque.empresa if embarque.empresa else ""
+            codigo_bl_master = embarque.codigo_bl_master if embarque.codigo_bl_master else ""
+            codigo_bl_house = embarque.codigo_bl_house if embarque.codigo_bl_house else ""
+            cod_proveedor = embarque.cod_proveedor if embarque.cod_proveedor else ""
+            fecha_embarque = datetime.strftime(embarque.fecha_embarque,"%d/%m/%Y") if embarque.fecha_embarque else ""
+            serialized_embarques.append({
+                'empresa': empresa,
+                'codigo_bl_master': codigo_bl_master,
+                'codigo_bl_house': codigo_bl_house,
+                'cod_proveedor': cod_proveedor,
+                'fecha_embarque': fecha_embarque
+            })
+        return jsonify(serialized_embarques)
+
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        #logging.error('Ocurrio un error: %s',e)
+        return jsonify({'error': str(e)}), 500
+
     
 #METODOS POST
 
@@ -1096,7 +1126,7 @@ def eliminar_orden_compra_det(cod_po, empresa, secuencia,tipo_comprobante):
 @cross_origin()
 def eliminar_orden_compra_tracking(cod_po, empresa, tipo_comprobante):
     try:
-        tracking = db.session.query(StOrdenCompraTracking).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante=tipo_comprobante).first()
+        tracking = db.session.query(StTracking).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante=tipo_comprobante).first()
         if not tracking:
             return jsonify({'mensaje': 'Tracking de orden de compra no existe.'}), 404
 
@@ -1155,11 +1185,15 @@ def crear_orden_compra_total():
             tipo_comprobante=data['cabecera']['tipo_comprobante'],
             cod_proveedor=data['cabecera']['cod_proveedor'],
             nombre=data['cabecera']['nombre'],
-            cod_po_padre=data['cabecera']['cod_po_padre'],
+            proforma=data['cabecera']['proforma'],
+            cod_opago=data['cabecera']['cod_opago'],
             usuario_crea=data['cabecera']['usuario_crea'].upper(),
             fecha_crea=fecha_crea,
             usuario_modifica=data['cabecera']['usuario_modifica'].upper(),
             fecha_modifica=datetime.strptime(data['cabecera']['fecha_modifica'], '%d/%m/%Y').date(),
+            fecha_estimada_produccion=datetime.strptime(data['cabecera']['fecha_estimada_produccion'], '%d/%m/%Y').date(),
+            fecha_estimada_puerto=datetime.strptime(data['cabecera']['fecha_estimada_puerto'], '%d/%m/%Y').date(),
+            fecha_estimada_llegada=datetime.strptime(data['cabecera']['fecha_estimada_llegada'], '%d/%m/%Y').date(),
             cod_modelo=data['cabecera']['cod_modelo'],
             cod_item=data['cabecera']['cod_item'],
             ciudad=ciudad,
