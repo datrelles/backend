@@ -1299,7 +1299,7 @@ def crear_orden_compra_total():
                     nombre_comercial=detalle['NOMBRE_COMERCIAL'],
                     costo_sistema=costo_sistema if costo_sistema else 0,
                     cantidad_pedido=detalle['PEDIDO'],
-                    saldo_producto=0,
+                    saldo_producto=detalle['PEDIDO'],
                     unidad_medida=unidad_medida,
                     usuario_crea=data['cabecera']['usuario_crea'].upper(),
                     fecha_crea=fecha_crea,
