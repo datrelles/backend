@@ -1199,7 +1199,10 @@ def crear_orden_compra_total():
 
         # Generar el código de la cabecera
         cod_po = asigna_cod_comprobante(data['cabecera']['empresa'], data['cabecera']['tipo_comprobante'], data['cabecera']['cod_agencia'])
-
+        cod_opago = data['cabecera']['cod_opago']
+        fecha_estimada_produccion=datetime.strptime(data['cabecera']['fecha_estimada_produccion'], '%d/%m/%Y').date(),
+        fecha_estimada_puerto=datetime.strptime(data['cabecera']['fecha_estimada_puerto'], '%d/%m/%Y').date(),
+        fecha_estimada_llegada=datetime.strptime(data['cabecera']['fecha_estimada_llegada'], '%d/%m/%Y').date(),
         # Crear la cabecera de la orden de compra
         cabecera = StOrdenCompraCab(
             empresa=data['cabecera']['empresa'],
@@ -1213,10 +1216,11 @@ def crear_orden_compra_total():
             usuario_crea=data['cabecera']['usuario_crea'].upper(),
             fecha_crea=fecha_crea,
             usuario_modifica=data['cabecera']['usuario_modifica'].upper(),
+            cod_opago = cod_opago if cod_opago else None,
             fecha_modifica=datetime.strptime(data['cabecera']['fecha_modifica'], '%d/%m/%Y').date(),
-            fecha_estimada_produccion=datetime.strptime(data['cabecera']['fecha_estimada_produccion'], '%d/%m/%Y').date(),
-            fecha_estimada_puerto=datetime.strptime(data['cabecera']['fecha_estimada_puerto'], '%d/%m/%Y').date(),
-            fecha_estimada_llegada=datetime.strptime(data['cabecera']['fecha_estimada_llegada'], '%d/%m/%Y').date(),
+            fecha_estimada_produccion = fecha_estimada_produccion if fecha_estimada_produccion else "",
+            fecha_estimada_puerto = fecha_estimada_puerto if fecha_estimada_puerto else "",
+            fecha_estimada_llegada = fecha_estimada_llegada if fecha_estimada_llegada else "",
             cod_modelo=data['cabecera']['cod_modelo'],
             cod_item=data['cabecera']['cod_item'],
             ciudad=ciudad,
