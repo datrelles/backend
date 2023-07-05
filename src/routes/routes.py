@@ -504,12 +504,36 @@ def obtener_embarques():
             codigo_bl_house = embarque.codigo_bl_house if embarque.codigo_bl_house else ""
             cod_proveedor = embarque.cod_proveedor if embarque.cod_proveedor else ""
             fecha_embarque = datetime.strftime(embarque.fecha_embarque,"%d/%m/%Y") if embarque.fecha_embarque else ""
+            fecha_llegada = datetime.strftime(embarque.fecha_llegada,"%d/%m/%Y") if embarque.fecha_llegada else ""
+            fecha_bodega = datetime.strftime(embarque.fecha_bodega,"%d/%m/%Y") if embarque.fecha_bodega else ""
+            numero_tracking = embarque.numero_tracking if embarque.numero_tracking else ""
+            naviera = embarque.naviera if embarque.naviera else ""
+            estado = embarque.estado if embarque.estado else ""
+            buque = embarque.buque if embarque.buque else ""
+            cod_puerto_embarque = embarque.cod_puerto_embarque if embarque.cod_puerto_embarque else ""
+            cod_puerto_desembarque = embarque.cod_puerto_desembarque if embarque.cod_puerto_desembarque else ""
+            costo_contenedor = embarque.costo_contenedor if embarque.costo_contenedor else ""
+            descripcion = embarque.descripcion if embarque.descripcion else ""
+            tipo_flete = embarque.tipo_flete if embarque.tipo_flete else ""
+            adicionado_por = embarque.adicionado_por if embarque.adicionado_por else ""
             serialized_embarques.append({
                 'empresa': empresa,
                 'codigo_bl_master': codigo_bl_master,
                 'codigo_bl_house': codigo_bl_house,
                 'cod_proveedor': cod_proveedor,
-                'fecha_embarque': fecha_embarque
+                'fecha_embarque': fecha_embarque,
+                'fecha_llegada': fecha_llegada,
+                'fecha_bodega': fecha_bodega,
+                'numero_tracking': numero_tracking,
+                'naviera': naviera,
+                'estado': estado,
+                'buque': buque,
+                'cod_puerto_embarque': cod_puerto_embarque,
+                'cod_puerto_desembarque': cod_puerto_desembarque,
+                'costo_contenedor': costo_contenedor,
+                'descripcion': descripcion,
+                'tipo_flete': tipo_flete,
+                'adicionado_por': adicionado_por,
             })
         return jsonify(serialized_embarques)
 
@@ -1186,7 +1210,6 @@ def crear_orden_compra_total():
             cod_proveedor=data['cabecera']['cod_proveedor'],
             nombre=data['cabecera']['nombre'],
             proforma=data['cabecera']['proforma'],
-            cod_opago=data['cabecera']['cod_opago'],
             usuario_crea=data['cabecera']['usuario_crea'].upper(),
             fecha_crea=fecha_crea,
             usuario_modifica=data['cabecera']['usuario_modifica'].upper(),

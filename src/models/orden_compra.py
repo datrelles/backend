@@ -45,9 +45,8 @@ class StOrdenCompraCab(Base):
 class StOrdenCompraDet(Base):
     __tablename__ = 'st_orden_compra_det'
     __table_args__ = (
-        Index('ind_orden_compra_det01', 'cod_po', 'tipo_comprobante', 'empresa'),
-        Index('udx2_unidad_medida', 'empresa', 'unidad_medida'),
         Index('udx1_producto', 'empresa', 'cod_producto'),
+        Index('udx2_unidad_medida', 'empresa', 'unidad_medida'),
         {'schema': 'stock'}
     )
 
@@ -56,11 +55,10 @@ class StOrdenCompraDet(Base):
     secuencia = Column(NUMBER(6, 0, False), primary_key=True, nullable=False)
     empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
     cod_producto = Column(VARCHAR(14))
-    cod_producto_modelo = Column(VARCHAR(14))
     nombre = Column(VARCHAR(200))
     costo_sistema = Column(NUMBER(16, 6, True))
     fob = Column(NUMBER(16, 6, True))
-    cantidad_pedido = Column(NUMBER(9, True))
+    cantidad_pedido = Column(NUMBER(9, 0, False))
     saldo_producto = Column(NUMBER(16, 6, True))
     unidad_medida = Column(VARCHAR(8))
     usuario_crea = Column(VARCHAR(30))
@@ -70,11 +68,12 @@ class StOrdenCompraDet(Base):
     fob_total = Column(NUMBER(16, 6, True))
     nombre_i = Column(VARCHAR(200))
     nombre_c = Column(VARCHAR(200))
-    exportar = Column(Boolean, default=True)
+    exportar = Column(Boolean, default = True)
     nombre_mod_prov = Column(VARCHAR(50))
     nombre_comercial = Column(VARCHAR(50))
     costo_cotizado = Column(NUMBER(16, 6, True))
     fecha_costo = Column(DateTime)
+    cod_producto_modelo = Column(VARCHAR(14))
 
     @classmethod
     def query(cls):
