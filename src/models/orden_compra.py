@@ -132,12 +132,12 @@ class StPackinglist(Base):
 class TcOpago(Base):
     __tablename__ = 'tc_opago'
     __table_args__ = (
-        Index('idx_tc_opago_agencia', 'empresa', 'cod_agencia'),
-        Index('idx_tc_opago_st_cta_cc', 'empresa', 'aa', 'cod_cuenta', 'cod_cto_costo'),
         Index('opago$cuenta', 'cod_cuenta', 'aa', 'empresa'),
         Index('idx_tc_opago_liquidacion', 'empresa', 'cod_liquidacion'),
         Index('idx_tc_opago_persona', 'empresa', 'cod_tipo_persona_so', 'cod_persona_so'),
         Index('uk_tc_opago_factura', 'empresa', 'ruc', 'nro_autorizacion_contribuyente', 'factura_manual', 'es_anulado', 'cod_tipo_comprobante_coa', unique=True),
+        Index('idx_tc_opago_agencia', 'empresa', 'cod_agencia'),
+        Index('idx_tc_opago_st_cta_cc', 'empresa', 'aa', 'cod_cuenta', 'cod_cto_costo'),
         {'schema': 'contabilidad'}
     )
 

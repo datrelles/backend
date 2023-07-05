@@ -553,9 +553,9 @@ def crear_orden_compra_cab():
         data = request.get_json()
         fecha_crea = date.today()#funcion para que se asigne la fecha actual al momento de crear la oden de compra
         fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
-        fecha_estimada_produccion = datetime.strftime(data['fecha_estimada_produccion'], '%d%m%Y').date()
-        fecha_estimada_puerto = datetime.strftime(data['fecha_estimada_puerto'], '%d%m%Y').date()
-        fecha_estimada_llegada = datetime.strftime(data['fecha_estimada_llegada'], '%d%m%Y').date()
+        fecha_estimada_produccion = datetime.strptime(data['fecha_estimada_produccion'], '%d/%m/%Y').date() if 'fecha_estimada_produccion' in data else None
+        fecha_estimada_puerto = datetime.strftime(data['fecha_estimada_puerto'], '%d%m%Y').date() if 'fecha_estimada_puerto' in data else None
+        fecha_estimada_llegada = datetime.strftime(data['fecha_estimada_llegada'], '%d%m%Y').date() if 'fecha_estimada_llegada' in data else None
 
         #busqueda para que se asigne de forma automatica la ciudad al buscarla por el cod_proveedor
         busq_ciudad = TcCoaProveedor.query().filter_by(ruc=data['cod_proveedor']).first()
@@ -582,7 +582,8 @@ def crear_orden_compra_cab():
             fecha_modifica=fecha_modifica,
             cod_modelo=data['cod_modelo'],
             cod_item=data['cod_item'],
-            proforma = data['proforma'],
+            proforma = data.get('proforma'),
+            cod_opago = data.get('cod_opago'),
             ciudad = ciudad if ciudad else "",
             fecha_estimada_produccion = fecha_estimada_produccion,
             fecha_estimada_puerto = fecha_estimada_puerto,

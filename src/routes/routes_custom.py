@@ -265,6 +265,7 @@ def obtener_orden_compra_cab_param():
     empresa = request.args.get('empresa', None)
     cod_po = request.args.get('cod_po', None)
     tipo_comprobante = request.args.get('tipo_comprobante', None)
+    cod_items = request.args.getlist('cod_items[]', None)
     fecha_inicio = request.args.get('fecha_inicio', None)  # Nueva fecha de inicio
     fecha_fin = request.args.get('fecha_fin', None)  # Nueva fecha de fin
 
@@ -275,6 +276,8 @@ def obtener_orden_compra_cab_param():
         query = query.filter(StOrdenCompraCab.cod_po == cod_po)
     if tipo_comprobante:
         query = query.filter(StOrdenCompraCab.tipo_comprobante == tipo_comprobante)
+    if cod_items:
+        query = query.filter(StOrdenCompraCab.cod_item.in_(cod_items))
     if fecha_inicio and fecha_fin:
         fecha_inicio = datetime.strptime(fecha_inicio, '%d/%m/%Y').date()
         fecha_fin = datetime.strptime(fecha_fin, '%d/%m/%Y').date()
@@ -547,63 +550,3 @@ def obtener_producto_modelo():
             'cod_producto_modelo': cod_producto_modelo
         })
     return jsonify(serialized_producto)
-
-@bpcustom.route('/orden_compra_cab_param2')
-@jwt_required()
-@cross_origin()
-def obtener_orden_compra_cab_param2():
-
-    empresa = request.args.get('empresa', None)
-    cod_po = request.args.get('cod_po', None)
-    tipo_comprobante = request.args.get('tipo_comprobante', None)
-    cod_items = request.args.getlist('cod_items[]', None)
-    fecha_inicio = request.args.get('fecha_inicio', None)  # Nueva fecha de inicio
-    fecha_fin = request.args.get('fecha_fin', None)  # Nueva fecha de fin
-
-    query = StOrdenCompraCab.query()
-    if empresa:
-        query = query.filter(StOrdenCompraCab.empresa == empresa)
-    if cod_po:
-        query = query.filter(StOrdenCompraCab.cod_po == cod_po)
-    if tipo_comprobante:
-        query = query.filter(StOrdenCompraCab.tipo_comprobante == tipo_comprobante)
-    if cod_items:
-        query = query.filter(StOrdenCompraCab.cod_item.in_(cod_items))
-    if fecha_inicio and fecha_fin:
-        fecha_inicio = datetime.strptime(fecha_inicio, '%d/%m/%Y').date()
-        fecha_fin = datetime.strptime(fecha_fin, '%d/%m/%Y').date()
-        query = query.filter(StOrdenCompraCab.fecha_crea.between(fecha_inicio, fecha_fin))
-
-    cabeceras = query.all()
-    serialized_cabeceras = []
-    for cabecera in cabeceras:
-        empresa = cabecera.empresa if cabecera.empresa else ""
-        cod_po = cabecera.cod_po if cabecera.cod_po else ""
-        tipo_comprobante = cabecera.tipo_comprobante if cabecera.tipo_comprobante else ""
-        cod_proveedor = cabecera.cod_proveedor if cabecera.cod_proveedor else ""
-        nombre = cabecera.nombre if cabecera.nombre else ""
-        proforma = cabecera.proforma if cabecera.proforma else ""
-        usuario_crea = cabecera.usuario_crea if cabecera.usuario_crea else ""
-        fecha_crea = cabecera.fecha_crea.strftime("%d/%m/%Y") if cabecera.fecha_crea else ""
-        usuario_modifica = cabecera.usuario_modifica if cabecera.usuario_modifica else ""
-        fecha_modifica = cabecera.fecha_modifica.strftime("%d/%m/%Y") if cabecera.fecha_modifica else ""
-        cod_modelo = cabecera.cod_modelo if cabecera.cod_modelo else ""
-        cod_item = cabecera.cod_item if cabecera.cod_item else ""
-        ciudad = cabecera.ciudad if cabecera.ciudad else ""
-        serialized_cabeceras.append({
-            'empresa': empresa,
-            'cod_po': cod_po,
-            'tipo_combrobante': tipo_comprobante,
-            'cod_proveedor': cod_proveedor,
-            'nombre': nombre,
-            'proforma': proforma,
-            'usuario_crea': usuario_crea,
-            'fecha_crea': fecha_crea,
-            'usuario_modifica': usuario_modifica,
-            'fecha_modifica': fecha_modifica,
-            'cod_modelo': cod_modelo,
-            'cod_item': cod_item,
-            'ciudad': ciudad
-        })
-    
-    return jsonify(serialized_cabeceras)
