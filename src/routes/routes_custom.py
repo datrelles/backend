@@ -268,6 +268,10 @@ def obtener_orden_compra_cab_param():
     cod_items = request.args.getlist('cod_items[]', None)
     fecha_inicio = request.args.get('fecha_inicio', None)  # Nueva fecha de inicio
     fecha_fin = request.args.get('fecha_fin', None)  # Nueva fecha de fin
+    fecha_estimada_produccion = request.args.get('fecha_estimada_produccion', None)
+    fecha_estimada_puerto = request.args.get('fecha_estimada_puerto', None)
+    fecha_estimada_llegada = request.args.get('fecha_estimada_llegada', None)
+    cod_opago = request.args.get('cod_opago', None)
 
     query = StOrdenCompraCab.query()
     if empresa:
@@ -276,6 +280,17 @@ def obtener_orden_compra_cab_param():
         query = query.filter(StOrdenCompraCab.cod_po == cod_po)
     if tipo_comprobante:
         query = query.filter(StOrdenCompraCab.tipo_comprobante == tipo_comprobante)
+    if fecha_estimada_produccion:
+        fecha_estimada_produccion = datetime.strptime(fecha_estimada_produccion, '%d/%m/%Y').date()
+        query = query.filter(StOrdenCompraCab.fecha_estimada_produccion == fecha_estimada_produccion)
+    if fecha_estimada_puerto:
+        fecha_estimada_puerto = datetime.strptime(fecha_estimada_puerto, '%d/%m/%Y').date()
+        query = query.filter(StOrdenCompraCab.fecha_estimada_puerto == fecha_estimada_puerto)
+    if fecha_estimada_llegada:
+        fecha_estimada_llegada = datetime.strptime(fecha_estimada_llegada, '%d/%m/%Y').date()
+        query = query.filter(StOrdenCompraCab.fecha_estimada_llegada == fecha_estimada_llegada)
+    if cod_opago:
+        query = query.filter(StOrdenCompraCab.cod_opago == cod_opago)
     if cod_items:
         query = query.filter(StOrdenCompraCab.cod_item.in_(cod_items))
     if fecha_inicio and fecha_fin:
