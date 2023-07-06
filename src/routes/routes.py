@@ -516,6 +516,12 @@ def obtener_embarques():
             descripcion = embarque.descripcion if embarque.descripcion else ""
             tipo_flete = embarque.tipo_flete if embarque.tipo_flete else ""
             adicionado_por = embarque.adicionado_por if embarque.adicionado_por else ""
+            fecha_adicion = datetime.strftime(embarque.fecha_adicion,"%d/%m/%Y") if embarque.fecha_adicion else ""
+            modificado_por = embarque.modificado_por if embarque.modificado_por else ""
+            fecha_modificacion = datetime.strftime(embarque.fecha_modificacion,"%d/%m/%Y") if embarque.fecha_modificacion else ""
+            cod_modelo = embarque.cod_modelo if embarque.cod_modelo else ""
+            cod_item = embarque.cod_item if embarque.cod_item else ""
+            cod_aforo = embarque.cod_aforo if embarque.cod_aforo else ""
             serialized_embarques.append({
                 'empresa': empresa,
                 'codigo_bl_master': codigo_bl_master,
@@ -534,6 +540,12 @@ def obtener_embarques():
                 'descripcion': descripcion,
                 'tipo_flete': tipo_flete,
                 'adicionado_por': adicionado_por,
+                'fecha_adicion': fecha_adicion,
+                'modificado_por': modificado_por,
+                'fecha_modificacion': fecha_modificacion,
+                'cod_modelo': cod_modelo,
+                'cod_item': cod_item,
+                'cod_aforo': cod_aforo
             })
         return jsonify(serialized_embarques)
 
@@ -949,6 +961,61 @@ def crear_orden_compra_track():
         logger.exception(f"Error al consultar: {str(e)}")
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
+    
+@bp.route('/embarque', methods = ['POST'])
+@jwt_required()
+@cross_origin()
+def crear_embarque():
+    try:
+        data = request.get_json()
+        fecha_adicion = date.today()#funcion para que se asigne la fecha actual al momento de crear la oden de compra
+        #fecha_modificacion = datetime.strptime(data['fecha_modificacion'], '%d/%m/%Y').date() if 'fecha_modificacion' in data else None
+        fecha_embarque = datetime.strptime(data['fecha_embarque'], '%d/%m/%Y').date() if 'fecha_embarque' in data else None
+        fecha_llegada = datetime.strptime(data['fecha_llegada'], '%d/%m/%Y').date() if 'fecha_llegada' in data else None
+        fecha_bodega = datetime.strptime(data['fecha_bodega'], '%d/%m/%Y').date() if 'fecha_bodega' in data else None
+
+        #busqueda para obtener el nombre del estado para la orden de compra
+        #estado = TgModeloItem.query().filter_by(cod_modelo=data['cod_modelo'], cod_item=data['cod_item']).first()
+        #estado_nombre = estado.nombre if estado else ''
+
+        embarque = StEmbarquesBl(
+            empresa=data['empresa'],
+            codigo_bl_master=data['codigo_bl_master'],
+            codigo_bl_house=data['codigo_bl_house'],
+            cod_proveedor=data['cod_proveedor'],
+            fecha_embarque = fecha_embarque,
+            fecha_llegada = fecha_llegada,
+            fecha_bodega=fecha_bodega,
+            numero_tracking=data['numero_tracking'],
+            naviera=data['naviera'],
+            estado = data['estado'],
+            buque = data.get('buque'),
+            cod_puerto_embarque = data.get('cod_puerto_embarque'),
+            cod_puerto_desembarque = data.get('cod_puerto_desembarque'),
+            costo_contenedor = data.get('costo_contenedor'),
+            descripcion = data.get('descripcion'),
+            tipo_flete = data.get('tipo_flete'),
+            adicionado_por=data['adicionado_por'].upper(),
+            fecha_adicion=fecha_adicion,
+            #modificado_por=data['modificado_por'].upper(),
+            #fecha_modificacion = fecha_modificacion,
+            cod_modelo=data['cod_modelo'],
+            cod_item=data['cod_item'],
+            cod_aforo = data.get('cod_aforo')
+        )
+        db.session.add(embarque)
+        db.session.commit()
+        return jsonify({'mensaje': "Embarque o BL creado exitosamente"})
+
+    except ValueError as ve:
+        # Capturar y manejar el error específico de ValueError
+        error_message = str(ve)
+        return jsonify({'error': error_message}), 500
+
+    except Exception as e:
+        # Manejar otros errores y proporcionar un mensaje personalizado
+        error_message = f"Se produjo un error: {str(e)}"
+        return jsonify({'error': error_message}), 500
 
 # METODOS UPDATE DE TABLAS DE ORDEN DE COMPRA
 
@@ -1108,6 +1175,51 @@ def actualizar_orden_compra_packinlist(cod_po,empresa,secuencia):
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
+@bp.route('/embarque/<codigo_bl_house>/<empresa>', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def actualizar_embarque(codigo_bl_house, empresa):
+    try:
+        embarque = db.session.query(StEmbarquesBl).filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).first()
+        if not embarque:
+            return jsonify({'mensaje': 'El embarque no existe.'}), 404
+
+        data = request.get_json()
+
+        if 'fecha_embarque' in data:
+            embarque.fecha_embarque = datetime.strptime(data['fecha_embarque'], '%d/%m/%Y').date()
+
+        if 'fecha_llegada' in data:
+            embarque.fecha_llegada = datetime.strptime(data['fecha_llegada'], '%d/%m/%Y').date()
+
+        if 'fecha_bodega' in data:
+            embarque.fecha_bodega = datetime.strptime(data['fecha_bodega'], '%d/%m/%Y').date()
+
+        embarque.cod_proveedor = data.get('cod_proveedor', embarque.cod_proveedor)
+        embarque.numero_tracking = data.get('numero_tracking', embarque.numero_tracking)
+        embarque.naviera = data.get('naviera', embarque.naviera)
+        embarque.estado = data.get('estado', embarque.estado)
+        embarque.agente = data.get('agente', embarque.agente)
+        embarque.fecha_modificacion = date.today()
+        embarque.buque = data.get('buque', embarque.buque)
+        embarque.cod_puerto_embarque = data.get('cod_puerto_embarque', embarque.cod_puerto_embarque)
+        embarque.cod_puerto_desembarque = data.get('cod_puerto_desembarque', embarque.cod_puerto_desembarque)
+        embarque.costo_contenedor = data.get('costo_contenedor', embarque.costo_contenedor)
+        embarque.descripcion = data.get('descripcion', embarque.descripcion)
+        embarque.tipo_flete = data.get('tipo_flete', embarque.tipo_flete)
+        embarque.modificado_por = data.get('modificado_por', embarque.modificado_por)
+        embarque.cod_modelo = data.get('cod_modelo', embarque.cod_modelo)
+        embarque.cod_item = data.get('cod_item', embarque.cod_item)
+        embarque.cod_aforo = data.get('cod_aforo', embarque.cod_aforo)
+
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Embarque o BL actualizado exitosamente.'})
+
+    except Exception as e:
+        logger.exception(f"Error al actualizar Embarque: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    
 #METODOS DELETE PARA ORDENES DE COMPRA
 
 @bp.route('/orden_compra_cab/<cod_po>/<empresa>/<tipo_comprobante>', methods=['DELETE'])
@@ -1181,6 +1293,26 @@ def eliminar_orden_compra_packinglist(cod_po, empresa, tipo_comprobante):
     except Exception as e:
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
+    
+@bp.route('/embarque/<codigo_bl_house>/<empresa>', methods=['DELETE'])
+@jwt_required()
+@cross_origin()
+def eliminar_embarque(codigo_bl_house, empresa, ):
+    try:
+        embarque = db.session.query(StEmbarquesBl).filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).first()
+        if not embarque:
+            return jsonify({'mensaje': 'Embarque de orden de compra no existe.'}), 404
+
+        db.session.delete(embarque)
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Embarque de orden de compra eliminada exitosamente.'})
+
+    except Exception as e:
+        logger.exception(f"Error al eliminar: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    
+#METODO PARA INGRESAR CABECERA Y DETALLES DE UNA ORDEN DE IMPORTACION
     
 @bp.route('/orden_compra_total', methods=['POST'])
 @jwt_required()

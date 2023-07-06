@@ -5,6 +5,7 @@ from models.tipo_comprobante import TipoComprobante
 from models.producto_despiece import StProductoDespiece
 from models.despiece import StDespiece
 from models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StTracking,StPackinglist
+from models.embarque_bl import StEmbarquesBl
 from config.database import db
 from sqlalchemy import and_
 import datetime
@@ -565,3 +566,78 @@ def obtener_producto_modelo():
             'cod_producto_modelo': cod_producto_modelo
         })
     return jsonify(serialized_producto)
+
+#METODO CUSTOM PARA EMBARQUES DE ORDENES DE COMPRA
+
+@bpcustom.route('/embarque_param')
+@jwt_required()
+@cross_origin()
+def obtener_embarques_param():
+    try:
+        empresa = request.args.get('empresa', None)
+        codigo_bl_house = request.args.get('cod_bl_house', None)
+        
+        query = StEmbarquesBl.query()
+        if empresa:
+            query = query.filter(StEmbarquesBl.empresa == empresa)
+        if codigo_bl_house:
+            query = query.filter(StEmbarquesBl.codigo_bl_house == codigo_bl_house)
+        
+        embarques = query.all()
+        serialized_embarques = []
+
+        for embarque in embarques:
+            empresa = embarque.empresa if embarque.empresa else ""
+            codigo_bl_master = embarque.codigo_bl_master if embarque.codigo_bl_master else ""
+            codigo_bl_house = embarque.codigo_bl_house if embarque.codigo_bl_house else ""
+            cod_proveedor = embarque.cod_proveedor if embarque.cod_proveedor else ""
+            fecha_embarque = datetime.strftime(embarque.fecha_embarque,"%d/%m/%Y") if embarque.fecha_embarque else ""
+            fecha_llegada = datetime.strftime(embarque.fecha_llegada,"%d/%m/%Y") if embarque.fecha_llegada else ""
+            fecha_bodega = datetime.strftime(embarque.fecha_bodega,"%d/%m/%Y") if embarque.fecha_bodega else ""
+            numero_tracking = embarque.numero_tracking if embarque.numero_tracking else ""
+            naviera = embarque.naviera if embarque.naviera else ""
+            estado = embarque.estado if embarque.estado else ""
+            buque = embarque.buque if embarque.buque else ""
+            cod_puerto_embarque = embarque.cod_puerto_embarque if embarque.cod_puerto_embarque else ""
+            cod_puerto_desembarque = embarque.cod_puerto_desembarque if embarque.cod_puerto_desembarque else ""
+            costo_contenedor = embarque.costo_contenedor if embarque.costo_contenedor else ""
+            descripcion = embarque.descripcion if embarque.descripcion else ""
+            tipo_flete = embarque.tipo_flete if embarque.tipo_flete else ""
+            adicionado_por = embarque.adicionado_por if embarque.adicionado_por else ""
+            fecha_adicion = datetime.strftime(embarque.fecha_adicion,"%d/%m/%Y") if embarque.fecha_adicion else ""
+            modificado_por = embarque.modificado_por if embarque.modificado_por else ""
+            fecha_modificacion = datetime.strftime(embarque.fecha_modificacion,"%d/%m/%Y") if embarque.fecha_modificacion else ""
+            cod_modelo = embarque.cod_modelo if embarque.cod_modelo else ""
+            cod_item = embarque.cod_item if embarque.cod_item else ""
+            cod_aforo = embarque.cod_aforo if embarque.cod_aforo else ""
+            serialized_embarques.append({
+                'empresa': empresa,
+                'codigo_bl_master': codigo_bl_master,
+                'codigo_bl_house': codigo_bl_house,
+                'cod_proveedor': cod_proveedor,
+                'fecha_embarque': fecha_embarque,
+                'fecha_llegada': fecha_llegada,
+                'fecha_bodega': fecha_bodega,
+                'numero_tracking': numero_tracking,
+                'naviera': naviera,
+                'estado': estado,
+                'buque': buque,
+                'cod_puerto_embarque': cod_puerto_embarque,
+                'cod_puerto_desembarque': cod_puerto_desembarque,
+                'costo_contenedor': costo_contenedor,
+                'descripcion': descripcion,
+                'tipo_flete': tipo_flete,
+                'adicionado_por': adicionado_por,
+                'fecha_adicion': fecha_adicion,
+                'modificado_por': modificado_por,
+                'fecha_modificacion': fecha_modificacion,
+                'cod_modelo': cod_modelo,
+                'cod_item': cod_item,
+                'cod_aforo': cod_aforo
+            })
+        return jsonify(serialized_embarques)
+
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        #logging.error('Ocurrio un error: %s',e)
+        return jsonify({'error': str(e)}), 500
