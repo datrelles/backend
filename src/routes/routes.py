@@ -9,6 +9,7 @@ from models.despiece import StDespiece
 from models.producto_despiece import StProductoDespiece
 from models.unidad_importacion import StUnidadImportacion
 from models.embarque_bl import StEmbarquesBl,StTrackingBl
+from models.tipo_aforo import StTipoAforo
 from config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer
 import logging
@@ -548,6 +549,42 @@ def obtener_embarques():
                 'cod_aforo': cod_aforo
             })
         return jsonify(serialized_embarques)
+
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        #logging.error('Ocurrio un error: %s',e)
+        return jsonify({'error': str(e)}), 500
+    
+@bp.route('/tipo_aforo')
+@jwt_required()
+@cross_origin()
+def obtener_tipo_aforo():
+    try:
+        query = StTipoAforo.query()
+        aforos = query.all()
+        serialized_aforos = []
+        for aforo in aforos:
+            empresa = aforo.empresa if aforo.empresa else ""
+            cod_aforo = aforo.cod_aforo if aforo.cod_aforo else ""
+            nombre = aforo.nombre if aforo.nombre else ""
+            valor = aforo.valor if aforo.valor else ""
+            observacion = aforo.observacion if aforo.observacion else ""
+            usuario_crea = aforo.usuario_crea if aforo.usuario_crea else ""
+            fecha_crea = datetime.strftime(aforo.fecha_crea,"%d/%m/%Y") if aforo.fecha_crea else ""
+            usuario_modifica = aforo.usuario_modifica if aforo.usuario_modifica else ""
+            fecha_modifica = datetime.strftime(aforo.fecha_modifica,"%d/%m/%Y") if aforo.fecha_modifica else ""
+            serialized_aforos.append({
+                'empresa': empresa,
+                'cod_aforo': cod_aforo,
+                'nombre': nombre,
+                'valor': valor,
+                'observacion': observacion,
+                'usuario_crea': usuario_crea,
+                'fecha_crea': fecha_crea,
+                'usuario_modifica': usuario_modifica,
+                'fecha_modifica': fecha_modifica
+            })
+            return jsonify(serialized_aforos)
 
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
