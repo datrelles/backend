@@ -462,8 +462,9 @@ def obtener_orden_compra_track_param():
 @cross_origin()
 def obtener_packinglist_param():
     empresa = request.args.get('empresa', None)
-    codigo_bl_house = request.args.get('cod_bl_house', None)
+    codigo_bl_house = request.args.get('codigo_bl_house', None)
     secuencia = request.args.get('secuencia', None)
+    cod_po = request.args.get('cod_po', None)
     
     query = StPackinglist.query()
     if empresa:
@@ -472,6 +473,8 @@ def obtener_packinglist_param():
         query = query.filter(StPackinglist.codigo_bl_house == codigo_bl_house)
     if secuencia:
         query = query.filter(StPackinglist.secuencia == secuencia)
+    if cod_po:
+        query = query.filter(StPackinglist.cod_po == cod_po)
     
     packings = query.all()
     serialized_packings = []
@@ -575,7 +578,7 @@ def obtener_producto_modelo():
 def obtener_embarques_param():
     try:
         empresa = request.args.get('empresa', None)
-        codigo_bl_house = request.args.get('cod_bl_house', None)
+        codigo_bl_house = request.args.get('codigo_bl_house', None)
         
         query = StEmbarquesBl.query()
         if empresa:
