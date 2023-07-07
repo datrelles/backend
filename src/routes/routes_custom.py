@@ -4,7 +4,7 @@ from src.models.proveedores import Proveedor, TgModeloItem
 from src.models.tipo_comprobante import TipoComprobante
 from src.models.producto_despiece import StProductoDespiece
 from src.models.despiece import StDespiece
-from src.models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StOrdenCompraTracking,StPackinglist
+from src.models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StTracking,StPackinglist
 from src.config.database import db
 from sqlalchemy import and_
 import datetime
@@ -289,9 +289,6 @@ def obtener_orden_compra_cab_param():
         cod_proveedor = cabecera.cod_proveedor if cabecera.cod_proveedor else ""
         nombre = cabecera.nombre if cabecera.nombre else ""
         proforma = cabecera.proforma if cabecera.proforma else ""
-        invoice = cabecera.invoice if cabecera.invoice else ""
-        bl_no = cabecera.bl_no if cabecera.bl_no else ""
-        cod_po_padre = cabecera.cod_po_padre if cabecera.cod_po_padre else ""
         usuario_crea = cabecera.usuario_crea if cabecera.usuario_crea else ""
         fecha_crea = cabecera.fecha_crea.strftime("%d/%m/%Y") if cabecera.fecha_crea else ""
         usuario_modifica = cabecera.usuario_modifica if cabecera.usuario_modifica else ""
@@ -306,9 +303,6 @@ def obtener_orden_compra_cab_param():
             'cod_proveedor': cod_proveedor,
             'nombre': nombre,
             'proforma': proforma,
-            'invoice': invoice,
-            'bl_no': bl_no,
-            'cod_po_padre': cod_po_padre,
             'usuario_crea': usuario_crea,
             'fecha_crea': fecha_crea,
             'usuario_modifica': usuario_modifica,
@@ -401,14 +395,17 @@ def obtener_orden_compra_track_param():
     empresa = request.args.get('empresa', None)
     cod_po = request.args.get('cod_po', None)
     tipo_comprobante = request.args.get('tipo_comprobante', None)
+    secuencia = request.args.get('secuencia', None)
 
-    query = StOrdenCompraTracking.query()
+    query = StTracking.query()
     if empresa:
-        query = query.filter(StOrdenCompraTracking.empresa == empresa)
+        query = query.filter(StTracking.empresa == empresa)
     if cod_po:
-        query = query.filter(StOrdenCompraTracking.cod_po == cod_po)
+        query = query.filter(StTracking.cod_po == cod_po)
     if tipo_comprobante:
-        query = query.filter(StOrdenCompraTracking.tipo_comprobante == tipo_comprobante)
+        query = query.filter(StTracking.tipo_comprobante == tipo_comprobante)
+    if secuencia:
+        query = query.filter(StTracking.secuencia == secuencia)
 
     seguimientos = query.all()
     serialized_seguimientos = []
@@ -416,48 +413,85 @@ def obtener_orden_compra_track_param():
         cod_po = seguimiento.cod_po if seguimiento.cod_po else ""
         tipo_comprobante = seguimiento.tipo_comprobante if seguimiento.tipo_comprobante else ""
         empresa = seguimiento.empresa if seguimiento.empresa else ""
+        secuencia = seguimiento.secuencia if seguimiento.secuencia else ""
         observaciones = seguimiento.observaciones if seguimiento.observaciones else ""
-        fecha_pedido = datetime.strftime(seguimiento.fecha_pedido,"%d/%m/%Y") if seguimiento.fecha_pedido else ""
-        fecha_transito = datetime.strftime(seguimiento.fecha_transito,"%d/%m/%Y") if seguimiento.fecha_transito else ""
-        fecha_puerto = datetime.strftime(seguimiento.fecha_puerto,"%d/%m/%Y") if seguimiento.fecha_puerto else ""
-        fecha_llegada = datetime.strftime(seguimiento.fecha_llegada,"%d/%m/%Y") if seguimiento.fecha_llegada else ""
-        estado = seguimiento.estado if seguimiento.estado else ""
-        buque = seguimiento.buque if seguimiento.buque else ""
-        naviera = seguimiento.naviera if seguimiento.naviera else ""
-        flete = seguimiento.flete if seguimiento.flete else ""
-        agente_aduanero = seguimiento.agente_aduanero if seguimiento.agente_aduanero else ""
-        puerto_origen = seguimiento.puerto_origen if seguimiento.puerto_origen else ""
+        cod_modelo = seguimiento.cod_modelo if seguimiento.cod_modelo else ""
+        cod_item = seguimiento.cod_modelo if seguimiento.cod_modelo else ""
+        fecha = datetime.strftime(seguimiento.fecha,"%d/%m/%Y") if seguimiento else ""
         usuario_crea = seguimiento.usuario_crea if seguimiento.usuario_crea else ""
         fecha_crea = datetime.strftime(seguimiento.fecha_crea,"%d/%m/%Y") if seguimiento.fecha_crea else ""
         usuario_modifica = seguimiento.usuario_modifica if seguimiento.usuario_modifica else ""
         fecha_modifica = datetime.strftime(seguimiento.fecha_modifica,"%d/%m/%Y") if seguimiento.fecha_modifica else ""
-        fecha_estimada_produccion = datetime.strftime(seguimiento.fecha_estimada_produccion,"%d/%m/%Y") if seguimiento.fecha_estimada_produccion else ""
-        fecha_estimada_puerto = datetime.strftime(seguimiento.fecha_estimada_puerto,"%d/%m/%Y") if seguimiento.fecha_estimada_puerto else ""
-        fecha_estimada_llegada = datetime.strftime(seguimiento.fecha_estimada_llegada,"%d/%m/%Y") if seguimiento.fecha_estimada_llegada else ""
         serialized_seguimientos.append({
             'cod_po': cod_po,
             'tipo_comprobante': tipo_comprobante,
             'empresa': empresa,
+            'secuencia': secuencia,
             'observaciones': observaciones,
-            'fecha_pedido': fecha_pedido,
-            'fecha_transito': fecha_transito,
-            'fecha_puerto': fecha_puerto,
-            'fecha_llegada': fecha_llegada,
-            'estado': estado,
-            'buque': buque,
-            'naviera': naviera,
-            'flete': flete,
-            'agente_aduanero': agente_aduanero,
-            'puerto_origen': puerto_origen,
+            'cod_modelo': cod_modelo,
+            'cod_item': cod_item,
+            'fecha': fecha,
             'usuario_crea': usuario_crea,
             'fecha_crea': fecha_crea,
             'usuario_modifica': usuario_modifica,
             'fecha_modifica': fecha_modifica,
-            'fecha_estimada_produccion': fecha_estimada_produccion,
-            'fecha_estimada_puerto': fecha_estimada_puerto,
-            'fecha_estimada_llegada': fecha_estimada_llegada,
         })
     return jsonify(serialized_seguimientos)
+
+@bpcustom.route('/packinglist_param')
+@jwt_required()
+@cross_origin()
+def obtener_packinglist_param():
+    empresa = request.args.get('empresa', None)
+    codigo_bl_house = request.args.get('cod_bl_house', None)
+    secuencia = request.args.get('secuencia', None)
+    
+    query = StPackinglist.query()
+    if empresa:
+        query = query.filter(StPackinglist.empresa == empresa)
+    if codigo_bl_house:
+        query = query.filter(StPackinglist.codigo_bl_house == codigo_bl_house)
+    if secuencia:
+        query = query.filter(StPackinglist.secuencia == secuencia)
+    
+    packings = query.all()
+    serialized_packings = []
+
+    for packing in packings:
+        codigo_bl_house = packing.codigo_bl_house if packing.codigo_bl_house else ""
+        secuencia = packing.secuencia if packing.secuencia else ""
+        cod_po = packing.cod_po if packing.cod_po else ""
+        tipo_comprobante = packing.tipo_comprobante if packing.tipo_comprobante else ""
+        empresa = packing.empresa if packing.empresa else ""
+        secuencia = packing.secuencia if packing.secuencia else ""
+        cod_producto = packing.cod_producto if packing.cod_producto else ""
+        cantidad = packing.cantidad if packing.cantidad else ""
+        fob = packing.fob if packing.fob else ""
+        unidad_medida = packing.unidad_medida if packing.unidad_medida else ""
+        cod_liquidacion = packing.cod_liquidacion if packing.cod_liquidacion else ""
+        cod_tipo_liquidacion = packing.cod_tipo_liquidacion if packing.cod_tipo_liquidacion else ""
+        usuario_crea = packing.usuario_crea if packing.usuario_crea else ""
+        fecha_crea = datetime.strftime(packing.fecha_crea,"%d/%m/%Y") if packing.fecha_crea else ""
+        usuario_modifica = packing.usuario_modifica if packing.usuario_modifica else ""
+        fecha_modifica = datetime.strftime(packing.fecha_modifica,"%d/%m/%Y") if packing.fecha_modifica else ""
+        serialized_packings.append({
+            'codigo_bl_house': codigo_bl_house,
+            'cod_po': cod_po,
+            'tipo_comprobante': tipo_comprobante,
+            'empresa': empresa,
+            'secuencia': secuencia,
+            'cod_producto': cod_producto,
+            'cantidad': cantidad,
+            'fob': fob,
+            'unidad_medida': unidad_medida,
+            'cod_liquidacion': cod_liquidacion,
+            'cod_tipo_liquidacion': cod_tipo_liquidacion,
+            'usuario_crea': usuario_crea,
+            'fecha_crea': fecha_crea,
+            'usuario_modifica': usuario_modifica,
+            'fecha_modifica': fecha_modifica
+        })
+    return jsonify(serialized_packings)
 
 #METODO CUSTOM PARA ELIMINAR TODA LA ORDEN DE COMPRA
 
@@ -474,7 +508,7 @@ def eliminar_orden_compra(cod_po, empresa, tipo_comprobante):
         db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante = tipo_comprobante).delete()
 
         # Eliminar registros en StOrdenCompraTracking
-        db.session.query(StOrdenCompraTracking).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante = tipo_comprobante).delete()
+        db.session.query(StTracking).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante = tipo_comprobante).delete()
 
         # Eliminar registros en StPackinglist
         db.session.query(StPackinglist).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante = tipo_comprobante).delete()
@@ -513,3 +547,63 @@ def obtener_producto_modelo():
             'cod_producto_modelo': cod_producto_modelo
         })
     return jsonify(serialized_producto)
+
+@bpcustom.route('/orden_compra_cab_param2')
+@jwt_required()
+@cross_origin()
+def obtener_orden_compra_cab_param2():
+
+    empresa = request.args.get('empresa', None)
+    cod_po = request.args.get('cod_po', None)
+    tipo_comprobante = request.args.get('tipo_comprobante', None)
+    cod_items = request.args.getlist('cod_items[]', None)
+    fecha_inicio = request.args.get('fecha_inicio', None)  # Nueva fecha de inicio
+    fecha_fin = request.args.get('fecha_fin', None)  # Nueva fecha de fin
+
+    query = StOrdenCompraCab.query()
+    if empresa:
+        query = query.filter(StOrdenCompraCab.empresa == empresa)
+    if cod_po:
+        query = query.filter(StOrdenCompraCab.cod_po == cod_po)
+    if tipo_comprobante:
+        query = query.filter(StOrdenCompraCab.tipo_comprobante == tipo_comprobante)
+    if cod_items:
+        query = query.filter(StOrdenCompraCab.cod_item.in_(cod_items))
+    if fecha_inicio and fecha_fin:
+        fecha_inicio = datetime.strptime(fecha_inicio, '%d/%m/%Y').date()
+        fecha_fin = datetime.strptime(fecha_fin, '%d/%m/%Y').date()
+        query = query.filter(StOrdenCompraCab.fecha_crea.between(fecha_inicio, fecha_fin))
+
+    cabeceras = query.all()
+    serialized_cabeceras = []
+    for cabecera in cabeceras:
+        empresa = cabecera.empresa if cabecera.empresa else ""
+        cod_po = cabecera.cod_po if cabecera.cod_po else ""
+        tipo_comprobante = cabecera.tipo_comprobante if cabecera.tipo_comprobante else ""
+        cod_proveedor = cabecera.cod_proveedor if cabecera.cod_proveedor else ""
+        nombre = cabecera.nombre if cabecera.nombre else ""
+        proforma = cabecera.proforma if cabecera.proforma else ""
+        usuario_crea = cabecera.usuario_crea if cabecera.usuario_crea else ""
+        fecha_crea = cabecera.fecha_crea.strftime("%d/%m/%Y") if cabecera.fecha_crea else ""
+        usuario_modifica = cabecera.usuario_modifica if cabecera.usuario_modifica else ""
+        fecha_modifica = cabecera.fecha_modifica.strftime("%d/%m/%Y") if cabecera.fecha_modifica else ""
+        cod_modelo = cabecera.cod_modelo if cabecera.cod_modelo else ""
+        cod_item = cabecera.cod_item if cabecera.cod_item else ""
+        ciudad = cabecera.ciudad if cabecera.ciudad else ""
+        serialized_cabeceras.append({
+            'empresa': empresa,
+            'cod_po': cod_po,
+            'tipo_combrobante': tipo_comprobante,
+            'cod_proveedor': cod_proveedor,
+            'nombre': nombre,
+            'proforma': proforma,
+            'usuario_crea': usuario_crea,
+            'fecha_crea': fecha_crea,
+            'usuario_modifica': usuario_modifica,
+            'fecha_modifica': fecha_modifica,
+            'cod_modelo': cod_modelo,
+            'cod_item': cod_item,
+            'ciudad': ciudad
+        })
+    
+    return jsonify(serialized_cabeceras)
