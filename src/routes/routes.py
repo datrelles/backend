@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 from datetime import datetime
+
 from src.models.users import Usuario, Empresa
 from src.models.tipo_comprobante import TipoComprobante
 from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
@@ -9,6 +10,7 @@ from src.models.despiece import StDespiece
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
 from src.models.embarque_bl import StEmbarquesBl,StTrackingBl
+from src.models.tipo_aforo import StTipoAforo
 from src.config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer
 import logging
@@ -368,6 +370,46 @@ def obtener_orden_compra_track():
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
+@bp.route('/tracking_bl')
+@jwt_required()
+@cross_origin()
+def obtener_tracking_bl():
+    try:
+        query = StTrackingBl.query()
+        track_bls = query.all()
+        serialized_bls = []
+        for bl in track_bls:
+            cod_bl_house = bl.cod_bl_house if cod_bl_house.cod_bl_house else ""
+            empresa = bl.empresa if bl.empresa else ""
+            secuencial = bl.secuencial if bl.secuencial else ""
+            observaciones = bl.observaciones if bl.observaciones else ""
+            cod_modelo = bl.cod_modelo if bl.cod_modelo else ""
+            usuario_crea = bl.usuario_crea if bl.usuario_crea else ""
+            fecha_crea = datetime.strftime(bl.fecha_crea,"%d/%m/%Y") if bl.fecha_crea else ""
+            usuario_modifica = bl.usuario_modifica if bl.usuario_modifica else ""
+            fecha_modifica = datetime.strftime(bl.fecha_modifica,"%d/%m/%Y") if bl.fecha_modifica else ""
+            fecha = datetime.strftime(bl.fecha,"%d/%m/%Y") if bl.fecha else ""
+            cod_item = bl.cod_item if bl.cod_item else ""
+            serialized_bls.append({
+                'cod_bl_house': cod_bl_house,
+                'empresa': empresa,
+                'secuencial': secuencial,
+                'observaciones': observaciones,
+                'cod_modelo': cod_modelo,
+                'usuario_crea': usuario_crea,
+                'fecha_crea': fecha_crea,
+                'usuario_modifica': usuario_modifica,
+                'fecha_modifica': fecha_modifica,
+                'fecha': fecha,
+                'cod_item': cod_item,
+            })
+        return jsonify(serialized_bls)
+    
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        #logging.error('Ocurrio un error: %s',e)
+        return jsonify({'error': str(e)}), 500
+    
 @bp.route('/packinglist')
 @jwt_required()
 @cross_origin()
@@ -377,6 +419,7 @@ def obtener_packinlist():
         packings = query.all()
         serialized_packing = []
         for packing in packings:
+            codigo_bl_house = packing.codigo_bl_house if packing.codigo_bl_house else ""
             cod_po = packing.cod_po if packing.cod_po else ""
             tipo_comprobante = packing.tipo_comprobante if packing.tipo_comprobante else ""
             empresa = packing.empresa if packing.empresa else ""
@@ -385,11 +428,14 @@ def obtener_packinlist():
             cantidad = packing.cantidad if packing.cantidad else ""
             fob = packing.fob if packing.fob else ""
             unidad_medida = packing.unidad_medida if packing.unidad_medida else ""
+            cod_liquidacion = packing.cod_liquidacion if packing.cod_liquidacion else ""
+            cod_tipo_liquidacion = packing.cod_tipo_liquidacion if packing.cod_tipo_liquidacion else ""
             usuario_crea = packing.usuario_crea if packing.usuario_crea else ""
             fecha_crea = datetime.strftime(packing.fecha_crea,"%d/%m/%Y") if packing.fecha_crea else ""
             usuario_modifica = packing.usuario_modifica if packing.usuario_modifica else ""
             fecha_modifica = datetime.strftime(packing.fecha_modifica,"%d/%m/%Y") if packing.fecha_modifica else ""
             serialized_packing.append({
+                'codigo_bl_house': codigo_bl_house,
                 'cod_po': cod_po,
                 'tipo_comprobante': tipo_comprobante,
                 'empresa': empresa,
@@ -398,6 +444,8 @@ def obtener_packinlist():
                 'cantidad': cantidad,
                 'fob': fob,
                 'unidad_medida': unidad_medida,
+                'cod_liquidacion': cod_liquidacion,
+                'cod_tipo_liquidacion': cod_tipo_liquidacion,
                 'usuario_crea': usuario_crea,
                 'fecha_crea': fecha_crea,
                 'usuario_modifica': usuario_modifica,
@@ -509,6 +557,7 @@ def obtener_embarques():
             numero_tracking = embarque.numero_tracking if embarque.numero_tracking else ""
             naviera = embarque.naviera if embarque.naviera else ""
             estado = embarque.estado if embarque.estado else ""
+            agente = embarque.agente if embarque.agente else ""
             buque = embarque.buque if embarque.buque else ""
             cod_puerto_embarque = embarque.cod_puerto_embarque if embarque.cod_puerto_embarque else ""
             cod_puerto_desembarque = embarque.cod_puerto_desembarque if embarque.cod_puerto_desembarque else ""
@@ -516,6 +565,12 @@ def obtener_embarques():
             descripcion = embarque.descripcion if embarque.descripcion else ""
             tipo_flete = embarque.tipo_flete if embarque.tipo_flete else ""
             adicionado_por = embarque.adicionado_por if embarque.adicionado_por else ""
+            fecha_adicion = datetime.strftime(embarque.fecha_adicion,"%d/%m/%Y") if embarque.fecha_adicion else ""
+            modificado_por = embarque.modificado_por if embarque.modificado_por else ""
+            fecha_modificacion = datetime.strftime(embarque.fecha_modificacion,"%d/%m/%Y") if embarque.fecha_modificacion else ""
+            cod_modelo = embarque.cod_modelo if embarque.cod_modelo else ""
+            cod_item = embarque.cod_item if embarque.cod_item else ""
+            cod_aforo = embarque.cod_aforo if embarque.cod_aforo else ""
             serialized_embarques.append({
                 'empresa': empresa,
                 'codigo_bl_master': codigo_bl_master,
@@ -527,6 +582,7 @@ def obtener_embarques():
                 'numero_tracking': numero_tracking,
                 'naviera': naviera,
                 'estado': estado,
+                'agente': agente,
                 'buque': buque,
                 'cod_puerto_embarque': cod_puerto_embarque,
                 'cod_puerto_desembarque': cod_puerto_desembarque,
@@ -534,8 +590,50 @@ def obtener_embarques():
                 'descripcion': descripcion,
                 'tipo_flete': tipo_flete,
                 'adicionado_por': adicionado_por,
+                'fecha_adicion': fecha_adicion,
+                'modificado_por': modificado_por,
+                'fecha_modificacion': fecha_modificacion,
+                'cod_modelo': cod_modelo,
+                'cod_item': cod_item,
+                'cod_aforo': cod_aforo
             })
         return jsonify(serialized_embarques)
+
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        #logging.error('Ocurrio un error: %s',e)
+        return jsonify({'error': str(e)}), 500
+    
+@bp.route('/tipo_aforo')
+@jwt_required()
+@cross_origin()
+def obtener_tipo_aforo():
+    try:
+        query = StTipoAforo.query()
+        aforos = query.all()
+        serialized_aforos = []
+        for aforo in aforos:
+            empresa = aforo.empresa if aforo.empresa else ""
+            cod_aforo = aforo.cod_aforo if aforo.cod_aforo else ""
+            nombre = aforo.nombre if aforo.nombre else ""
+            valor = aforo.valor if aforo.valor else ""
+            observacion = aforo.observacion if aforo.observacion else ""
+            usuario_crea = aforo.usuario_crea if aforo.usuario_crea else ""
+            fecha_crea = datetime.strftime(aforo.fecha_crea,"%d/%m/%Y") if aforo.fecha_crea else ""
+            usuario_modifica = aforo.usuario_modifica if aforo.usuario_modifica else ""
+            fecha_modifica = datetime.strftime(aforo.fecha_modifica,"%d/%m/%Y") if aforo.fecha_modifica else ""
+            serialized_aforos.append({
+                'empresa': empresa,
+                'cod_aforo': cod_aforo,
+                'nombre': nombre,
+                'valor': valor,
+                'observacion': observacion,
+                'usuario_crea': usuario_crea,
+                'fecha_crea': fecha_crea,
+                'usuario_modifica': usuario_modifica,
+                'fecha_modifica': fecha_modifica
+            })
+            return jsonify(serialized_aforos)
 
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
@@ -553,9 +651,9 @@ def crear_orden_compra_cab():
         data = request.get_json()
         fecha_crea = date.today()#funcion para que se asigne la fecha actual al momento de crear la oden de compra
         fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
-        fecha_estimada_produccion = datetime.strftime(data['fecha_estimada_produccion'], '%d%m%Y').date()
-        fecha_estimada_puerto = datetime.strftime(data['fecha_estimada_puerto'], '%d%m%Y').date()
-        fecha_estimada_llegada = datetime.strftime(data['fecha_estimada_llegada'], '%d%m%Y').date()
+        fecha_estimada_produccion = datetime.strptime(data['fecha_estimada_produccion'], '%d/%m/%Y').date() if 'fecha_estimada_produccion' in data else None
+        fecha_estimada_puerto = datetime.strftime(data['fecha_estimada_puerto'], '%d%m%Y').date() if 'fecha_estimada_puerto' in data else None
+        fecha_estimada_llegada = datetime.strftime(data['fecha_estimada_llegada'], '%d%m%Y').date() if 'fecha_estimada_llegada' in data else None
 
         #busqueda para que se asigne de forma automatica la ciudad al buscarla por el cod_proveedor
         busq_ciudad = TcCoaProveedor.query().filter_by(ruc=data['cod_proveedor']).first()
@@ -582,7 +680,8 @@ def crear_orden_compra_cab():
             fecha_modifica=fecha_modifica,
             cod_modelo=data['cod_modelo'],
             cod_item=data['cod_item'],
-            proforma = data['proforma'],
+            proforma = data.get('proforma'),
+            cod_opago = data.get('cod_opago'),
             ciudad = ciudad if ciudad else "",
             fecha_estimada_produccion = fecha_estimada_produccion,
             fecha_estimada_puerto = fecha_estimada_puerto,
@@ -792,92 +891,104 @@ def crear_packinglist():
         cod_prod_no_existe = []
         unidad_medida_no_existe = []
         prod_no_existe = []
+        bl_no_existe = []
 
         for packing in data['packings']:
             unidad_medida = packing['unidad_medida']
             cod_producto = packing['cod_producto']
+            codigo_bl_house = packing['codigo_bl_house']
             secuencia = obtener_secuencia_packing(cod_po)
 
             #Verificar si el producto existe en la tabla de StOrdenCompraDet
             query = StOrdenCompraDet.query().filter_by(cod_producto = cod_producto, cod_po = cod_po, empresa = empresa).first()
             print(query)
             query_umedida = StUnidadImportacion.query().filter_by(cod_unidad = unidad_medida, empresa = empresa).first()
-            if query and query_umedida:
-                packinlist = StPackinglist(
-                    empresa = empresa,
-                    cod_po = cod_po,
-                    secuencia = secuencia,
-                    tipo_comprobante = tipo_comprobante,
-                    cod_producto = cod_producto,
-                    cantidad = packing['cantidad'],
-                    fob = packing['fob'],
-                    unidad_medida = unidad_medida,
-                    usuario_crea = usuario_crea,
-                    fecha_crea = fecha_crea,
-                    #usuario_modifica = packing['usuario_modifica'].upper(),
-                    #fecha_modifica = fecha_modifica
-                )
-                # Realizar la actualizacion de saldo_producto
-                query.saldo_producto = query.cantidad_pedido - packing['cantidad']
-                
-                db.session.add(packinlist)
-                db.session.commit()
-            else:
-                if query is None:
-                    query_prod = Producto.query().filter_by(cod_producto = cod_producto, empresa = empresa).first()
-                    despiece = StProductoDespiece.query().filter_by(cod_producto=cod_producto, empresa = empresa).first() #usar la empresa
-                    if despiece:
-                        packinlist = StPackinglist(
-                            empresa = empresa,
-                            cod_po = cod_po,
-                            secuencia = secuencia,
-                            tipo_comprobante = tipo_comprobante,
-                            cod_producto = cod_producto,
-                            cantidad = packing['cantidad'],
-                            fob = packing['fob'],
-                            unidad_medida = unidad_medida,
-                            usuario_crea = usuario_crea,
-                            fecha_crea = fecha_crea,
-                            #usuario_modifica = packing['usuario_modifica'].upper(),
-                            #fecha_modifica = fecha_modifica
-                        )
-                        costo_sistema = query_prod.costo
-                        if despiece is not None:
-                            nombre_busq = StDespiece.query().filter_by(cod_despiece =despiece.cod_despiece).first()
-                            nombre = nombre_busq.nombre_e
-                            nombre_i = nombre_busq.nombre_i
-                            nombre_c = nombre_busq.nombre_c
-                        else:
-                            nombre_busq = Producto.query().filter_by(cod_producto = cod_producto).first()
-                            nombre = nombre_busq.nombre
-                            nombre_i = nombre_busq.nombre
-                            nombre_c = nombre_busq.nombre
-                        # Crear un nuevo registro en StOrdenCompraDet con cantidad en negativo
-                        detalle = StOrdenCompraDet(
-                            exportar=False,
-                            cod_po=cod_po,
-                            tipo_comprobante='PO',
-                            secuencia=obtener_secuencia(cod_po),
-                            empresa=empresa,
-                            cod_producto=cod_producto,
-                            nombre=nombre if nombre else None,
-                            nombre_i=nombre_i if nombre_i else None,
-                            nombre_c=nombre_c if nombre_c else None,
-                            costo_sistema=costo_sistema if costo_sistema else 0,
-                            cantidad_pedido=-packing['cantidad'],  # Cantidad en negativo
-                            saldo_producto =0,
-                            unidad_medida=unidad_medida,
-                            usuario_crea=usuario_crea,
-                            fecha_crea=fecha_crea,
-                        )
-                        db.session.add(packinlist)
-                        db.session.add(detalle)
-                        db.session.commit()
-                        cod_prod_no_existe.append(cod_producto)
-                    else:
-                        prod_no_existe.append(cod_producto)
+            query_bl = StEmbarquesBl.query().filter_by(codigo_bl_house = codigo_bl_house, empresa = empresa).first()
+            if query_bl:
+                if query and query_umedida:
+                    packinlist = StPackinglist(
+                        codigo_bl_house = codigo_bl_house,
+                        empresa = empresa,
+                        cod_po = cod_po,
+                        secuencia = secuencia,
+                        tipo_comprobante = tipo_comprobante,
+                        cod_producto = cod_producto,
+                        cantidad = packing['cantidad'],
+                        fob = packing['fob'],
+                        unidad_medida = unidad_medida,
+                        usuario_crea = usuario_crea,
+                        fecha_crea = fecha_crea,
+                        #usuario_modifica = packing['usuario_modifica'].upper(),
+                        #fecha_modifica = fecha_modifica
+                    )
+                    # Realizar la actualizacion de saldo_producto
+                    query.saldo_producto = query.saldo_producto - packing['cantidad']
+                    
+                    db.session.add(packinlist)
+                    db.session.commit()
                 else:
-                    unidad_medida_no_existe.append(unidad_medida)
+                    if query is None:
+                        query_prod = Producto.query().filter_by(cod_producto = cod_producto, empresa = empresa).first()
+                        despiece = StProductoDespiece.query().filter_by(cod_producto=cod_producto, empresa = empresa).first() #usar la empresa
+                        if despiece:
+                            packinlist = StPackinglist(
+                                codigo_bl_house = codigo_bl_house,
+                                empresa = empresa,
+                                cod_po = cod_po,
+                                secuencia = secuencia,
+                                tipo_comprobante = tipo_comprobante,
+                                cod_producto = cod_producto,
+                                cantidad = packing['cantidad'],
+                                fob = packing['fob'],
+                                unidad_medida = unidad_medida,
+                                usuario_crea = usuario_crea,
+                                fecha_crea = fecha_crea,
+                                #usuario_modifica = packing['usuario_modifica'].upper(),
+                                #fecha_modifica = fecha_modifica
+                            )
+                            costo_sistema = query_prod.costo
+                            if despiece is not None:
+                                nombre_busq = StDespiece.query().filter_by(cod_despiece =despiece.cod_despiece).first()
+                                nombre = nombre_busq.nombre_e
+                                nombre_i = nombre_busq.nombre_i
+                                nombre_c = nombre_busq.nombre_c
+                            else:
+                                nombre_busq = Producto.query().filter_by(cod_producto = cod_producto).first()
+                                nombre = nombre_busq.nombre
+                                nombre_i = nombre_busq.nombre
+                                nombre_c = nombre_busq.nombre
+                            # Crear un nuevo registro en StOrdenCompraDet con cantidad en negativo
+                            detalle = StOrdenCompraDet(
+                                exportar=False,
+                                cod_po=cod_po,
+                                tipo_comprobante='PO',
+                                secuencia=obtener_secuencia(cod_po),
+                                empresa=empresa,
+                                cod_producto=cod_producto,
+                                nombre=nombre if nombre else None,
+                                nombre_i=nombre_i if nombre_i else None,
+                                nombre_c=nombre_c if nombre_c else None,
+                                costo_sistema=costo_sistema if costo_sistema else 0,
+                                cantidad_pedido=-packing['cantidad'],  # Cantidad en negativo
+                                saldo_producto =0,
+                                unidad_medida=unidad_medida,
+                                usuario_crea=usuario_crea,
+                                fecha_crea=fecha_crea,
+                            )
+                            db.session.add(packinlist)
+                            db.session.add(detalle)
+                            db.session.commit()
+                            cod_prod_no_existe.append(cod_producto)
+                        else:
+                            prod_no_existe.append(cod_producto)
+                    else:
+                        unidad_medida_no_existe.append(unidad_medida)
+                
+            else:
+                bl_no_existe.append(codigo_bl_house)
+
+        if bl_no_existe:
+            return jsonify({'mensaje': 'Embarque o Bl no existentes.', 'codigo_bl_house': codigo_bl_house})
         if prod_no_existe:
             return jsonify({'mensaje': 'Productos no existentes en base de datos, no ingresados.', 'prod_no_existe': prod_no_existe, 'cod_po': cod_po})
         if cod_prod_no_existe:
@@ -948,6 +1059,61 @@ def crear_orden_compra_track():
         logger.exception(f"Error al consultar: {str(e)}")
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
+    
+@bp.route('/embarque', methods = ['POST'])
+@jwt_required()
+@cross_origin()
+def crear_embarque():
+    try:
+        data = request.get_json()
+        fecha_adicion = date.today()#funcion para que se asigne la fecha actual al momento de crear la oden de compra
+        #fecha_modificacion = datetime.strptime(data['fecha_modificacion'], '%d/%m/%Y').date() if 'fecha_modificacion' in data else None
+        fecha_embarque = datetime.strptime(data['fecha_embarque'], '%d/%m/%Y').date() if 'fecha_embarque' in data else None
+        fecha_llegada = datetime.strptime(data['fecha_llegada'], '%d/%m/%Y').date() if 'fecha_llegada' in data else None
+        fecha_bodega = datetime.strptime(data['fecha_bodega'], '%d/%m/%Y').date() if 'fecha_bodega' in data else None
+
+        #busqueda para obtener el nombre del estado para la orden de compra
+        #estado = TgModeloItem.query().filter_by(cod_modelo=data['cod_modelo'], cod_item=data['cod_item']).first()
+        #estado_nombre = estado.nombre if estado else ''
+
+        embarque = StEmbarquesBl(
+            empresa=data['empresa'],
+            codigo_bl_master=data['codigo_bl_master'],
+            codigo_bl_house=data['codigo_bl_house'],
+            cod_proveedor=data['cod_proveedor'],
+            fecha_embarque = fecha_embarque,
+            fecha_llegada = fecha_llegada,
+            fecha_bodega=fecha_bodega,
+            numero_tracking=data['numero_tracking'],
+            naviera=data['naviera'],
+            estado = data['estado'],
+            buque = data.get('buque'),
+            cod_puerto_embarque = data.get('cod_puerto_embarque'),
+            cod_puerto_desembarque = data.get('cod_puerto_desembarque'),
+            costo_contenedor = data.get('costo_contenedor'),
+            descripcion = data.get('descripcion'),
+            tipo_flete = data.get('tipo_flete'),
+            adicionado_por=data['adicionado_por'].upper(),
+            fecha_adicion=fecha_adicion,
+            #modificado_por=data['modificado_por'].upper(),
+            #fecha_modificacion = fecha_modificacion,
+            cod_modelo=data['cod_modelo'],
+            cod_item=data['cod_item'],
+            cod_aforo = data.get('cod_aforo')
+        )
+        db.session.add(embarque)
+        db.session.commit()
+        return jsonify({'mensaje': "Embarque o BL creado exitosamente"})
+
+    except ValueError as ve:
+        # Capturar y manejar el error específico de ValueError
+        error_message = str(ve)
+        return jsonify({'error': error_message}), 500
+
+    except Exception as e:
+        # Manejar otros errores y proporcionar un mensaje personalizado
+        error_message = f"Se produjo un error: {str(e)}"
+        return jsonify({'error': error_message}), 500
 
 # METODOS UPDATE DE TABLAS DE ORDEN DE COMPRA
 
@@ -1079,7 +1245,7 @@ def actualizar_orden_compra_trancking(cod_po,empresa,tipo_comprobante):
 @bp.route('/orden_compra_packinglist/<cod_po>/<empresa>/<secuencia>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
-def actualizar_orden_compra_packinlist(cod_po,empresa,secuencia):
+def actualizar_orden_compra_packinglist(cod_po,empresa,secuencia):
     try:
         packinglist = db.session.query(StPackinglist).filter_by(cod_po=cod_po,empresa=empresa,secuencia=secuencia).first()
         if not packinglist:
@@ -1105,6 +1271,51 @@ def actualizar_orden_compra_packinlist(cod_po,empresa,secuencia):
     except Exception as e:
         logger.exception(f"Error al actualizar: {str(e)}")
         #logging.error('Ocurrio un error: %s',e)
+        return jsonify({'error': str(e)}), 500
+    
+@bp.route('/embarque/<codigo_bl_house>/<empresa>', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def actualizar_embarque(codigo_bl_house, empresa):
+    try:
+        embarque = db.session.query(StEmbarquesBl).filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).first()
+        if not embarque:
+            return jsonify({'mensaje': 'El embarque no existe.'}), 404
+
+        data = request.get_json()
+
+        if 'fecha_embarque' in data:
+            embarque.fecha_embarque = datetime.strptime(data['fecha_embarque'], '%d/%m/%Y').date()
+
+        if 'fecha_llegada' in data:
+            embarque.fecha_llegada = datetime.strptime(data['fecha_llegada'], '%d/%m/%Y').date()
+
+        if 'fecha_bodega' in data:
+            embarque.fecha_bodega = datetime.strptime(data['fecha_bodega'], '%d/%m/%Y').date()
+
+        embarque.cod_proveedor = data.get('cod_proveedor', embarque.cod_proveedor)
+        embarque.numero_tracking = data.get('numero_tracking', embarque.numero_tracking)
+        embarque.naviera = data.get('naviera', embarque.naviera)
+        embarque.estado = data.get('estado', embarque.estado)
+        embarque.agente = data.get('agente', embarque.agente)
+        embarque.fecha_modificacion = date.today()
+        embarque.buque = data.get('buque', embarque.buque)
+        embarque.cod_puerto_embarque = data.get('cod_puerto_embarque', embarque.cod_puerto_embarque)
+        embarque.cod_puerto_desembarque = data.get('cod_puerto_desembarque', embarque.cod_puerto_desembarque)
+        embarque.costo_contenedor = data.get('costo_contenedor', embarque.costo_contenedor)
+        embarque.descripcion = data.get('descripcion', embarque.descripcion)
+        embarque.tipo_flete = data.get('tipo_flete', embarque.tipo_flete)
+        embarque.modificado_por = data.get('modificado_por', embarque.modificado_por)
+        embarque.cod_modelo = data.get('cod_modelo', embarque.cod_modelo)
+        embarque.cod_item = data.get('cod_item', embarque.cod_item)
+        embarque.cod_aforo = data.get('cod_aforo', embarque.cod_aforo)
+
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Embarque o BL actualizado exitosamente.'})
+
+    except Exception as e:
+        logger.exception(f"Error al actualizar Embarque: {str(e)}")
         return jsonify({'error': str(e)}), 500
     
 #METODOS DELETE PARA ORDENES DE COMPRA
@@ -1180,6 +1391,26 @@ def eliminar_orden_compra_packinglist(cod_po, empresa, tipo_comprobante):
     except Exception as e:
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
+    
+@bp.route('/embarque/<codigo_bl_house>/<empresa>', methods=['DELETE'])
+@jwt_required()
+@cross_origin()
+def eliminar_embarque(codigo_bl_house, empresa, ):
+    try:
+        embarque = db.session.query(StEmbarquesBl).filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).first()
+        if not embarque:
+            return jsonify({'mensaje': 'Embarque de orden de compra no existe.'}), 404
+
+        db.session.delete(embarque)
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Embarque de orden de compra eliminada exitosamente.'})
+
+    except Exception as e:
+        logger.exception(f"Error al eliminar: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    
+#METODO PARA INGRESAR CABECERA Y DETALLES DE UNA ORDEN DE IMPORTACION
     
 @bp.route('/orden_compra_total', methods=['POST'])
 @jwt_required()
@@ -1299,7 +1530,7 @@ def crear_orden_compra_total():
                     nombre_comercial=detalle['NOMBRE_COMERCIAL'],
                     costo_sistema=costo_sistema if costo_sistema else 0,
                     cantidad_pedido=detalle['PEDIDO'],
-                    saldo_producto=0,
+                    saldo_producto=detalle['PEDIDO'],
                     unidad_medida=unidad_medida,
                     usuario_crea=data['cabecera']['usuario_crea'].upper(),
                     fecha_crea=fecha_crea,
