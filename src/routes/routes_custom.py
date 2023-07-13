@@ -5,7 +5,7 @@ from models.tipo_comprobante import TipoComprobante
 from models.producto_despiece import StProductoDespiece
 from models.despiece import StDespiece
 from models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StTracking,StPackinglist
-from models.embarque_bl import StEmbarquesBl
+from models.embarque_bl import StEmbarquesBl, StTrackingBl
 from config.database import db
 from sqlalchemy import and_
 import datetime
@@ -26,15 +26,15 @@ logger = logging.getLogger(__name__)
 def obtener_productos_param():
     cod_producto = request.args.get('cod_producto', None)
     empresa = request.args.get('empresa', None)
-    cod_barra = request.args.get('cod_barra', None)
+    nombre = request.args.get('nombre', None)
 
     query = Producto.query()
     if cod_producto:
-        query = query.filter(Producto.cod_producto == cod_producto)
+        query = query.filter(Producto.cod_producto.like(f'%{cod_producto.upper()}%'))
     if empresa:
         query = query.filter(Producto.empresa == empresa)
-    if cod_barra:
-        query = query.filter(Producto.cod_barra == cod_barra)
+    if nombre:
+        query = query.filter(Producto.nombre.like(f'%{nombre.upper()}%'))
 
     productos = query.all()
 
@@ -456,6 +456,55 @@ def obtener_orden_compra_track_param():
             'fecha_modifica': fecha_modifica,
         })
     return jsonify(serialized_seguimientos)
+
+@bpcustom.route('/tracking_bl_param')
+@jwt_required()
+@cross_origin()
+def obtener_tracking_bl_param():
+    try:
+        cod_bl_house = request.args.get('cod_bl_house', None)
+        empresa = request.args.get('empresa', None)
+        secuencial = request.args.get('secuencial', None)
+
+        query = StTrackingBl.query()
+        if cod_bl_house:
+            query = query.filter(StTrackingBl.cod_bl_house == cod_bl_house)
+        if empresa:
+            query = query.filter(StTrackingBl.empresa == empresa)
+        if secuencial:
+            query = query.filter(StTrackingBl.secuencial == secuencial)
+        
+        track_bls = query.all()
+        serialized_bls = []
+
+        for bl in track_bls:
+            cod_bl_house = bl.cod_bl_house if bl.cod_bl_house else ""
+            empresa = bl.empresa if bl.empresa else ""
+            secuencial = bl.secuencial if bl.secuencial else ""
+            observaciones = bl.observaciones if bl.observaciones else ""
+            cod_modelo = bl.cod_modelo if bl.cod_modelo else ""
+            fecha_crea = datetime.strftime(bl.fecha_crea,"%d/%m/%Y") if bl.fecha_crea else ""
+            usuario_modifica = bl.usuario_modifica if bl.usuario_modifica else ""
+            fecha_modifica = datetime.strftime(bl.fecha_modifica,"%d/%m/%Y") if bl.fecha_modifica else ""
+            fecha = datetime.strftime(bl.fecha,"%d/%m/%Y") if bl.fecha else ""
+            cod_item = bl.cod_item if bl.cod_item else ""
+            serialized_bls.append({
+                'cod_bl_house': cod_bl_house,
+                'empresa': empresa,
+                'secuencial': secuencial,
+                'observaciones': observaciones,
+                'cod_modelo': cod_modelo,
+                'fecha_crea': fecha_crea,
+                'usuario_modifica': usuario_modifica,
+                'fecha_modifica': fecha_modifica,
+                'fecha': fecha,
+                'cod_item': cod_item,
+            })
+        return jsonify(serialized_bls)
+        
+    except Exception as e:
+        logger.exception(f"Error al eliminar: {str(e)}")
+        return jsonify({'error': str(e)}), 500    
 
 @bpcustom.route('/packinglist_param')
 @jwt_required()

@@ -369,6 +369,46 @@ def obtener_orden_compra_track():
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
+@bp.route('/tracking_bl')
+@jwt_required()
+@cross_origin()
+def obtener_tracking_bl():
+    try:
+        query = StTrackingBl.query()
+        track_bls = query.all()
+        serialized_bls = []
+        for bl in track_bls:
+            cod_bl_house = bl.cod_bl_house if cod_bl_house.cod_bl_house else ""
+            empresa = bl.empresa if bl.empresa else ""
+            secuencial = bl.secuencial if bl.secuencial else ""
+            observaciones = bl.observaciones if bl.observaciones else ""
+            cod_modelo = bl.cod_modelo if bl.cod_modelo else ""
+            usuario_crea = bl.usuario_crea if bl.usuario_crea else ""
+            fecha_crea = datetime.strftime(bl.fecha_crea,"%d/%m/%Y") if bl.fecha_crea else ""
+            usuario_modifica = bl.usuario_modifica if bl.usuario_modifica else ""
+            fecha_modifica = datetime.strftime(bl.fecha_modifica,"%d/%m/%Y") if bl.fecha_modifica else ""
+            fecha = datetime.strftime(bl.fecha,"%d/%m/%Y") if bl.fecha else ""
+            cod_item = bl.cod_item if bl.cod_item else ""
+            serialized_bls.append({
+                'cod_bl_house': cod_bl_house,
+                'empresa': empresa,
+                'secuencial': secuencial,
+                'observaciones': observaciones,
+                'cod_modelo': cod_modelo,
+                'usuario_crea': usuario_crea,
+                'fecha_crea': fecha_crea,
+                'usuario_modifica': usuario_modifica,
+                'fecha_modifica': fecha_modifica,
+                'fecha': fecha,
+                'cod_item': cod_item,
+            })
+        return jsonify(serialized_bls)
+    
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        #logging.error('Ocurrio un error: %s',e)
+        return jsonify({'error': str(e)}), 500
+    
 @bp.route('/packinglist')
 @jwt_required()
 @cross_origin()
@@ -516,6 +556,7 @@ def obtener_embarques():
             numero_tracking = embarque.numero_tracking if embarque.numero_tracking else ""
             naviera = embarque.naviera if embarque.naviera else ""
             estado = embarque.estado if embarque.estado else ""
+            agente = embarque.agente if embarque.agente else ""
             buque = embarque.buque if embarque.buque else ""
             cod_puerto_embarque = embarque.cod_puerto_embarque if embarque.cod_puerto_embarque else ""
             cod_puerto_desembarque = embarque.cod_puerto_desembarque if embarque.cod_puerto_desembarque else ""
@@ -540,6 +581,7 @@ def obtener_embarques():
                 'numero_tracking': numero_tracking,
                 'naviera': naviera,
                 'estado': estado,
+                'agente': agente,
                 'buque': buque,
                 'cod_puerto_embarque': cod_puerto_embarque,
                 'cod_puerto_desembarque': cod_puerto_desembarque,
@@ -879,10 +921,7 @@ def crear_packinglist():
                         #fecha_modifica = fecha_modifica
                     )
                     # Realizar la actualizacion de saldo_producto
-                    if query.saldo_producto == 0:
-                        query.saldo_producto = query.cantidad_pedido - packing['cantidad']
-                    else:
-                        query.saldo_producto = query.saldo_producto - packing['cantidad']
+                    query.saldo_producto = query.saldo_producto - packing['cantidad']
                     
                     db.session.add(packinlist)
                     db.session.commit()
@@ -1205,7 +1244,7 @@ def actualizar_orden_compra_trancking(cod_po,empresa,tipo_comprobante):
 @bp.route('/orden_compra_packinglist/<cod_po>/<empresa>/<secuencia>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
-def actualizar_orden_compra_packinlist(cod_po,empresa,secuencia):
+def actualizar_orden_compra_packinglist(cod_po,empresa,secuencia):
     try:
         packinglist = db.session.query(StPackinglist).filter_by(cod_po=cod_po,empresa=empresa,secuencia=secuencia).first()
         if not packinglist:
