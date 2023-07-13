@@ -129,16 +129,6 @@ def refresh_expiring_jwts(response):
         # Case where there is not a valid JWT. Just return the original response
         return response
 
-@app.route('/profile')
-@jwt_required()
-@cross_origin()
-def my_profile():
-    response_body = {
-        "name": "Damian",
-        "about": "Hello! I'm a full stack developer that loves python and javascript"
-    }
-    return response_body
-
 @app.route('/enterprise/<id>')
 @jwt_required()
 @cross_origin()
@@ -192,6 +182,44 @@ def branch(id,en):
         raise Exception(ex)
     return response_body
 
+@app.route('/modules/<user>/<enterprise>')
+@jwt_required()
+@cross_origin()
+def module(user,enterprise):
+    try:
+        c = oracle.connection('stock', 'stock')
+        cur_01 = c.cursor()
+        user = str(upper(user))
+        sql = ('SELECT F.COD_SISTEMA, F.SISTEMA, F.PATH_IMAGEN, F.RUTA '
+                'FROM computo.usuario  a, computo.TG_ROL_USUARIO B, computo.TG_ROL C, computo.TG_MENU_SISTEMA_ROL D, computo.TG_MENU_SISTEMA E, computo.TG_SISTEMA F '
+                'WHERE a.usuario_oracle        =         :id '
+                'AND   A.EMPRESA_ACTUAL        =         :en '
+                'AND   B.EMPRESA               =         A.EMPRESA_ACTUAL '
+                'AND   B.USUARIO               =         A.USUARIO_ORACLE '
+                'AND   B.ACTIVO                =         1 '
+                'AND   C.EMPRESA               =         B.EMPRESA '
+                'AND   C.COD_ROL               =         B.COD_ROL '
+                'AND   C.ACTIVO                =         1 '
+                'AND   D.COD_ROL               =         B.COD_ROL '
+                'AND   D.COD_SISTEMA           =         E.COD_SISTEMA '
+                'AND   D.COD_MENU              =         E.COD_MENU_PADRE '
+                'AND   D.EMPRESA               =         B.EMPRESA '
+                'AND   D.EMPRESA               =         E.EMPRESA '
+                'AND   D.ACTIVO                =         1 '
+                'AND   F.COD_SISTEMA           =         E.COD_SISTEMA')
+        cursor = cur_01.execute(sql, id=user, en=enterprise)
+        c.close
+        row_headers = [x[0] for x in cursor.description]
+        array = cursor.fetchall()
+        modulos = []
+        for result in array:
+            modulos.append(dict(zip(row_headers, result)))
+        modulos = sorted(modulos, key=lambda k: k['SISTEMA'])
+        return json.dumps(modulos)
+    except Exception as ex:
+        raise Exception(ex)
+    return response_body
+
 
 @app.route("/logout",methods=["POST"])
 @cross_origin()
@@ -199,58 +227,6 @@ def logout():
     response = jsonify({"msg": "logout succesfull"})
     unset_jwt_cookies(response)
     return response
-
-
-# @login_manager.user_loader
-# def load_user(username):
-#     return ModelUser.get_by_id(username)
-
-# @app.route('/logout')
-# def logout():
-#     logout_user()
-#     return redirect(url_for('login'))
-
-# def status_401(error):
-#     return redirect(url_for('login'))
-# def status_404(error):
-#     return "<h1>Página no encontrada</h1>", 404
-
-
-# @app.route('/')
-# def index():
-#     return redirect(url_for('login'))
-
-
-# @app.route('/login', methods=['GET', 'POST'])
-# def login():
-#     if request.method == 'POST':
-#         data = request.get_json()
-#         usuario = data['username'].upper()
-#         password = data['password']
-#         print(usuario,password)
-#         user = User(usuario,password)
-#         logged_user=ModelUser.login(user)
-#         if logged_user != None:
-#             if logged_user.password:
-#                 login_user(logged_user)
-#                 return jsonify({'msg': 'User Logged'})                    #redirect(url_for('home'))
-#             else:
-#                 #flash("Invalid password...")
-#                 return jsonify({'msg': 'Invalid password...'})                           #render_template('auth/login.html')
-#         else:
-#             #flash("User not found...")
-#             return jsonify({'msg': 'User not found...'})                                                     #render_template('auth/login.html')
-#     else:
-#         return render_template('auth/login.html')
-#
-
-# @app.route('/home')
-# @login_required
-# def home():
-#     return render_template('home.html')
-
-
-########################################################################
 
 @app.route("/user/<id>", methods=['GET'])
 @jwt_required()
