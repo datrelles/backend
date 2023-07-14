@@ -156,6 +156,28 @@ def enterprise(id):
     return response_body
 
 
+@app.route('/enterprise_default/<id>')
+@jwt_required()
+@cross_origin()
+def enterprise_default(id):
+    try:
+        c = oracle.connection('stock', 'stock')
+        cur_01 = c.cursor()
+        id = str(upper(id))
+        sql = ('select u.empresa_actual from usuario u where u.usuario_oracle = :id')
+        cursor = cur_01.execute(sql, [id])
+        c.close
+        row_headers = [x[0] for x in cursor.description]
+        array = cursor.fetchall()
+        empresas = []
+        for result in array:
+            empresas.append(dict(zip(row_headers, result)))
+        return json.dumps(empresas)
+    except Exception as ex:
+        raise Exception(ex)
+    return response_body
+
+
 @app.route('/branch/<id>/<en>')
 @jwt_required()
 @cross_origin()
