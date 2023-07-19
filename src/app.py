@@ -212,7 +212,7 @@ def module(user,enterprise):
         c = oracle.connection('stock', 'stock')
         cur_01 = c.cursor()
         user = str(upper(user))
-        sql = ('SELECT F.COD_SISTEMA, F.SISTEMA, F.PATH_IMAGEN, F.RUTA '
+        sql = ('SELECT DISTINCT F.COD_SISTEMA, F.SISTEMA, F.PATH_IMAGEN, F.RUTA '
                 'FROM computo.usuario  a, computo.TG_ROL_USUARIO B, computo.TG_ROL C, computo.TG_MENU_SISTEMA_ROL D, computo.TG_MENU_SISTEMA E, computo.TG_SISTEMA F '
                 'WHERE a.usuario_oracle        =         :id '
                 'AND   A.EMPRESA_ACTUAL        =         :en '
@@ -242,6 +242,60 @@ def module(user,enterprise):
         raise Exception(ex)
     return response_body
 
+@app.route('/menus/<user>/<enterprise>/<system>')
+@jwt_required()
+@cross_origin()
+def menu(user,enterprise, system):
+    try:
+        c = oracle.connection('stock', 'stock')
+        cur_01 = c.cursor()
+        user = str(upper(user))
+        sql = ('SELECT E.COD_MENU, E.COD_MENU_PADRE, E.NOMBRE, E.RUTA '
+                    'FROM computo.usuario  a, computo.TG_ROL_USUARIO B,  computo.TG_ROL C, ' 
+                    'computo.TG_MENU_SISTEMA_ROL D, computo.TG_MENU_SISTEMA E, computo.TG_SISTEMA F '
+                    'WHERE a.usuario_oracle        =         :id '
+                    'AND   A.EMPRESA_ACTUAL        =         :en '
+                    'AND   B.EMPRESA               =         A.EMPRESA_ACTUAL '
+                    'AND   B.USUARIO               =         A.USUARIO_ORACLE '
+                    'AND   B.ACTIVO                =         1 '
+                    'AND   C.EMPRESA               =         B.EMPRESA '
+                    'AND   C.COD_ROL               =         B.COD_ROL '
+                    'AND   C.ACTIVO                =         1 '
+                    'AND   D.COD_ROL               =         B.COD_ROL '
+                    'AND   D.COD_SISTEMA           =         E.COD_SISTEMA '
+                    'AND   D.EMPRESA               =         B.EMPRESA '
+                    'AND   D.EMPRESA               =         E.EMPRESA '
+                    'AND   D.COD_MENU              =         E.COD_MENU '
+                    'AND   D.ACTIVO                =         1 '
+                    'AND   F.COD_SISTEMA           =         E.COD_SISTEMA '
+                    'AND   F.COD_SISTEMA           =         :sys')
+        cursor = cur_01.execute(sql, id=user, en=enterprise, sys=system)
+        c.close
+        row_headers = [x[0] for x in cursor.description]
+        array = cursor.fetchall()
+        menus = []
+        for result in array:
+            menus.append(dict(zip(row_headers, result)))
+        result = {}
+        for item in menus:
+            if item["COD_MENU_PADRE"] is None:
+                result[item["COD_MENU"]] = {
+                    "title": item["NOMBRE"],
+                    "items": []
+                }
+        for item in menus:
+            if item["COD_MENU_PADRE"] is not None:
+                result[item["COD_MENU_PADRE"]]["items"].append({
+                    "COD_MENU": item["COD_MENU"],
+                    "NOMBRE": item["NOMBRE"],
+                    "RUTA": item["RUTA"]
+                })
+
+        return json.dumps(list(result.values()), indent=2)
+
+    except Exception as ex:
+        raise Exception(ex)
+    return response_body
 
 @app.route("/logout",methods=["POST"])
 @cross_origin()
