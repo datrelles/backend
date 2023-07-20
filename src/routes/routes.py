@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 from datetime import datetime
+<<<<<<< HEAD
 from models.users import Usuario, Empresa
 from models.tipo_comprobante import TipoComprobante
 from models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
@@ -14,6 +15,21 @@ from config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer, event
 from sqlalchemy.orm import AttributeEvents
 from functools import partial
+=======
+
+from src.models.users import Usuario, Empresa
+from src.models.tipo_comprobante import TipoComprobante
+from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
+from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StTracking, StPackinglist
+from src.models.productos import Producto
+from src.models.despiece import StDespiece
+from src.models.producto_despiece import StProductoDespiece
+from src.models.unidad_importacion import StUnidadImportacion
+from src.models.embarque_bl import StEmbarquesBl,StTrackingBl
+from src.models.tipo_aforo import StTipoAforo
+from src.config.database import db,engine,session
+from sqlalchemy import func, text,bindparam,Integer
+>>>>>>> 75b22c8c2f7bab02e7d421efe648f438ef54d542
 import logging
 import datetime
 import requests
