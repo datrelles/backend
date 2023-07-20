@@ -5,13 +5,15 @@ from models.tipo_comprobante import TipoComprobante
 from models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
 from models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StTracking, StPackinglist
 from models.productos import Producto
-from models.despiece import StDespiece
+from models.despiece import StDespiece, StDespieceD
 from models.producto_despiece import StProductoDespiece
 from models.unidad_importacion import StUnidadImportacion
 from models.embarque_bl import StEmbarquesBl,StTrackingBl
 from models.tipo_aforo import StTipoAforo
 from config.database import db,engine,session
-from sqlalchemy import func, text,bindparam,Integer
+from sqlalchemy import func, text,bindparam,Integer, event
+from sqlalchemy.orm import AttributeEvents
+from functools import partial
 import logging
 import datetime
 import requests
@@ -378,7 +380,7 @@ def obtener_tracking_bl():
         track_bls = query.all()
         serialized_bls = []
         for bl in track_bls:
-            cod_bl_house = bl.cod_bl_house if cod_bl_house.cod_bl_house else ""
+            cod_bl_house = bl.cod_bl_house if bl.cod_bl_house else ""
             empresa = bl.empresa if bl.empresa else ""
             secuencial = bl.secuencial if bl.secuencial else ""
             observaciones = bl.observaciones if bl.observaciones else ""
@@ -771,7 +773,7 @@ def crear_orden_compra_det():
                 # Consultar la tabla StDespiece para obtener los valores correspondientes
                 despiece = StProductoDespiece.query().filter_by(cod_producto=order['COD_PRODUCTO'], empresa = empresa).first() #usar la empresa
                 if despiece is not None:
-                    nombre_busq = StDespiece.query().filter_by(cod_despiece =despiece.cod_despiece).first()
+                    nombre_busq = StDespieceD.query().filter_by(cod_despiece =despiece.cod_despiece, secuencia = despiece.secuencia).first()
                     nombre = nombre_busq.nombre_e
                     nombre_i = nombre_busq.nombre_i
                     nombre_c = nombre_busq.nombre_c
@@ -1113,6 +1115,60 @@ def crear_embarque():
         # Manejar otros errores y proporcionar un mensaje personalizado
         error_message = f"Se produjo un error: {str(e)}"
         return jsonify({'error': error_message}), 500
+    
+def secuencia_trackingbl(cod_bl_house):
+    # Verificar si el embarque existe en la tabla StEmbarquesBl
+    #existe_embarque = db.session.query(StEmbarquesBl).filter_by(codigo_bl_house=cod_bl_house).first()
+
+    #if existe_embarque is not None:
+        #print('EXISTE',existe_embarque.cod_bl_house)
+        # Si el cod_po existe en la tabla StTrackingBl, verificar si existe en la tabla StTrackingBl
+    existe_cod_bl_house = db.session.query(StTrackingBl).filter_by(cod_bl_house=cod_bl_house).first()
+
+    if existe_cod_bl_house is not None:
+        print('EXISTE2',existe_cod_bl_house.cod_bl_house)
+        # Si el cod_po existe en la tabla StTrackingBl, obtener el último número de secuencia
+        max_secuencia = db.session.query(func.max(StTrackingBl.secuencial)).filter_by(cod_bl_house=cod_bl_house).distinct().scalar()
+        print('MAXIMO',max_secuencia)
+        nueva_secuencia = int(max_secuencia) + 1
+        print('PROXIMO',nueva_secuencia)
+        return nueva_secuencia
+    else:
+        # Si el cod_bl_house no existe en la tabla StTrackingBl, generar secuencia desde 1
+        nueva_secuencia = 1
+        print('Secuencia de inicio', nueva_secuencia)
+        return nueva_secuencia
+    #else:
+    # Si el embarque no existe en la tabla StEmbarquesBl, mostrar mensaje de error
+    #    raise ValueError('El embarque no existe.')
+
+# Función para crear el registro en StTrackingBl
+def crear_tracking_bl(session, flush_context):
+    for target in session.new.union(session.dirty):
+        if isinstance(target, StEmbarquesBl) and target.cod_item:
+            # Verificar si ya existe un registro en StTrackingBl con el nuevo valor de cod_item
+            # existing_record = db.session.query(StTrackingBl).filter(
+            #     StTrackingBl.cod_bl_house == target.codigo_bl_house,
+            #     StTrackingBl.empresa == target.empresa,
+            #     StTrackingBl.cod_item == target.cod_item
+            # ).first()
+
+            # Si no existe un registro en StTrackingBl con el nuevo valor de cod_item, y el registro en StEmbarquesBl existe, insertarlo
+            if db.session.query(StEmbarquesBl).filter_by(codigo_bl_house=target.codigo_bl_house, empresa=target.empresa).first():
+                new_record = StTrackingBl(
+                    cod_bl_house=target.codigo_bl_house,
+                    empresa=target.empresa,
+                    secuencial=secuencia_trackingbl(target.codigo_bl_house),
+                    cod_modelo=target.cod_modelo,
+                    usuario_crea=target.adicionado_por,
+                    fecha_crea=datetime.now(),
+                    fecha=datetime.now(),
+                    cod_item=target.cod_item
+                )
+                db.session.add(new_record)
+
+# Registrar el evento after_flush en SQLAlchemy
+event.listen(db.session, 'after_flush', crear_tracking_bl)
 
 # METODOS UPDATE DE TABLAS DE ORDEN DE COMPRA
 
@@ -1504,7 +1560,7 @@ def crear_orden_compra_total():
                 # Obtener los nombres correspondientes del despiece o el producto
                 despiece = StProductoDespiece.query().filter_by(cod_producto=cod_producto, empresa=data['cabecera']['empresa']).first()
                 if despiece:
-                    nombre_busq = StDespiece.query().filter_by(cod_despiece=despiece.cod_despiece).first()
+                    nombre_busq = StDespieceD.query().filter_by(cod_despiece=despiece.cod_despiece, secuencia = despiece.secuencia).first()
                     nombre = nombre_busq.nombre_e
                     nombre_i = nombre_busq.nombre_i
                     nombre_c = nombre_busq.nombre_c
@@ -1560,3 +1616,44 @@ def crear_orden_compra_total():
     except Exception as e:
         error_message = f"Se produjo un error: {str(e)}"
         return jsonify({'error': error_message}), 500
+    
+'''# Función para crear el registro en StTracking
+def crear_registro_tracking(target):
+    if isinstance(target, StOrdenCompraCab):
+        # Si el cod_item cambia o es un nuevo registro, crear el registro en StTracking
+        if 'cod_item' in target.__dict__ or target not in db.session:
+            new_record = StTracking(
+                cod_po=target.cod_po,
+                tipo_comprobante='PO',
+                secuencia=secuencia_track_oc(target.cod_po),
+                empresa=target.empresa,
+                cod_modelo=target.cod_modelo,
+                cod_item=target.cod_item,
+                fecha=datetime.now(),
+                usuario_crea=target.usuario_crea,
+                fecha_crea=datetime.now(),
+            )
+            db.session.add(new_record)
+
+# Registrar el evento before_flush en SQLAlchemy
+@event.listens_for(db.session, 'before_flush')
+def before_flush(session, flush_context, instances):
+    for target in session.new.union(session.dirty):
+        crear_registro_tracking(target)
+
+def secuencia_track_oc(cod_po):
+    existe_cod_po = db.session.query(StTracking).filter_by(cod_po=cod_po).first()
+
+    if existe_cod_po is not None:
+        print('EXISTE2',existe_cod_po.cod_po)
+        # Si el cod_po existe en la tabla StTracking, obtener el último número de secuencia
+        max_secuencia = db.session.query(func.max(StTracking.secuencia)).filter_by(cod_po=cod_po).distinct().scalar()
+        print('MAXIMO',max_secuencia)
+        nueva_secuencia = int(max_secuencia) + 1
+        print('PROXIMO',nueva_secuencia)
+        return nueva_secuencia
+    else:
+        # Si el cod_po no existe en la tabla StTracking, generar secuencia desde 1
+        nueva_secuencia = 1
+        print('Secuencia de inicio', nueva_secuencia)
+        return nueva_secuencia'''

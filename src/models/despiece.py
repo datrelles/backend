@@ -1,5 +1,5 @@
 # coding: utf-8
-from sqlalchemy import Column, DateTime, Index, LargeBinary, VARCHAR
+from sqlalchemy import Column, DateTime, Index, LargeBinary, VARCHAR, text
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from config.database import db
@@ -25,6 +25,30 @@ class StDespiece(Base):
     foto = Column(LargeBinary)
     nombre_imagen = Column(VARCHAR(50), comment='UTILIZADO PARA ENTORNO WEB')
     cod_marca = Column(NUMBER(3, 0, False), comment='VIENE DE MARCA')
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class StDespieceD(Base):
+    __tablename__ = 'st_despiece_d'
+    __table_args__ = (
+        Index('ind$_despiece_d_fk_desp', 'cod_despiece', 'empresa'),
+        {'schema': 'stock'}
+    )
+
+    cod_despiece = Column(VARCHAR(20), primary_key=True, nullable=False)
+    secuencia = Column(NUMBER(5, 1, True), primary_key=True, nullable=False)
+    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
+    partno = Column(VARCHAR(100))
+    nombre_c = Column(VARCHAR(200))
+    nombre_i = Column(VARCHAR(200))
+    nombre_e = Column(VARCHAR(200))
+    cantidad = Column(NUMBER(9, 2, True))
+    remark = Column(VARCHAR(20))
+    precio_ref = Column(NUMBER(14, 2, True))
+    coordenadas = Column(VARCHAR(20))
+    es_web = Column(NUMBER(1, 0, False), nullable=False, server_default=text("1 "))
 
     @classmethod
     def query(cls):
