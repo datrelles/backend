@@ -7,7 +7,7 @@ from models.despiece import StDespiece
 from models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StTracking,StPackinglist
 from models.embarque_bl import StEmbarquesBl, StTrackingBl
 from config.database import db
-from sqlalchemy import and_
+from sqlalchemy import and_, or_
 import datetime
 from datetime import datetime
 import logging
@@ -689,6 +689,77 @@ def obtener_embarques_param():
             })
         return jsonify(serialized_embarques)
 
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        #logging.error('Ocurrio un error: %s',e)
+        return jsonify({'error': str(e)}), 500
+    
+@bpcustom.route('/wizard_productos') #sw para mostrar los productos por parametros
+@jwt_required()
+@cross_origin()
+def obtener_wizard_productos():
+    try:
+        cod_producto = request.args.get('cod_producto' , None)
+        empresa = request.args.get('empresa' , None)
+        nombre = request.args.get('nombre' , None)
+
+        query = Producto.query()
+
+        if nombre or cod_producto:
+            query = db.session.query(Producto).filter(or_(Producto.cod_producto.like(f'%{cod_producto.upper()}%'),
+                                                    Producto.nombre.like(f'%{nombre.upper()}%')))
+            
+        if empresa:
+            query = query.filter(Producto.empresa == empresa)
+
+        productos = query.all()
+
+        serialized_productos = []
+        for producto in productos:
+            empresa = producto.empresa if producto.empresa else ""
+            cod_producto = producto.cod_producto if producto.cod_producto else ""
+            tipo_inventario = producto.tipo_inventario if producto.tipo_inventario else ""
+            cod_marca = producto.cod_marca if producto.cod_marca else ""
+            cod_alterno = producto.cod_alterno if producto.cod_alterno else ""
+            nombre = producto.nombre if producto.nombre else ""
+            cod_barra = producto.cod_barra if producto.cod_barra else ""
+            useridc = producto.useridc if producto.useridc else ""
+            presentacion = producto.presentacion if producto.presentacion else ""
+            volumen = producto.volumen if producto.volumen else ""
+            grado = producto.grado if producto.grado else ""
+            costo = producto.costo if producto.costo else ""
+            activo = producto.activo if producto.activo else ""
+            cod_modelo = producto.cod_modelo if producto.cod_modelo else ""
+            cod_item = producto.cod_item if producto.cod_item else ""
+            cod_modelo_cat = producto.cod_modelo_cat if producto.cod_modelo_cat else ""
+            cod_item_cat = producto.cod_item_cat if producto.cod_item_cat else ""
+            serie = producto.serie if producto.serie else ""
+            ice = producto.ice if producto.ice else ""
+            cod_producto_modelo = producto.cod_producto_modelo if producto.cod_producto_modelo else ""
+            serialized_productos.append({
+                'empresa': empresa,
+                'cod_producto': cod_producto,
+                'tipo_inventario': tipo_inventario,
+                'cod_marca': cod_marca,
+                'cod_alterno': cod_alterno,
+                'nombre': nombre,
+                'cod_barra': cod_barra,
+                'useridc': useridc,
+                'presentacion': presentacion,
+                'volumen': volumen,
+                'grado': grado,
+                'costo': costo,
+                'activo': activo,
+                'cod_modelo': cod_modelo,
+                'cod_item': cod_item,
+                'cod_modelo_cat': cod_modelo_cat,
+                'cod_item_cat': cod_item_cat,
+                'serie': serie,
+                "ice": ice,
+                'cod_producto_modelo': cod_producto_modelo
+            })
+        return jsonify(serialized_productos)
+    
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
         #logging.error('Ocurrio un error: %s',e)
