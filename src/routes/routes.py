@@ -1,21 +1,19 @@
 from flask import Blueprint, jsonify, request
 from datetime import datetime
-
 from src.models.users import Usuario, Empresa
 from src.models.tipo_comprobante import TipoComprobante
 from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
 from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StTracking, StPackinglist
 from src.models.productos import Producto
-from src.models.despiece import StDespiece
+from src.models.despiece import StDespiece, StDespieceD
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
 from src.models.embarque_bl import StEmbarquesBl,StTrackingBl
 from src.models.tipo_aforo import StTipoAforo
 from src.config.database import db,engine,session
-from sqlalchemy import func, text,bindparam,Integer
+from sqlalchemy import func, text,bindparam,Integer, event
 import logging
 import datetime
-import requests
 from datetime import datetime,date
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
@@ -1616,7 +1614,7 @@ def crear_orden_compra_total():
         error_message = f"Se produjo un error: {str(e)}"
         return jsonify({'error': error_message}), 500
     
-'''# Función para crear el registro en StTracking
+# Función para crear el registro en StTracking
 def crear_registro_tracking(target):
     if isinstance(target, StOrdenCompraCab):
         # Si el cod_item cambia o es un nuevo registro, crear el registro en StTracking
@@ -1655,4 +1653,4 @@ def secuencia_track_oc(cod_po):
         # Si el cod_po no existe en la tabla StTracking, generar secuencia desde 1
         nueva_secuencia = 1
         print('Secuencia de inicio', nueva_secuencia)
-        return nueva_secuencia'''
+        return nueva_secuencia
