@@ -65,7 +65,7 @@ def create_token():
     password = request.json.get("password", None)
 
     try:
-        db = oracle.connection('stock', 'stock')
+        db = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cursor = db.cursor()
         sql = """SELECT USUARIO_ORACLE, PASSWORD, NOMBRE FROM USUARIO 
                 WHERE USUARIO_ORACLE = '{}'""".format(user.upper())
@@ -107,7 +107,7 @@ def refresh_expiring_jwts(response):
 def enterprise(id):
     aux = "N"
     try:
-        c = oracle.connection('stock', 'stock')
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur_01 = c.cursor()
         id = str(upper(id))
         print(id)
@@ -133,7 +133,7 @@ def enterprise(id):
 @cross_origin()
 def enterprise_default(id):
     try:
-        c = oracle.connection('stock', 'stock')
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur_01 = c.cursor()
         id = str(upper(id))
         sql = ('select u.empresa_actual from usuario u where u.usuario_oracle = :id')
@@ -155,7 +155,7 @@ def enterprise_default(id):
 @cross_origin()
 def branch(id,en):
     try:
-        c = oracle.connection('stock', 'stock')
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur_01 = c.cursor()
         id = str(upper(id))
 
@@ -181,7 +181,7 @@ def branch(id,en):
 @cross_origin()
 def module(user,enterprise):
     try:
-        c = oracle.connection('stock', 'stock')
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur_01 = c.cursor()
         user = str(upper(user))
         sql = ('SELECT DISTINCT F.COD_SISTEMA, F.SISTEMA, F.PATH_IMAGEN, F.RUTA '
@@ -219,7 +219,7 @@ def module(user,enterprise):
 @cross_origin()
 def menu(user,enterprise, system):
     try:
-        c = oracle.connection('stock', 'stock')
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur_01 = c.cursor()
         user = str(upper(user))
         sql = ('SELECT E.COD_MENU, E.COD_MENU_PADRE, E.NOMBRE, E.RUTA '
