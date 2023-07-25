@@ -612,9 +612,9 @@ def obtener_tipo_aforo():
         serialized_aforos = []
         for aforo in aforos:
             empresa = aforo.empresa if aforo.empresa else ""
-            cod_aforo = aforo.cod_aforo if aforo.cod_aforo else ""
+            cod_aforo = aforo.cod_aforo
             nombre = aforo.nombre if aforo.nombre else ""
-            valor = aforo.valor if aforo.valor else ""
+            valor = aforo.valor
             observacion = aforo.observacion if aforo.observacion else ""
             usuario_crea = aforo.usuario_crea if aforo.usuario_crea else ""
             fecha_crea = datetime.strftime(aforo.fecha_crea,"%d/%m/%Y") if aforo.fecha_crea else ""
@@ -631,7 +631,7 @@ def obtener_tipo_aforo():
                 'usuario_modifica': usuario_modifica,
                 'fecha_modifica': fecha_modifica
             })
-            return jsonify(serialized_aforos)
+        return jsonify(serialized_aforos)
 
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
@@ -687,7 +687,7 @@ def crear_orden_compra_cab():
         )
         db.session.add(orden)
         db.session.commit()
-        return jsonify({'mensaje': cod_po})
+        return jsonify({'Cabecera de Orden de compra creada exitosamente': cod_po})
 
     except ValueError as ve:
         # Capturar y manejar el error específico de ValueError
@@ -1167,6 +1167,31 @@ def crear_tracking_bl(session, flush_context):
 # Registrar el evento after_flush en SQLAlchemy
 event.listen(db.session, 'after_flush', crear_tracking_bl)
 
+@bp.route('/tipo_aforo' , methods = ['POST'])
+@jwt_required()
+@cross_origin()
+def crear_tipo_aforo():
+    try:
+        data = request.get_json()
+        fecha_crea = date.today()
+        tipo_aforo = StTipoAforo(
+            cod_aforo = data['cod_aforo'],
+            empresa = data['empresa'],
+            nombre = data['nombre'].upper(),
+            valor = data['valor'],
+            observacion = data['observacion'],
+            usuario_crea = data['usuario_crea'].upper(),
+            fecha_crea = fecha_crea,
+        )
+        db.session.add(tipo_aforo)
+        db.session.commit()
+        return jsonify({'mensaje': 'Tipo de Aforo creado exitosamente.'})
+
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        #logging.error('Ocurrio un error: %s',e)
+        return jsonify({'error': str(e)}), 500
+
 # METODOS UPDATE DE TABLAS DE ORDEN DE COMPRA
 
 @bp.route('/orden_compra_cab/<cod_po>/<empresa>/<tipo_comprobante>', methods=['PUT'])
@@ -1179,6 +1204,10 @@ def actualizar_orden_compra_cab(cod_po, empresa, tipo_comprobante):
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
 
         data = request.get_json()
+
+        #busqueda para que se asigne de forma automatica la ciudad al buscarla por el cod_proveedor
+        busq_ciudad = TcCoaProveedor.query().filter_by(ruc=data['cod_proveedor']).first()
+        ciudad = busq_ciudad.ciudad_matriz
 
         if 'fecha_estimada_produccion' in data:
             orden.fecha_estimada_produccion = datetime.strptime(data['fecha_estimada_produccion'], '%d/%m/%Y').date()
@@ -1198,7 +1227,7 @@ def actualizar_orden_compra_cab(cod_po, empresa, tipo_comprobante):
         orden.cod_modelo = data.get('cod_modelo', orden.cod_modelo)
         orden.cod_item = data.get('cod_item', orden.cod_item)
         orden.bodega = data.get('bodega', orden.bodega)
-        orden.ciudad = data.get('ciudad', orden.ciudad)
+        orden.ciudad = ciudad
         orden.cod_opago = data.get('cod_opago', orden.cod_opago)
 
         db.session.commit()
@@ -1236,6 +1265,8 @@ def actualizar_orden_compra_det(cod_po, empresa, tipo_comprobante):
                 query.fob = order.get('fob', query.fob)
                 query.fob_total = order.get('fob_total', query.fob_total)
                 query.cantidad_pedido = order.get('cantidad_pedido', query.cantidad_pedido)
+                query.exportar = order.get('exportar', query.exportar)
+                query.unidad_medida = order.get('unidad_medida', query.unidad_medida).upper()
                 query.saldo_producto = order.get('saldo_producto', query.saldo_producto)
                 query.usuario_modifica = usuario_modifica
                 query.fecha_modifica = fecha_modifica
@@ -1370,6 +1401,32 @@ def actualizar_embarque(codigo_bl_house, empresa):
         logger.exception(f"Error al actualizar Embarque: {str(e)}")
         return jsonify({'error': str(e)}), 500
     
+@bp.route('/tipo_aforo/<empresa>/<cod_aforo>', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def actualizar_tipo_aforo(empresa,cod_aforo):
+    try:
+        aforo = db.session.query(StTipoAforo).filter_by( empresa=empresa, cod_aforo = cod_aforo).first()
+        if not aforo:
+            return jsonify({'mensaje': 'El tipo de aforo no existe.'}), 404
+        
+        fecha_modifica = date.today()
+        
+        data = request.get_json()
+        aforo.nombre = data.get('nombre', aforo.nombre).upper()
+        aforo.valor = data.get('valor', aforo.valor)
+        aforo.observacion = data.get('observacion', aforo.observacion)
+        aforo.usuario_modifica = data.get('usuario_modifica', aforo.usuario_modifica).upper()
+        aforo.fecha_modifica = fecha_modifica
+
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Tipo de Aforo actualizado exitosamente.'})
+    
+    except Exception as e:
+        logger.exception(f"Error al actualizar el Tipo de Aforo: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    
 #METODOS DELETE PARA ORDENES DE COMPRA
 
 @bp.route('/orden_compra_cab/<cod_po>/<empresa>/<tipo_comprobante>', methods=['DELETE'])
@@ -1457,6 +1514,24 @@ def eliminar_embarque(codigo_bl_house, empresa, ):
         db.session.commit()
 
         return jsonify({'mensaje': 'Embarque de orden de compra eliminada exitosamente.'})
+
+    except Exception as e:
+        logger.exception(f"Error al eliminar: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    
+@bp.route('/tipo_aforo/<empresa>/<cod_aforo>', methods=['DELETE'])
+@jwt_required()
+@cross_origin()
+def eliminar_tipo_aforo(empresa, cod_aforo):
+    try:
+        aforo = db.session.query(StTipoAforo).filter_by(empresa=empresa, cod_aforo = cod_aforo).first()
+        if not aforo:
+            return jsonify({'mensaje': 'Tipo de aforo no existe.'}), 404
+
+        db.session.delete(aforo)
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Tipo de Aforo eliminado exitosamente.'})
 
     except Exception as e:
         logger.exception(f"Error al eliminar: {str(e)}")
