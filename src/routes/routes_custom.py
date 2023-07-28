@@ -7,6 +7,7 @@ from src.models.despiece import StDespiece
 from src.models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StTracking,StPackinglist
 from src.models.embarque_bl import StEmbarquesBl, StTrackingBl
 from src.config.database import db
+from src.models.tipo_aforo import StTipoAforo
 from sqlalchemy import and_, or_
 import datetime
 from datetime import datetime
@@ -760,6 +761,52 @@ def obtener_wizard_productos():
             })
         return jsonify(serialized_productos)
     
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        #logging.error('Ocurrio un error: %s',e)
+        return jsonify({'error': str(e)}), 500
+    
+#RUTA CUSTOM PARA TIPOS DE AFORO
+@bpcustom.route('/tipo_aforo_param')
+@jwt_required()
+@cross_origin()
+def obtener_tipo_aforo_param():
+    try:
+        empresa = request.args.get('empresa', None)
+        cod_aforo = request.args.get('cod_aforo', None)
+
+        query = StTipoAforo.query()
+        if empresa:
+            query = query.filter(StTipoAforo.empresa  == empresa)
+        if cod_aforo:
+            query = query.filter(StTipoAforo.cod_aforo == cod_aforo)
+
+        aforos = query.all()
+        serialized_aforos = []
+
+        for aforo in aforos:
+            empresa = aforo.empresa if aforo.empresa else ""
+            cod_aforo = aforo.cod_aforo if aforo.cod_aforo else ""
+            nombre = aforo.nombre if aforo.nombre else ""
+            valor = aforo.valor
+            observacion = aforo.observacion if aforo.observacion else ""
+            usuario_crea = aforo.usuario_crea if aforo.usuario_crea else ""
+            fecha_crea = datetime.strftime(aforo.fecha_crea,"%d/%m/%Y") if aforo.fecha_crea else ""
+            usuario_modifica = aforo.usuario_modifica if aforo.usuario_modifica else ""
+            fecha_modifica = datetime.strftime(aforo.fecha_modifica,"%d/%m/%Y") if aforo.fecha_modifica else ""
+            serialized_aforos.append({
+                'empresa': empresa,
+                'cod_aforo': cod_aforo,
+                'nombre': nombre,
+                'valor': valor,
+                'observacion': observacion,
+                'usuario_crea': usuario_crea,
+                'fecha_crea': fecha_crea,
+                'usuario_modifica': usuario_modifica,
+                'fecha_modificia': fecha_modifica 
+            })
+        return jsonify(serialized_aforos)
+
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
         #logging.error('Ocurrio un error: %s',e)
