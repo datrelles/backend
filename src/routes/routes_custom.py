@@ -694,7 +694,8 @@ def obtener_embarques_param():
         logger.exception(f"Error al consultar: {str(e)}")
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
-    
+
+#RUTA PARA CREACION DE WIZARD PARA BUSQUEDA DE PRODUCTOS
 @bpcustom.route('/wizard_productos') #sw para mostrar los productos por parametros
 @jwt_required()
 @cross_origin()
