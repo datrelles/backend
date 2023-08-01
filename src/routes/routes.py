@@ -1215,8 +1215,12 @@ def actualizar_orden_compra_cab(cod_po, empresa, tipo_comprobante):
         data = request.get_json()
 
         #busqueda para que se asigne de forma automatica la ciudad al buscarla por el cod_proveedor
-        busq_ciudad = TcCoaProveedor.query().filter_by(ruc=data['cod_proveedor']).first()
-        ciudad = busq_ciudad.ciudad_matriz
+        cod_proveedor = data.get('cod_proveedor')
+        if cod_proveedor:
+            busq_ciudad = TcCoaProveedor.query().filter_by(ruc=cod_proveedor).first()
+            ciudad = busq_ciudad.ciudad_matriz
+        else:
+            ciudad = ""
 
         if 'fecha_estimada_produccion' in data:
             orden.fecha_estimada_produccion = datetime.strptime(data['fecha_estimada_produccion'], '%d/%m/%Y').date()
