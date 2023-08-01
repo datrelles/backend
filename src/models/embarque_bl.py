@@ -17,10 +17,11 @@ class StPuertosEmbarque(Base):
 class StEmbarquesBl(Base):
     __tablename__ = 'st_embarques_bl'
     __table_args__ = (
-        Index('ind_embaques_tg_modelo_item', 'cod_item', 'cod_modelo', 'empresa'),
         Index('ind_embarques_tipo_aforo', 'empresa', 'cod_aforo'),
-        Index('ind_embarques_bl02', 'cod_puerto_desembarque', 'empresa'),
         Index('ind_embarques_bl03', 'cod_puerto_embarque', 'empresa'),
+        Index('ind_embaques_tg_modelo_item', 'cod_item', 'cod_modelo', 'empresa'),
+        Index('ind_embarques_naviera', 'empresa', 'naviera'),
+        Index('ind_embarques_bl02', 'cod_puerto_desembarque', 'empresa'),
         {'schema': 'stock'}
     )
 
@@ -32,7 +33,7 @@ class StEmbarquesBl(Base):
     fecha_llegada = Column(DateTime)
     fecha_bodega = Column(DateTime)
     numero_tracking = Column(VARCHAR(30))
-    naviera = Column(VARCHAR(100))
+    naviera = Column(VARCHAR(9))
     estado = Column(VARCHAR(1))
     agente = Column(VARCHAR(100))
     buque = Column(VARCHAR(100))

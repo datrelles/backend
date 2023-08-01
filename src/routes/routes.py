@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from datetime import datetime
+from datetime import datetime, timedelta
 from src.models.users import Usuario, Empresa
 from src.models.tipo_comprobante import TipoComprobante
 from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
@@ -1376,13 +1376,13 @@ def actualizar_embarque(codigo_bl_house, empresa):
 
         data = request.get_json()
 
-        if 'fecha_embarque' in data:
+        if 'fecha_embarque' in data and data['fecha_embarque']:
             embarque.fecha_embarque = datetime.strptime(data['fecha_embarque'], '%d/%m/%Y').date()
-
-        if 'fecha_llegada' in data:
+        
+        if 'fecha_llegada' in data and data['fecha_llegada']:
             embarque.fecha_llegada = datetime.strptime(data['fecha_llegada'], '%d/%m/%Y').date()
 
-        if 'fecha_bodega' in data:
+        if 'fecha_bodega' in data and data['fecha_bodega']:
             embarque.fecha_bodega = datetime.strptime(data['fecha_bodega'], '%d/%m/%Y').date()
 
         # Verificar si el campo 'cod_item' está presente en el JSON antes de asignarlo
@@ -1408,7 +1408,6 @@ def actualizar_embarque(codigo_bl_house, empresa):
         embarque.modificado_por = data.get('modificado_por', embarque.modificado_por)
         embarque.cod_modelo = data.get('cod_modelo', embarque.cod_modelo)
         embarque.cod_aforo = data.get('cod_aforo', embarque.cod_aforo)
-        embarque.naviera_respaldo = data.get('naviera_respaldo', embarque.naviera_respaldo)
 
         # Obtener el valor del campo valor en la tabla StTipoAforo
         tipo_aforo = db.session.query(StTipoAforo).filter_by(cod_aforo=embarque.cod_aforo).first()
