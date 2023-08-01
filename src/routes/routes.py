@@ -1414,11 +1414,13 @@ def actualizar_embarque(codigo_bl_house, empresa):
         if tipo_aforo:
             valor_aforo = tipo_aforo.valor
         else:
-            valor_aforo = 0
+            valor_aforo = None
 
         # Sumar el valor_aforo (en días) a la fecha_bodega, solo si valor_aforo no es None
         if valor_aforo is not None:
-            embarque.fecha_bodega += timedelta(days=valor_aforo)
+            # Sumar el valor_aforo (en días) a la fecha_bodega, solo si valor_aforo no es None
+            if embarque.fecha_bodega:
+                embarque.fecha_bodega += timedelta(days=valor_aforo)
 
         db.session.commit()
 
