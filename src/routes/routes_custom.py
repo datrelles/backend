@@ -629,12 +629,18 @@ def obtener_embarques_param():
     try:
         empresa = request.args.get('empresa', None)
         codigo_bl_house = request.args.get('codigo_bl_house', None)
+        fecha_inicio = request.args.get('fecha_inicio', None)  # Nueva fecha de inicio
+        fecha_fin = request.args.get('fecha_fin', None)  # Nueva fecha de fin
         
         query = StEmbarquesBl.query()
         if empresa:
             query = query.filter(StEmbarquesBl.empresa == empresa)
         if codigo_bl_house:
             query = query.filter(StEmbarquesBl.codigo_bl_house == codigo_bl_house)
+        if fecha_inicio and fecha_fin:
+            fecha_inicio = datetime.strptime(fecha_inicio, '%d/%m/%Y').date()
+            fecha_fin = datetime.strptime(fecha_fin, '%d/%m/%Y').date()
+            query = query.filter(StEmbarquesBl.fecha_adicion.between(fecha_inicio, fecha_fin))
         
         embarques = query.all()
         serialized_embarques = []
