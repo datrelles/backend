@@ -12,6 +12,7 @@ from src.models.embarque_bl import StEmbarquesBl,StTrackingBl
 from src.models.tipo_aforo import StTipoAforo
 from src.config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer, event
+from sqlalchemy.orm import scoped_session
 import logging
 import datetime
 from datetime import datetime,date
@@ -559,7 +560,7 @@ def obtener_embarques():
             buque = embarque.buque if embarque.buque else ""
             cod_puerto_embarque = embarque.cod_puerto_embarque if embarque.cod_puerto_embarque else ""
             cod_puerto_desembarque = embarque.cod_puerto_desembarque if embarque.cod_puerto_desembarque else ""
-            costo_contenedor = embarque.costo_contenedor if embarque.costo_contenedor else ""
+            costo_contenedor = embarque.costo_contenedor if embarque.costo_contenedor else 0
             descripcion = embarque.descripcion if embarque.descripcion else ""
             tipo_flete = embarque.tipo_flete if embarque.tipo_flete else ""
             adicionado_por = embarque.adicionado_por if embarque.adicionado_por else ""
@@ -584,7 +585,7 @@ def obtener_embarques():
                 'buque': buque,
                 'cod_puerto_embarque': cod_puerto_embarque,
                 'cod_puerto_desembarque': cod_puerto_desembarque,
-                'costo_contenedor': costo_contenedor,
+                'costo_contenedor': float(costo_contenedor),
                 'descripcion': descripcion,
                 'tipo_flete': tipo_flete,
                 'adicionado_por': adicionado_por,
@@ -755,9 +756,9 @@ def crear_orden_compra_det():
         print(data)
         for order in data['orders']:
             print(order)
-            cod_producto = order['COD_PRODUCTO'].strip()
-            cod_producto_modelo = order['COD_PRODUCTO_MODELO'].strip()
-            unidad_medida = order['UNIDAD_MEDIDA']
+            cod_producto = order['cod_producto'].strip()
+            cod_producto_modelo = order['cod_producto_modelo'].strip()
+            unidad_medida = order['unidad_medida'].upper()
 
             #Verificar si el producto existe en la tabla de Productos
             query = Producto.query().filter_by(cod_producto = cod_producto).first()
@@ -768,20 +769,20 @@ def crear_orden_compra_det():
                 costo_sistema = query.costo
 
                 # Consultar la tabla StDespiece para obtener los valores correspondientes
-                despiece = StProductoDespiece.query().filter_by(cod_producto=order['COD_PRODUCTO'], empresa = empresa).first() #usar la empresa
+                despiece = StProductoDespiece.query().filter_by(cod_producto=order['cod_producto'], empresa = empresa).first() #usar la empresa
                 if despiece is not None:
                     nombre_busq = StDespieceD.query().filter_by(cod_despiece =despiece.cod_despiece, secuencia = despiece.secuencia).first()
                     nombre = nombre_busq.nombre_e
                     nombre_i = nombre_busq.nombre_i
                     nombre_c = nombre_busq.nombre_c
                 else:
-                    nombre_busq = Producto.query().filter_by(cod_producto = order['COD_PRODUCTO']).first()
+                    nombre_busq = Producto.query().filter_by(cod_producto = order['cod_producto']).first()
                     nombre = nombre_busq.nombre
                     nombre_i = nombre_busq.nombre
                     nombre_c = nombre_busq.nombre
 
                 detalle = StOrdenCompraDet(
-                    exportar=order['AGRUPADO'],
+                    exportar=order['agrupado'],
                     cod_po=cod_po,
                     tipo_comprobante ='PO',
                     secuencia=secuencia,
@@ -791,12 +792,12 @@ def crear_orden_compra_det():
                     nombre=nombre if nombre else None,
                     nombre_i=nombre_i if nombre_i else None,
                     nombre_c=nombre_c if nombre_c else None,
-                    nombre_mod_prov = order['NOMBRE_PROVEEDOR'],
-                    nombre_comercial = order['NOMBRE_COMERCIAL'],
+                    nombre_mod_prov = order['nombre_proveedor'],
+                    nombre_comercial = order['nombre_comercial'],
                     costo_sistema=costo_sistema if costo_sistema else 0,
                     #fob=order['FOB'] if order['FOB'] else "",
-                    cantidad_pedido=order['PEDIDO'],
-                    saldo_producto=order['PEDIDO'],
+                    cantidad_pedido=order['pedido'],
+                    saldo_producto=order['pedido'],
                     unidad_medida=unidad_medida,
                     usuario_crea=usuario_crea,
                     fecha_crea=fecha_crea,
@@ -1139,33 +1140,41 @@ def secuencia_trackingbl(cod_bl_house):
     # Si el embarque no existe en la tabla StEmbarquesBl, mostrar mensaje de error
     #    raise ValueError('El embarque no existe.')
 
-# Función para crear el registro en StTrackingBl
-def crear_tracking_bl(session, flush_context):
+# Crear un diccionario para llevar un registro de la última secuencia por cod_bl_house
+ultimas_secuencias = {}
+
+# Función para crear o actualizar el registro en StTrackingBl
+def crear_o_actualizar_registro_tracking(session):
     for target in session.new.union(session.dirty):
         if isinstance(target, StEmbarquesBl) and target.cod_item:
-            # Verificar si ya existe un registro en StTrackingBl con el nuevo valor de cod_item
-            # existing_record = db.session.query(StTrackingBl).filter(
-            #     StTrackingBl.cod_bl_house == target.codigo_bl_house,
-            #     StTrackingBl.empresa == target.empresa,
-            #     StTrackingBl.cod_item == target.cod_item
-            # ).first()
+            # Verificar si el objeto tiene los atributos esperados
+            if hasattr(target, 'codigo_bl_house') and hasattr(target, 'empresa') and hasattr(target, 'adicionado_por') and hasattr(target, 'cod_modelo'):
+                cod_bl_house = target.codigo_bl_house
+                empresa = target.empresa
 
-            # Si no existe un registro en StTrackingBl con el nuevo valor de cod_item, y el registro en StEmbarquesBl existe, insertarlo
-            if db.session.query(StEmbarquesBl).filter_by(codigo_bl_house=target.codigo_bl_house, empresa=target.empresa).first():
-                new_record = StTrackingBl(
-                    cod_bl_house=target.codigo_bl_house,
-                    empresa=target.empresa,
-                    secuencial=secuencia_trackingbl(target.codigo_bl_house),
-                    cod_modelo=target.cod_modelo,
-                    usuario_crea=target.adicionado_por,
-                    fecha_crea=datetime.now(),
-                    fecha=datetime.now(),
-                    cod_item=target.cod_item
-                )
-                db.session.add(new_record)
+                # Obtener la última secuencia para este cod_bl_house y empresa
+                ultima_secuencia = ultimas_secuencias.get((cod_bl_house, empresa), None)
 
-# Registrar el evento after_flush en SQLAlchemy
-event.listen(db.session, 'after_flush', crear_tracking_bl)
+                # Si no hay última secuencia registrada o el cod_item es diferente, generar un nuevo registro
+                if not ultima_secuencia or target.cod_item != ultima_secuencia.get('cod_item'):
+                    nueva_secuencia = secuencia_trackingbl(cod_bl_house)
+                    new_record = StTrackingBl(
+                        cod_bl_house=cod_bl_house,
+                        empresa=empresa,
+                        secuencial=nueva_secuencia,
+                        cod_modelo=target.cod_modelo,
+                        usuario_crea=target.adicionado_por,
+                        fecha_crea=datetime.now(),
+                        fecha=datetime.now(),
+                        cod_item=target.cod_item
+                    )
+                    session.add(new_record)
+
+                    # Actualizar la última secuencia registrada para este cod_bl_house y empresa
+                    ultimas_secuencias[(cod_bl_house, empresa)] = {'cod_item': target.cod_item, 'secuencia': nueva_secuencia}
+
+# Registrar el evento before_commit en la sesión de SQLAlchemy para crear o actualizar registros en StTrackingBl
+event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking)
 
 @bp.route('/tipo_aforo' , methods = ['POST'])
 @jwt_required()
@@ -1376,22 +1385,40 @@ def actualizar_embarque(codigo_bl_house, empresa):
         if 'fecha_bodega' in data:
             embarque.fecha_bodega = datetime.strptime(data['fecha_bodega'], '%d/%m/%Y').date()
 
+        # Verificar si el campo 'cod_item' está presente en el JSON antes de asignarlo
+        if 'cod_item' in data:
+            embarque.cod_item = data['cod_item']
+
+        # Verificar si el campo 'estado' está presente en el JSON antes de asignarlo
+        if 'estado' in data:
+            embarque.estado = data['estado']
+
         embarque.cod_proveedor = data.get('cod_proveedor', embarque.cod_proveedor)
         embarque.numero_tracking = data.get('numero_tracking', embarque.numero_tracking)
         embarque.naviera = data.get('naviera', embarque.naviera)
-        embarque.estado = data.get('estado', embarque.estado)
         embarque.agente = data.get('agente', embarque.agente)
         embarque.fecha_modificacion = date.today()
         embarque.buque = data.get('buque', embarque.buque)
         embarque.cod_puerto_embarque = data.get('cod_puerto_embarque', embarque.cod_puerto_embarque)
         embarque.cod_puerto_desembarque = data.get('cod_puerto_desembarque', embarque.cod_puerto_desembarque)
-        embarque.costo_contenedor = data.get('costo_contenedor', embarque.costo_contenedor)
+        costo_contenedor = data.get('costo_contenedor', embarque.costo_contenedor)
+        embarque.costo_contenedor = float(costo_contenedor)
         embarque.descripcion = data.get('descripcion', embarque.descripcion)
         embarque.tipo_flete = data.get('tipo_flete', embarque.tipo_flete)
         embarque.modificado_por = data.get('modificado_por', embarque.modificado_por)
         embarque.cod_modelo = data.get('cod_modelo', embarque.cod_modelo)
-        embarque.cod_item = data.get('cod_item', embarque.cod_item)
         embarque.cod_aforo = data.get('cod_aforo', embarque.cod_aforo)
+        embarque.naviera_respaldo = data.get('naviera_respaldo', embarque.naviera_respaldo)
+
+        # Obtener el valor del campo valor en la tabla StTipoAforo
+        tipo_aforo = db.session.query(StTipoAforo).filter_by(cod_aforo=embarque.cod_aforo).first()
+        if tipo_aforo:
+            valor_aforo = tipo_aforo.valor
+        else:
+            valor_aforo = 0
+
+        # Sumar el valor_aforo (en días) a la fecha_bodega
+        embarque.fecha_bodega += timedelta(days=valor_aforo)
 
         db.session.commit()
 
@@ -1616,9 +1643,9 @@ def crear_orden_compra_total():
         unidad_medida_no_existe = []
 
         for detalle in data['detalles']:
-            cod_producto = detalle['COD_PRODUCTO'].strip()
-            unidad_medida = detalle['UNIDAD_MEDIDA']
-            cod_producto_modelo = detalle['COD_PRODUCTO_MODELO']
+            cod_producto = detalle['cod_producto'].strip()
+            unidad_medida = detalle['unidad_medida']
+            cod_producto_modelo = detalle['cod_producto_modelo']
 
             # Verificar si el producto y la unidad de medida existen
             query_producto = Producto.query().filter_by(cod_producto=cod_producto).first()
@@ -1643,7 +1670,7 @@ def crear_orden_compra_total():
                     nombre_c = nombre_busq.nombre
 
                 detalle_orden = StOrdenCompraDet(
-                    exportar=detalle['AGRUPADO'],
+                    exportar=detalle['agrupado'],
                     cod_po=cod_po,
                     tipo_comprobante='PO',
                     secuencia=secuencia,
@@ -1653,11 +1680,11 @@ def crear_orden_compra_total():
                     nombre=nombre if nombre else None,
                     nombre_i=nombre_i if nombre_i else None,
                     nombre_c=nombre_c if nombre_c else None,
-                    nombre_mod_prov=detalle['NOMBRE_PROVEEDOR'],
-                    nombre_comercial=detalle['NOMBRE_COMERCIAL'],
+                    nombre_mod_prov=detalle['nombre_proveedor'],
+                    nombre_comercial=detalle['nombre_comercial'],
                     costo_sistema=costo_sistema if costo_sistema else 0,
-                    cantidad_pedido=detalle['PEDIDO'],
-                    saldo_producto=detalle['PEDIDO'],
+                    cantidad_pedido=detalle['pedido'],
+                    saldo_producto=detalle['pedido'],
                     unidad_medida=unidad_medida,
                     usuario_crea=data['cabecera']['usuario_crea'].upper(),
                     fecha_crea=fecha_crea,
