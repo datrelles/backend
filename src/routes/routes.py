@@ -677,7 +677,7 @@ def crear_orden_compra_cab():
             fecha_crea=fecha_crea,
             usuario_modifica=data['usuario_modifica'].upper(),
             fecha_modifica=fecha_modifica,
-            cod_modelo=data['cod_modelo'],
+            cod_modelo='IMPR',
             cod_item=data['cod_item'],
             proforma = data.get('proforma'),
             cod_opago = data.get('cod_opago'),
@@ -1096,7 +1096,7 @@ def crear_embarque():
             fecha_adicion=fecha_adicion,
             #modificado_por=data['modificado_por'].upper(),
             #fecha_modificacion = fecha_modificacion,
-            cod_modelo=data['cod_modelo'],
+            cod_modelo='IMPR',
             cod_item=data['cod_item'],
             cod_aforo = data.get('cod_aforo')
         )
@@ -1607,7 +1607,7 @@ def crear_orden_compra_total():
             fecha_crea=fecha_crea,
             usuario_modifica=data['cabecera']['usuario_modifica'].upper(),
             fecha_modifica=datetime.strptime(data['cabecera']['fecha_modifica'], '%d/%m/%Y').date(),
-            cod_modelo=data['cabecera']['cod_modelo'],
+            cod_modelo='IMPR',
             cod_item=data['cabecera']['cod_item'],
             ciudad=ciudad,
         )
