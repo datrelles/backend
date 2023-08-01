@@ -793,7 +793,7 @@ def obtener_tipo_aforo_param():
 
         for aforo in aforos:
             empresa = aforo.empresa if aforo.empresa else ""
-            cod_aforo = aforo.cod_aforo if aforo.cod_aforo else ""
+            cod_aforo = aforo.cod_aforo
             nombre = aforo.nombre if aforo.nombre else ""
             valor = aforo.valor
             observacion = aforo.observacion if aforo.observacion else ""
