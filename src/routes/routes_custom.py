@@ -655,6 +655,7 @@ def obtener_embarques_param():
             fecha_bodega = datetime.strftime(embarque.fecha_bodega,"%d/%m/%Y") if embarque.fecha_bodega else ""
             numero_tracking = embarque.numero_tracking if embarque.numero_tracking else ""
             naviera = embarque.naviera if embarque.naviera else ""
+            agente = embarque.agente if embarque.agente else ""
             estado = embarque.estado if embarque.estado else ""
             buque = embarque.buque if embarque.buque else ""
             cod_puerto_embarque = embarque.cod_puerto_embarque if embarque.cod_puerto_embarque else ""
@@ -679,6 +680,7 @@ def obtener_embarques_param():
                 'fecha_bodega': fecha_bodega,
                 'numero_tracking': numero_tracking,
                 'naviera': naviera,
+                'agente': agente,
                 'estado': estado,
                 'buque': buque,
                 'cod_puerto_embarque': cod_puerto_embarque,
