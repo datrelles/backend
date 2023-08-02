@@ -1338,35 +1338,54 @@ def actualizar_orden_compra_trancking(cod_po,empresa,tipo_comprobante):
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
-@bp.route('/orden_compra_packinglist/<cod_po>/<empresa>/<secuencia>', methods=['PUT'])
+@bp.route('/orden_compra_packinglist/<cod_po>/<empresa>/<codigo_bl_house>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
-def actualizar_orden_compra_packinglist(cod_po,empresa,secuencia):
+def actualizar_orden_compra_packinglist(cod_po, empresa, codigo_bl_house):
     try:
-        packinglist = db.session.query(StPackinglist).filter_by(cod_po=cod_po,empresa=empresa,secuencia=secuencia).first()
+        packinglist = db.session.query(StPackinglist).filter_by(cod_po=cod_po, empresa=empresa, codigo_bl_house=codigo_bl_house).first()
         if not packinglist:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
         
         data = request.get_json()
-        packinglist.cod_po = data.get('cod_po', packinglist.cod_po)
-        packinglist.empresa = data.get('empresa', packinglist.empresa)
-        packinglist.secuencia = data.get('secuencia', packinglist.secuencia)
-        packinglist.cod_producto = data.get('cod_producto', packinglist.cod_producto)
-        packinglist.cantidad = data.get('cantidad', packinglist.cantidad)
-        packinglist.fob = data.get('fob', packinglist.fob)
-        packinglist.unidad_medida = data.get('unidad_medida', packinglist.unidad_medida)
-        packinglist.usuario_crea = data.get('usuario_crea', packinglist.usuario_crea).upper()
-        packinglist.fecha_crea = datetime.strptime(data.get('fecha_crea', str(packinglist.fecha_crea)), '%d/%m/%Y').date()
-        packinglist.usuario_modifica = data.get('usuario_modifica', packinglist.usuario_modifica).upper()
-        packinglist.fecha_modifica = datetime.strptime(data.get('fecha_modifica', str(packinglist.fecha_modifica)), '%d/%m/%Y').date()
-
+        fecha_modifica = date.today()
+        cod_producto_no_existe = []
+        usuario_modifica = data['usuario_modifica'].upper()
+        for order in data['orders']:
+            query = StPackinglist.query().filter_by(cod_po=cod_po, empresa=empresa, codigo_bl_house=codigo_bl_house, cod_producto=order['cod_producto']).first()
+            if query:
+                # Actualizar campos en StPackinglist
+                query.tipo_comprobante = order.get('tipo_comprobante', query.tipo_comprobante)
+                query.cod_producto = order.get('cod_producto', query.cod_producto)
+                query.cantidad = order.get('cantidad', query.cantidad)
+                query.fob = order.get('fob', query.fob)
+                query.unidad_medida = order.get('unidad_medida', query.unidad_medida).upper()
+                query.cod_liquidacion = order.get('cod_liquidacion', query.cod_liquidacion)
+                query.cod_tipo_liquidacion = order.get('cod_tipo_liquidacion', query.cod_tipo_liquidacion)
+                query.usuario_modifica = usuario_modifica
+                query.fecha_modifica = fecha_modifica
+                
+                # Actualizar campo saldo_pedido en StOrdenCompraDet
+                orden_det = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa, cod_producto=order['cod_producto']).first()
+                if orden_det:
+                    saldo_producto = orden_det.cantidad_pedido - query.cantidad
+                    orden_det.saldo_producto = saldo_producto
+                    orden_det.fecha_modifica = fecha_modifica
+                    orden_det.usuario_modifica = usuario_modifica
+                else:
+                    cod_producto_no_existe.append(order['cod_producto'])
+            else:
+                cod_producto_no_existe.append(order['cod_producto'])
+        
         db.session.commit()
 
-        return jsonify({'mensaje': 'Packinglist de Orden de compra actualizada exitosamente.'})
+        if cod_producto_no_existe:
+            return jsonify({'mensaje': 'Productos no Actualizados.', 'cod_producto_no_existe': cod_producto_no_existe})
+        else:
+            return jsonify({'mensaje': 'Packinglist de Orden de compra actualizada exitosamente.'})
     
     except Exception as e:
         logger.exception(f"Error al actualizar: {str(e)}")
-        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
 @bp.route('/embarque/<codigo_bl_house>/<empresa>', methods=['PUT'])
@@ -1516,19 +1535,41 @@ def eliminar_orden_compra_tracking(cod_po, empresa, tipo_comprobante):
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
     
-@bp.route('/orden_compra_packinglist/<cod_po>/<empresa>/<tipo_comprobante>', methods=['DELETE'])
+@bp.route('/orden_compra_packinglist', methods=['DELETE'])
 @jwt_required()
 @cross_origin()
-def eliminar_orden_compra_packinglist(cod_po, empresa, tipo_comprobante):
+def eliminar_orden_compra_packinglist():
     try:
-        packing = db.session.query(StPackinglist).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante = tipo_comprobante).first()
-        if not packing:
-            return jsonify({'mensaje': 'Packinglist de orden de compra no existe.'}), 404
+        cod_po = request.args.get('cod_po')
+        codigo_bl_house = request.args.get('codigo_bl_house')
+        secuencia = request.args.get('secuencia')
+        empresa = request.args.get('empresa')
 
-        db.session.delete(packing)
+        if not cod_po and not codigo_bl_house:
+            return jsonify({'error': 'Debes proporcionar al menos cod_po o codigo_bl_house para eliminar.'}), 400
+
+        packing_query = db.session.query(StPackinglist)
+
+        if cod_po:
+            packing_query = packing_query.filter_by(cod_po=cod_po)
+        if codigo_bl_house:
+            packing_query = packing_query.filter_by(codigo_bl_house=codigo_bl_house)
+        if secuencia:
+            packing_query = packing_query.filter_by(secuencia=secuencia)
+        if empresa:
+            packing_query = packing_query.filter_by(empresa=empresa)
+
+        packings_to_delete = packing_query.all()
+
+        if not packings_to_delete:
+            return jsonify({'mensaje': 'No se encontraron registros para eliminar.'}), 404
+
+        for packing in packings_to_delete:
+            db.session.delete(packing)
+
         db.session.commit()
 
-        return jsonify({'mensaje': 'Packinglist de orden de compra eliminada exitosamente.'})
+        return jsonify({'mensaje': 'Registro de Packinglists de orden de compra eliminado exitosamente.'})
 
     except Exception as e:
         logger.exception(f"Error al eliminar: {str(e)}")
@@ -1537,8 +1578,13 @@ def eliminar_orden_compra_packinglist(cod_po, empresa, tipo_comprobante):
 @bp.route('/embarque/<codigo_bl_house>/<empresa>', methods=['DELETE'])
 @jwt_required()
 @cross_origin()
-def eliminar_embarque(codigo_bl_house, empresa, ):
+def eliminar_embarque(codigo_bl_house, empresa):
     try:
+        # Verificar si existen registros en StPackinglist que dependen del código_bl_house
+        existe_packing = db.session.query(StPackinglist).filter_by(codigo_bl_house=codigo_bl_house).first()
+        if existe_packing:
+            return jsonify({'error': 'Existen registros en StPackinglist que dependen de este embarque. No se puede eliminar.'}), 400
+
         embarque = db.session.query(StEmbarquesBl).filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).first()
         if not embarque:
             return jsonify({'mensaje': 'Embarque de orden de compra no existe.'}), 404
