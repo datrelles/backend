@@ -1089,7 +1089,7 @@ def crear_embarque():
             buque = data.get('buque'),
             cod_puerto_embarque = data.get('cod_puerto_embarque'),
             cod_puerto_desembarque = data.get('cod_puerto_desembarque'),
-            costo_contenedor = data.get('costo_contenedor'),
+            costo_contenedor = data.get('costo_contenedor') if data.get('costo_contenedor') else None,
             descripcion = data.get('descripcion'),
             tipo_flete = data.get('tipo_flete'),
             adicionado_por=data['adicionado_por'].upper(),
@@ -1425,7 +1425,10 @@ def actualizar_embarque(codigo_bl_house, empresa):
         embarque.cod_puerto_embarque = data.get('cod_puerto_embarque', embarque.cod_puerto_embarque)
         embarque.cod_puerto_desembarque = data.get('cod_puerto_desembarque', embarque.cod_puerto_desembarque)
         costo_contenedor = data.get('costo_contenedor', embarque.costo_contenedor)
-        embarque.costo_contenedor = float(costo_contenedor)
+        if costo_contenedor == "":
+            embarque.costo_contenedor = None
+        else:
+            embarque.costo_contenedor = float(costo_contenedor)
         embarque.descripcion = data.get('descripcion', embarque.descripcion)
         embarque.tipo_flete = data.get('tipo_flete', embarque.tipo_flete)
         embarque.modificado_por = data.get('modificado_por', embarque.modificado_por)
