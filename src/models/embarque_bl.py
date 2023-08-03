@@ -14,6 +14,10 @@ class StPuertosEmbarque(Base):
     cod_puerto = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
     descripcion = Column(VARCHAR(100))
 
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+    
 class StEmbarquesBl(Base):
     __tablename__ = 'st_embarques_bl'
     __table_args__ = (
