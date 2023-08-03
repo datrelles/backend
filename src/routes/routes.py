@@ -8,7 +8,7 @@ from src.models.productos import Producto
 from src.models.despiece import StDespiece, StDespieceD
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
-from src.models.embarque_bl import StEmbarquesBl,StTrackingBl
+from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque
 from src.models.tipo_aforo import StTipoAforo
 from src.config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer, event
@@ -130,6 +130,24 @@ def obtener_proveedores_nac():
             'telefono': telefono
         })
     return jsonify(serialized_proveedores)
+
+@bp.route('/puertos_embarque')
+@jwt_required()
+@cross_origin()
+def obtener_puertos_embarque():
+    query = StPuertosEmbarque.query()
+    puertos_embarque = query.all()
+    serialized_puertos = []
+    for puerto in puertos_embarque:
+        empresa = puerto.empresa if puerto.empresa else ""
+        cod_puerto = puerto.cod_puerto if puerto.cod_puerto else ""
+        descripcion = puerto.descripcion if puerto.descripcion else ""
+        serialized_puertos.append({
+            'empresa': empresa,
+            'cod_puerto': cod_puerto,
+            'descripcion': descripcion
+        })
+    return jsonify(serialized_puertos)
 
 @bp.route('/orden_compra_cab')
 @jwt_required()
