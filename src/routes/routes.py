@@ -8,7 +8,7 @@ from src.models.productos import Producto
 from src.models.despiece import StDespiece, StDespieceD
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
-from src.models.embarque_bl import StEmbarquesBl,StTrackingBl
+from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque
 from src.models.tipo_aforo import StTipoAforo
 from src.config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer, event
@@ -130,6 +130,24 @@ def obtener_proveedores_nac():
             'telefono': telefono
         })
     return jsonify(serialized_proveedores)
+
+@bp.route('/puertos_embarque')
+@jwt_required()
+@cross_origin()
+def obtener_puertos_embarque():
+    query = StPuertosEmbarque.query()
+    puertos_embarque = query.all()
+    serialized_puertos = []
+    for puerto in puertos_embarque:
+        empresa = puerto.empresa if puerto.empresa else ""
+        cod_puerto = puerto.cod_puerto if puerto.cod_puerto else ""
+        descripcion = puerto.descripcion if puerto.descripcion else ""
+        serialized_puertos.append({
+            'empresa': empresa,
+            'cod_puerto': cod_puerto,
+            'descripcion': descripcion
+        })
+    return jsonify(serialized_puertos)
 
 @bp.route('/orden_compra_cab')
 @jwt_required()
@@ -1140,41 +1158,42 @@ def secuencia_trackingbl(cod_bl_house):
     # Si el embarque no existe en la tabla StEmbarquesBl, mostrar mensaje de error
     #    raise ValueError('El embarque no existe.')
 
-# Crear un diccionario para llevar un registro de la última secuencia por cod_bl_house
-ultimas_secuencias = {}
+# Crear un diccionario para llevar un registro de la última combinación (codigo_bl_house, empresa, cod_item)
+ultimas_combinaciones_track_embarque = {}
 
 # Función para crear o actualizar el registro en StTrackingBl
-def crear_o_actualizar_registro_tracking(session):
+def crear_o_actualizar_registro_tracking_embarque(session):
     for target in session.new.union(session.dirty):
         if isinstance(target, StEmbarquesBl) and target.cod_item:
             # Verificar si el objeto tiene los atributos esperados
             if hasattr(target, 'codigo_bl_house') and hasattr(target, 'empresa') and hasattr(target, 'adicionado_por') and hasattr(target, 'cod_modelo'):
-                cod_bl_house = target.codigo_bl_house
+                codigo_bl_house = target.codigo_bl_house
                 empresa = target.empresa
+                cod_item = target.cod_item
 
-                # Obtener la última secuencia para este cod_bl_house y empresa
-                ultima_secuencia = ultimas_secuencias.get((cod_bl_house, empresa), None)
+                # Obtener la última combinación (codigo_bl_house, empresa, cod_item)
+                ultima_combinacion = ultimas_combinaciones_track_embarque.get((codigo_bl_house, empresa), None)
 
-                # Si no hay última secuencia registrada o el cod_item es diferente, generar un nuevo registro
-                if not ultima_secuencia or target.cod_item != ultima_secuencia.get('cod_item'):
-                    nueva_secuencia = secuencia_trackingbl(cod_bl_house)
+                # Verificar si es una nueva combinación o si el cod_item cambió
+                if not ultima_combinacion or cod_item != ultima_combinacion['cod_item']:
+                    nueva_secuencia = secuencia_trackingbl(codigo_bl_house)
                     new_record = StTrackingBl(
-                        cod_bl_house=cod_bl_house,
+                        cod_bl_house=codigo_bl_house,
                         empresa=empresa,
                         secuencial=nueva_secuencia,
                         cod_modelo=target.cod_modelo,
                         usuario_crea=target.adicionado_por,
                         fecha_crea=datetime.now(),
                         fecha=datetime.now(),
-                        cod_item=target.cod_item
+                        cod_item=cod_item
                     )
                     session.add(new_record)
 
-                    # Actualizar la última secuencia registrada para este cod_bl_house y empresa
-                    ultimas_secuencias[(cod_bl_house, empresa)] = {'cod_item': target.cod_item, 'secuencia': nueva_secuencia}
+                    # Actualizar la última combinación registrada
+                    ultimas_combinaciones_track_embarque[(codigo_bl_house, empresa)] = {'cod_item': cod_item}
 
 # Registrar el evento before_commit en la sesión de SQLAlchemy para crear o actualizar registros en StTrackingBl
-event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking)
+event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_embarque)
 
 @bp.route('/tipo_aforo' , methods = ['POST'])
 @jwt_required()
@@ -1771,29 +1790,44 @@ def crear_orden_compra_total():
         error_message = f"Se produjo un error: {str(e)}"
         return jsonify({'error': error_message}), 500
     
-# Función para crear el registro en StTracking
-def crear_registro_tracking(target):
-    if isinstance(target, StOrdenCompraCab):
-        # Si el cod_item cambia o es un nuevo registro, crear el registro en StTracking
-        if 'cod_item' in target.__dict__ or target not in db.session:
-            new_record = StTracking(
-                cod_po=target.cod_po,
-                tipo_comprobante='PO',
-                secuencia=secuencia_track_oc(target.cod_po),
-                empresa=target.empresa,
-                cod_modelo=target.cod_modelo,
-                cod_item=target.cod_item,
-                fecha=datetime.now(),
-                usuario_crea=target.usuario_crea,
-                fecha_crea=datetime.now(),
-            )
-            db.session.add(new_record)
+# Crear un diccionario para llevar un registro de la última combinación (cod_po, empresa, cod_item)
+ultimas_combinaciones_track_oc = {}
 
-# Registrar el evento before_flush en SQLAlchemy
-@event.listens_for(db.session, 'before_flush')
-def before_flush(session, flush_context, instances):
+# Función para crear o actualizar el registro en StTracking
+def crear_o_actualizar_registro_tracking_oc(session):
     for target in session.new.union(session.dirty):
-        crear_registro_tracking(target)
+        if isinstance(target, StOrdenCompraCab) and 'cod_item' in target.__dict__:
+            # Verificar si el objeto tiene los atributos esperados
+            if hasattr(target, 'cod_po') and hasattr(target, 'empresa') and hasattr(target, 'usuario_crea') and hasattr(target, 'cod_modelo'):
+                cod_po = target.cod_po
+                empresa = target.empresa
+                cod_item = target.cod_item
+
+                # Obtener la última combinación (cod_po, empresa, cod_item)
+                ultima_combinacion = ultimas_combinaciones_track_oc.get((cod_po, empresa), None)
+
+                # Verificar si es una nueva combinación o si el cod_item cambió
+                if not ultima_combinacion or cod_item != ultima_combinacion['cod_item']:
+                    nueva_secuencia = secuencia_track_oc(cod_po)
+                    new_record = StTracking(
+                        cod_po=cod_po,
+                        tipo_comprobante='PO',
+                        secuencia=nueva_secuencia,
+                        empresa=empresa,
+                        cod_modelo=target.cod_modelo,
+                        cod_item=cod_item,
+                        fecha=datetime.now(),
+                        usuario_crea=target.usuario_crea,
+                        fecha_crea=datetime.now()
+                    )
+                    session.add(new_record)
+
+                    # Actualizar la última combinación registrada
+                    ultimas_combinaciones_track_oc[(cod_po, empresa)] = {'cod_item': cod_item}
+
+# Registrar el evento before_commit en la sesión de SQLAlchemy para crear o actualizar registros en StTracking
+event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_oc)
+
 
 def secuencia_track_oc(cod_po):
     existe_cod_po = db.session.query(StTracking).filter_by(cod_po=cod_po).first()
