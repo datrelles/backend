@@ -8,7 +8,7 @@ from src.models.productos import Producto
 from src.models.despiece import StDespiece, StDespieceD
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
-from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque
+from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque, StNaviera
 from src.models.tipo_aforo import StTipoAforo
 from src.config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer, event
@@ -148,6 +148,34 @@ def obtener_puertos_embarque():
             'descripcion': descripcion
         })
     return jsonify(serialized_puertos)
+
+@bp.route('/naviera')
+@jwt_required()
+@cross_origin()
+def obtener_naviera():
+    query = StNaviera.query()
+    navieras = query.all()
+    serialized_navieras = []
+    for naviera in navieras:
+        empresa = naviera.empresa if naviera.empresa else ""
+        codigo = naviera.codigo if naviera.codigo else ""
+        nombre = naviera.nombre if naviera.nombre else ""
+        estado = naviera.estado
+        usuario_crea = naviera.usuario_crea if naviera.usuario_crea else ""
+        fecha_crea = datetime.strftime(naviera.fecha_crea, "%d%m%Y") if naviera.fecha_crea else ""
+        usuario_modifica = naviera.usuario_modifica if naviera.usuario_modifica else ""
+        fecha_modifica = datetime.strftime(naviera.fecha_modifica, "%d%m%Y") if naviera.fecha_modifica else ""
+        serialized_navieras.append({
+            "empresa": empresa,
+            "codigo": codigo,
+            "nombre": nombre,
+            "estado": estado,
+            "usuario_crea": usuario_crea,
+            "fecha_crea": fecha_crea,
+            "usuario_modifica": usuario_modifica,
+            "fecha_modifica": fecha_modifica
+        })
+    return jsonify(serialized_navieras)        
 
 @bp.route('/orden_compra_cab')
 @jwt_required()
