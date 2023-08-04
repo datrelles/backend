@@ -5,7 +5,7 @@ from src.models.tipo_comprobante import TipoComprobante
 from src.models.producto_despiece import StProductoDespiece
 from src.models.despiece import StDespiece
 from src.models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StTracking,StPackinglist
-from src.models.embarque_bl import StEmbarquesBl, StTrackingBl
+from src.models.embarque_bl import StEmbarquesBl, StTrackingBl, StNaviera
 from src.config.database import db
 from src.models.tipo_aforo import StTipoAforo
 from sqlalchemy import and_, or_
@@ -256,6 +256,43 @@ def obtener_estados_param():
             'orden': orden
         })
     return jsonify(serialized_estados)
+
+#METODO PARA OBTENER LAS NAVIERAS CON PARAMETROS
+@bpcustom.route('/naviera_param')
+@jwt_required()
+@cross_origin()
+def obtener_naviera_param():
+    empresa = request.args.get('empresa', None)
+    codigo = request.args.get('codigo', None)
+    query = StNaviera.query()
+
+    if empresa:
+        query = query.filter(StNaviera.empresa == empresa)
+    if codigo:
+        query = query.filter(StNaviera.codigo == codigo)
+    
+    navieras = query.all()
+    serialized_naviera = []
+    for naviera in navieras:
+        empresa = naviera.empresa if naviera.empresa else ""
+        codigo = naviera.codigo if naviera.codigo else ""
+        nombre = naviera.nombre if naviera.nombre else ""
+        estado = naviera.estado
+        usuario_crea = naviera.usuario_crea if naviera.usuario_crea else ""
+        fecha_crea = datetime.strftime(naviera.fecha_crea , "%d%m%Y") if naviera.fecha_crea else ""
+        usuario_modifica = naviera.usuario_modifica if naviera.usuario_modifica else ""
+        fecha_modifica = datetime.strftime(naviera.fecha_modifica, "%d%m%Y") if naviera.fecha_modifica else ""
+        serialized_naviera.append({
+            "empresa": empresa,
+            "codigo": codigo,
+            "nombre" : nombre,
+            "estado": estado,
+            "usuario_crea": usuario_crea,
+            "fecha_crea": fecha_crea,
+            "usuario_modifica": usuario_modifica,
+            "fecha_modifica": fecha_modifica
+        })
+    return jsonify(serialized_naviera)
 
 #METODOS GET CUSTOM PARA ORDENES DE COMPRA
 
