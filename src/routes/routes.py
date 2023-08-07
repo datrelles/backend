@@ -1385,12 +1385,12 @@ def actualizar_orden_compra_trancking(cod_po,empresa,tipo_comprobante):
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
-@bp.route('/orden_compra_packinglist/<cod_po>/<empresa>/<codigo_bl_house>', methods=['PUT'])
+@bp.route('/orden_compra_packinglist/<cod_po>/<empresa>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
-def actualizar_orden_compra_packinglist(cod_po, empresa, codigo_bl_house):
+def actualizar_orden_compra_packinglist(cod_po, empresa):
     try:
-        packinglist = db.session.query(StPackinglist).filter_by(cod_po=cod_po, empresa=empresa, codigo_bl_house=codigo_bl_house).first()
+        packinglist = db.session.query(StPackinglist).filter_by(cod_po=cod_po, empresa=empresa).first()
         if not packinglist:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
         
@@ -1399,9 +1399,11 @@ def actualizar_orden_compra_packinglist(cod_po, empresa, codigo_bl_house):
         cod_producto_no_existe = []
         usuario_modifica = data['usuario_modifica'].upper()
         for order in data['orders']:
+            codigo_bl_house = order['codigo_bl_house']
             query = StPackinglist.query().filter_by(cod_po=cod_po, empresa=empresa, codigo_bl_house=codigo_bl_house, cod_producto=order['cod_producto']).first()
             if query:
                 # Actualizar campos en StPackinglist
+                query.codigo_bl_house = codigo_bl_house
                 query.tipo_comprobante = order.get('tipo_comprobante', query.tipo_comprobante)
                 query.cod_producto = order.get('cod_producto', query.cod_producto)
                 query.cantidad = order.get('cantidad', query.cantidad)
@@ -1427,7 +1429,7 @@ def actualizar_orden_compra_packinglist(cod_po, empresa, codigo_bl_house):
         db.session.commit()
 
         if cod_producto_no_existe:
-            return jsonify({'mensaje': 'Productos no Actualizados.', 'cod_producto_no_existe': cod_producto_no_existe})
+            return jsonify({'mensaje': 'Productos no Actualizados. No existe el producto o codigo_bl_house erroneo.', 'cod_producto_no_existe': cod_producto_no_existe})
         else:
             return jsonify({'mensaje': 'Packinglist de Orden de compra actualizada exitosamente.'})
     
