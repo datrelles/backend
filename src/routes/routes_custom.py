@@ -706,7 +706,7 @@ def obtener_embarques_param():
             fecha_modificacion = datetime.strftime(embarque.fecha_modificacion,"%d/%m/%Y") if embarque.fecha_modificacion else ""
             cod_modelo = embarque.cod_modelo if embarque.cod_modelo else ""
             cod_item = embarque.cod_item if embarque.cod_item else ""
-            cod_aforo = embarque.cod_aforo if embarque.cod_aforo else ""
+            cod_aforo = embarque.cod_aforo
             serialized_embarques.append({
                 'empresa': empresa,
                 'codigo_bl_master': codigo_bl_master,
