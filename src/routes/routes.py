@@ -1132,6 +1132,7 @@ def crear_embarque():
             numero_tracking=data['numero_tracking'],
             naviera=data['naviera'],
             estado = data['estado'],
+            agente = data['agente'],
             buque = data.get('buque'),
             cod_puerto_embarque = data.get('cod_puerto_embarque'),
             cod_puerto_desembarque = data.get('cod_puerto_desembarque'),
