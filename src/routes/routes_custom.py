@@ -10,7 +10,7 @@ from src.config.database import db
 from src.models.tipo_aforo import StTipoAforo
 from sqlalchemy import and_, or_
 import datetime
-from datetime import datetime
+from datetime import datetime, date
 import logging
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
@@ -706,7 +706,7 @@ def obtener_embarques_param():
             fecha_modificacion = datetime.strftime(embarque.fecha_modificacion,"%d/%m/%Y") if embarque.fecha_modificacion else ""
             cod_modelo = embarque.cod_modelo if embarque.cod_modelo else ""
             cod_item = embarque.cod_item if embarque.cod_item else ""
-            cod_aforo = embarque.cod_aforo if embarque.cod_aforo else ""
+            cod_aforo = embarque.cod_aforo
             serialized_embarques.append({
                 'empresa': empresa,
                 'codigo_bl_master': codigo_bl_master,
@@ -852,6 +852,43 @@ def obtener_tipo_aforo_param():
                 'fecha_modificia': fecha_modifica 
             })
         return jsonify(serialized_aforos)
+
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        #logging.error('Ocurrio un error: %s',e)
+        return jsonify({'error': str(e)}), 500
+    
+#RUTA CUSTOM PARA ACTUALIZAR UN REGISTRO DE PACKINGLIST
+@bpcustom.route('/actualizar_packinglist/<empresa>/<cod_po>/<codigo_bl_house>/<secuencia>', methods = ['PUT'])
+@jwt_required()
+@cross_origin()
+def actualizar_registro_packinglist(empresa, cod_po, codigo_bl_house, secuencia):
+    try:
+        registro = db.session.query(StPackinglist).filter_by(empresa = empresa, cod_po = cod_po, codigo_bl_house = codigo_bl_house, secuencia = secuencia).first()
+        if not registro:
+            return jsonify({'mensaje': 'El registro no existe en el packinglist'}), 404
+        
+        data = request.get_json()
+        registro.cod_producto = data.get('cod_producto', registro.cod_producto)
+        registro.cantidad = data.get('cantidad', registro.cantidad)
+        registro.fob = data.get('fob', registro.fob)
+        registro.unidad_medida = data.get('unidad_medida', registro.unidad_medida).upper()
+        registro.cod_liquidacion = data.get('cod_liquidacion', registro.cod_liquidacion)
+        registro.cod_tipo_liquidacion = data.get('cod_tipo_liquidacion', registro.cod_tipo_liquidacion)
+        registro.usuario_modifica = data.get('usuario_modifica', registro.usuario_modifica).upper()
+        registro.fecha_modifica = date.today()
+
+        # Actualizar campo saldo_pedido en StOrdenCompraDet
+        orden_det = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa, cod_producto=registro.cod_producto).first()
+        if orden_det:
+            saldo_producto = orden_det.cantidad_pedido - registro.cantidad
+            orden_det.saldo_producto = saldo_producto
+            orden_det.fecha_modifica = date.today()
+            orden_det.usuario_modifica = data.get('usuario_modifica', orden_det.usuario_modifica).upper()
+
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Registro de packinglist actualizado exitosamente'})
 
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
