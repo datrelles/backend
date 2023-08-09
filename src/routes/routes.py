@@ -942,7 +942,7 @@ def crear_packinglist():
             unidad_medida = packing['unidad_medida']
             cod_producto = packing['cod_producto']
             codigo_bl_house = packing['codigo_bl_house']
-            secuencia = obtener_secuencia_packing(cod_po)
+            secuencia = obtener_secuencia_packing(codigo_bl_house, empresa)
 
             #Verificar si el producto existe en la tabla de StOrdenCompraDet
             query = StOrdenCompraDet.query().filter_by(cod_producto = cod_producto, cod_po = cod_po, empresa = empresa).first()
@@ -1048,31 +1048,31 @@ def crear_packinglist():
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
-def obtener_secuencia_packing(cod_po):
-    # Verificar si el cod_po existe en la tabla StOrdenCompraCab
-    existe_cod_po_cab = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po).first()
+def obtener_secuencia_packing(codigo_bl_house, empresa):
+    # Verificar si el codigo_bl_house existe en la tabla StEmbarquesBl
+    existe_codigo_bl = db.session.query(StEmbarquesBl).filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).first()
 
-    if existe_cod_po_cab is not None:
-        print('EXISTE',existe_cod_po_cab.cod_po)
-        # Si el cod_po existe en la tabla StOrdenCompraCab, verificar si existe en la tabla StOrdenCompraDet
-        existe_cod_po_pack = db.session.query(StPackinglist).filter_by(cod_po=cod_po).first()
+    if existe_codigo_bl is not None:
+        print('EXISTE', existe_codigo_bl.codigo_bl_house)
+        # Si el codigo_bl_house existe en la tabla StEmbarquesBl, verificar si existe en la tabla StPackinglist
+        existe_codigo_bl_pack = db.session.query(StPackinglist).filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).first()
 
-        if existe_cod_po_pack is not None:
-            print('EXISTE2',existe_cod_po_pack.cod_po)
-            # Si el cod_po existe en la tabla StOrdenCompraDet, obtener el último número de secuencia
-            max_secuencia = db.session.query(func.max(StPackinglist.secuencia)).filter_by(cod_po=cod_po).distinct().scalar()
-            print('MAXIMO',max_secuencia)
+        if existe_codigo_bl_pack is not None:
+            print('EXISTE2', existe_codigo_bl_pack.codigo_bl_house)
+            # Si el codigo_bl_house existe en la tabla StPackinglist, obtener el último número de secuencia
+            max_secuencia = db.session.query(func.max(StPackinglist.secuencia)).filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).distinct().scalar()
+            print('MAXIMO', max_secuencia)
             nueva_secuencia = int(max_secuencia) + 1
-            print('PROXIMO',nueva_secuencia)
+            print('PROXIMO', nueva_secuencia)
             return nueva_secuencia
         else:
-            # Si el cod_po no existe en la tabla StPackinglist, generar secuencia desde 1
+            # Si el codigo_bl_house no existe en la tabla StPackinglist, generar secuencia desde 1
             nueva_secuencia = 1
             print('Secuencia de inicio', nueva_secuencia)
             return nueva_secuencia
     else:
-        # Si el cod_po no existe en la tabla StOrdenCompraCab, mostrar mensaje de error
-        raise ValueError('La Orden de Compra no existe.')
+        # Si el codigo_bl_house no existe en la tabla StEmbarquesBl, mostrar mensaje de error
+        raise ValueError('El código BL House no existe.')
     
 @bp.route('/orden_compra_track', methods=['POST'])
 @jwt_required()
