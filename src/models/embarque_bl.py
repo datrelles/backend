@@ -21,11 +21,13 @@ class StPuertosEmbarque(Base):
 class StEmbarquesBl(Base):
     __tablename__ = 'st_embarques_bl'
     __table_args__ = (
-        Index('ind_embarques_tipo_aforo', 'empresa', 'cod_aforo'),
-        Index('ind_embarques_bl03', 'cod_puerto_embarque', 'empresa'),
         Index('ind_embaques_tg_modelo_item', 'cod_item', 'cod_modelo', 'empresa'),
+        Index('ind_embarques_bl03', 'cod_puerto_embarque', 'empresa'),
         Index('ind_embarques_naviera', 'empresa', 'naviera'),
         Index('ind_embarques_bl02', 'cod_puerto_desembarque', 'empresa'),
+        Index('ind_embarques_tipo_aforo', 'empresa', 'cod_aforo'),
+        Index('ind_embarques_regimen', 'cod_regimen' ),
+        Index('ind_embarques_bl01', 'cod_proveedor'),
         {'schema': 'stock'}
     )
 
@@ -53,6 +55,8 @@ class StEmbarquesBl(Base):
     cod_modelo = Column(VARCHAR(8))
     cod_item = Column(VARCHAR(3))
     cod_aforo = Column(NUMBER(2, 0, False))
+    cod_regimen = Column(NUMBER(3, 0, False), index=True)
+    nro_mrn = Column(VARCHAR(40))
 
     @classmethod
     def query(cls):

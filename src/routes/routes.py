@@ -616,6 +616,8 @@ def obtener_embarques():
             cod_modelo = embarque.cod_modelo if embarque.cod_modelo else ""
             cod_item = embarque.cod_item if embarque.cod_item else ""
             cod_aforo = embarque.cod_aforo
+            cod_regimen = embarque.cod_regimen
+            nro_mrn = embarque.nro_mrn if embarque.nro_mrn else ""
             serialized_embarques.append({
                 'empresa': empresa,
                 'codigo_bl_master': codigo_bl_master,
@@ -640,7 +642,9 @@ def obtener_embarques():
                 'fecha_modificacion': fecha_modificacion,
                 'cod_modelo': cod_modelo,
                 'cod_item': cod_item,
-                'cod_aforo': cod_aforo
+                'cod_aforo': cod_aforo,
+                'cod_regimen': cod_regimen,
+                'nro_mrn': nro_mrn
             })
         return jsonify(serialized_embarques)
 
@@ -1485,6 +1489,8 @@ def actualizar_embarque(codigo_bl_house, empresa):
         embarque.modificado_por = data.get('modificado_por', embarque.modificado_por)
         embarque.cod_modelo = data.get('cod_modelo', embarque.cod_modelo)
         embarque.cod_aforo = data.get('cod_aforo', embarque.cod_aforo)
+        embarque.cod_regimen = data.get('cod_regimen', embarque.cod_regimen)
+        embarque.nro_mrn = data.get('nro_mrn', embarque.nro_mrn)
 
         # Obtener el valor del campo valor en la tabla StTipoAforo
         tipo_aforo = db.session.query(StTipoAforo).filter_by(cod_aforo=embarque.cod_aforo).first()
