@@ -1105,61 +1105,62 @@ def crear_orden_compra_track():
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
-@bp.route('/embarque', methods = ['POST'])
+@bp.route('/embarque', methods=['POST'])
 @jwt_required()
 @cross_origin()
 def crear_embarque():
     try:
         data = request.get_json()
-        fecha_adicion = date.today()#funcion para que se asigne la fecha actual al momento de crear la oden de compra
-        #fecha_modificacion = datetime.strptime(data['fecha_modificacion'], '%d/%m/%Y').date() if 'fecha_modificacion' in data else None
-        fecha_embarque = datetime.strptime(data['fecha_embarque'], '%d/%m/%Y').date() if 'fecha_embarque' in data else None
-        fecha_llegada = datetime.strptime(data['fecha_llegada'], '%d/%m/%Y').date() if 'fecha_llegada' in data else None
-        fecha_bodega = datetime.strptime(data['fecha_bodega'], '%d/%m/%Y').date() if 'fecha_bodega' in data else None
+        fecha_adicion = date.today()
 
-        #busqueda para obtener el nombre del estado para la orden de compra
-        #estado = TgModeloItem.query().filter_by(cod_modelo=data['cod_modelo'], cod_item=data['cod_item']).first()
-        #estado_nombre = estado.nombre if estado else ''
+        fecha_embarque = parse_date(data.get('fecha_embarque'))
+        fecha_llegada = parse_date(data.get('fecha_llegada'))
+        fecha_bodega = parse_date(data.get('fecha_bodega'))
 
         embarque = StEmbarquesBl(
             empresa=data['empresa'],
             codigo_bl_master=data['codigo_bl_master'],
             codigo_bl_house=data['codigo_bl_house'],
             cod_proveedor=data['cod_proveedor'],
-            fecha_embarque = fecha_embarque,
-            fecha_llegada = fecha_llegada,
+            fecha_embarque=fecha_embarque,
+            fecha_llegada=fecha_llegada,
             fecha_bodega=fecha_bodega,
-            numero_tracking=data['numero_tracking'],
-            naviera=data['naviera'],
-            estado = data['estado'],
-            agente = data['agente'],
-            buque = data.get('buque'),
-            cod_puerto_embarque = data.get('cod_puerto_embarque'),
-            cod_puerto_desembarque = data.get('cod_puerto_desembarque'),
-            costo_contenedor = data.get('costo_contenedor') if data.get('costo_contenedor') else None,
-            descripcion = data.get('descripcion'),
-            tipo_flete = data.get('tipo_flete'),
+            numero_tracking=data.get('numero_tracking'),
+            naviera=data.get('naviera'),
+            estado=data['estado'],
+            agente=data.get('agente'),
+            buque=data.get('buque'),
+            cod_puerto_embarque=data.get('cod_puerto_embarque'),
+            cod_puerto_desembarque=data.get('cod_puerto_desembarque'),
+            costo_contenedor=data.get('costo_contenedor'),
+            descripcion=data.get('descripcion'),
+            tipo_flete=data.get('tipo_flete'),
             adicionado_por=data['adicionado_por'].upper(),
             fecha_adicion=fecha_adicion,
-            #modificado_por=data['modificado_por'].upper(),
-            #fecha_modificacion = fecha_modificacion,
             cod_modelo='BL',
             cod_item=data['cod_item'],
-            cod_aforo = data.get('cod_aforo')
+            cod_aforo=data.get('cod_aforo'),
+            cod_regimen = data.get('cod_regimen'),
+            nro_mrn = data.get('nro_mrn')
         )
+
         db.session.add(embarque)
         db.session.commit()
+
         return jsonify({'mensaje': "Embarque o BL creado exitosamente"})
 
     except ValueError as ve:
-        # Capturar y manejar el error específico de ValueError
         error_message = str(ve)
         return jsonify({'error': error_message}), 500
 
     except Exception as e:
-        # Manejar otros errores y proporcionar un mensaje personalizado
         error_message = f"Se produjo un error: {str(e)}"
         return jsonify({'error': error_message}), 500
+
+def parse_date(date_string):
+    if date_string:
+        return datetime.strptime(date_string, '%d/%m/%Y').date()
+    return None
     
 def secuencia_trackingbl(cod_bl_house):
     # Verificar si el embarque existe en la tabla StEmbarquesBl
