@@ -8,6 +8,7 @@ from src.models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StTracking
 from src.models.embarque_bl import StEmbarquesBl, StTrackingBl, StNaviera
 from src.config.database import db
 from src.models.tipo_aforo import StTipoAforo
+from src.models.aduana import StAduRegimen
 from sqlalchemy import and_, or_
 import datetime
 from datetime import datetime, date
@@ -657,6 +658,31 @@ def obtener_producto_modelo():
         })
     return jsonify(serialized_producto)
 
+#METODO PARA OBTENER EL REGIMEN ADUANA SOLO ACTIVOS
+@bpcustom.route('/regimen_aduana')
+@jwt_required()
+@cross_origin()
+def obtener_regimen_aduana():
+    try:
+        query = db.session.query(StAduRegimen).filter(
+                StAduRegimen.es_activo == 1
+        )
+        regimenes = query.all()
+        serialized_regimen = []
+        for regimen in regimenes:
+            cod_regimen = regimen.cod_regimen
+            descripcion= regimen.descripcion
+            serialized_regimen.append({
+                'cod_regimen': cod_regimen,
+                'descripcion' : descripcion
+            })
+        return jsonify(serialized_regimen)
+
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        #logging.error('Ocurrio un error: %s',e)
+        return jsonify({'error': str(e)}), 500
+    
 #METODO CUSTOM PARA EMBARQUES DE ORDENES DE COMPRA
 
 @bpcustom.route('/embarque_param')
@@ -707,6 +733,8 @@ def obtener_embarques_param():
             cod_modelo = embarque.cod_modelo if embarque.cod_modelo else ""
             cod_item = embarque.cod_item if embarque.cod_item else ""
             cod_aforo = embarque.cod_aforo
+            cod_regimen = embarque.cod_regimen
+            nro_mrn = embarque.nro_mrn if embarque.nro_mrn else ""
             serialized_embarques.append({
                 'empresa': empresa,
                 'codigo_bl_master': codigo_bl_master,
@@ -731,7 +759,9 @@ def obtener_embarques_param():
                 'fecha_modificacion': fecha_modificacion,
                 'cod_modelo': cod_modelo,
                 'cod_item': cod_item,
-                'cod_aforo': cod_aforo
+                'cod_aforo': cod_aforo,
+                'cod_regimen': cod_regimen,
+                'nro_mrn': nro_mrn
             })
         return jsonify(serialized_embarques)
 
