@@ -1883,3 +1883,57 @@ def secuencia_track_oc(cod_po):
         nueva_secuencia = 1
         print('Secuencia de inicio', nueva_secuencia)
         return nueva_secuencia
+
+@bp.route('/packinglist_total')
+@jwt_required()
+@cross_origin()
+def obtener_packinglist_total():
+    empresa = request.args.get('empresa', None)
+    query = db.session.query(StPackinglist)
+
+    if empresa:
+        query = query.filter(StPackinglist.empresa == empresa)
+
+
+    packings = query.all()
+    serialized_packings = []
+    for packing in packings:
+        codigo_bl_house = packing.codigo_bl_house if packing.codigo_bl_house else ""
+        secuencia = packing.secuencia if packing.secuencia else ""
+        cod_po = packing.cod_po if packing.cod_po else ""
+        tipo_comprobante = packing.tipo_comprobante if packing.tipo_comprobante else ""
+        empresa = packing.empresa if packing.empresa else ""
+        cod_producto = packing.cod_producto if packing.cod_producto else ""
+        cantidad = packing.cantidad if packing.cantidad else ""
+        fob = packing.fob if packing.fob else ""
+        unidad_medida = packing.unidad_medida if packing.unidad_medida else ""
+        cod_liquidacion = packing.cod_liquidacion if packing.cod_liquidacion else ""
+        cod_tipo_liquidacion = packing.cod_tipo_liquidacion if packing.cod_tipo_liquidacion else ""
+        usuario_crea = packing.usuario_crea if packing.usuario_crea else ""
+        fecha_crea = datetime.strftime(packing.fecha_crea, "%d/%m/%Y") if packing.fecha_crea else ""
+        usuario_modifica = packing.usuario_modifica if packing.usuario_modifica else ""
+        fecha_modifica = datetime.strftime(packing.fecha_modifica, "%d/%m/%Y") if packing.fecha_modifica else ""
+        proforma = db.session.query(StOrdenCompraCab.proforma).filter(StOrdenCompraCab.cod_po == packing.cod_po).scalar()
+        producto = db.session.query(Producto.nombre).filter(Producto.cod_producto == packing.cod_producto).scalar()
+        estado = db.session.query(StEmbarquesBl.cod_item).filter(StEmbarquesBl.codigo_bl_house == packing.codigo_bl_house).scalar()
+        serialized_packings.append({
+            'proforma': proforma,
+            'producto': producto,
+            'estado': estado,
+            'codigo_bl_house': codigo_bl_house,
+            'cod_po': cod_po,
+            'tipo_comprobante': tipo_comprobante,
+            'empresa': empresa,
+            'secuencia': secuencia,
+            'cod_producto': cod_producto,
+            'cantidad': cantidad,
+            'fob': fob,
+            'unidad_medida': unidad_medida,
+            'cod_liquidacion': cod_liquidacion,
+            'cod_tipo_liquidacion': cod_tipo_liquidacion,
+            'usuario_crea': usuario_crea,
+            'fecha_crea': fecha_crea,
+            'usuario_modifica': usuario_modifica,
+            'fecha_modifica': fecha_modifica
+        })
+    return jsonify(serialized_packings)
