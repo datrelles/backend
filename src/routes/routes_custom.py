@@ -354,6 +354,9 @@ def obtener_orden_compra_cab_param():
         cod_modelo = cabecera.cod_modelo if cabecera.cod_modelo else ""
         cod_item = cabecera.cod_item if cabecera.cod_item else ""
         ciudad = cabecera.ciudad if cabecera.ciudad else ""
+        fecha_estimada_produccion = cabecera.fecha_estimada_produccion.strftime("%d/%m/%Y") if cabecera.fecha_estimada_produccion else ""
+        fecha_estimada_puerto = cabecera.fecha_estimada_puerto.strftime("%d/%m/%Y") if cabecera.fecha_estimada_puerto else ""
+        fecha_estimada_llegada = cabecera.fecha_estimada_llegada.strftime("%d/%m/%Y") if cabecera.fecha_estimada_llegada else ""
         serialized_cabeceras.append({
             'empresa': empresa,
             'cod_po': cod_po,
@@ -367,7 +370,10 @@ def obtener_orden_compra_cab_param():
             'fecha_modifica': fecha_modifica,
             'cod_modelo': cod_modelo,
             'cod_item': cod_item,
-            'ciudad': ciudad
+            'ciudad': ciudad,
+            'fecha_estimada_produccion': fecha_estimada_produccion,
+            'fecha_estimada_puerto': fecha_estimada_puerto,
+            'fecha_estimada_llegada': fecha_estimada_llegada
         })
     
     return jsonify(serialized_cabeceras)

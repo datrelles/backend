@@ -1266,7 +1266,6 @@ def actualizar_orden_compra_cab(cod_po, empresa, tipo_comprobante):
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
 
         data = request.get_json()
-
         #busqueda para que se asigne de forma automatica la ciudad al buscarla por el cod_proveedor
         cod_proveedor = data.get('cod_proveedor')
         if cod_proveedor:
@@ -1275,13 +1274,13 @@ def actualizar_orden_compra_cab(cod_po, empresa, tipo_comprobante):
         else:
             ciudad = ""
 
-        if 'fecha_estimada_produccion' in data:
+        if 'fecha_estimada_produccion' in data and data['fecha_estimada_produccion']:
             orden.fecha_estimada_produccion = datetime.strptime(data['fecha_estimada_produccion'], '%d/%m/%Y').date()
 
-        if 'fecha_estimada_puerto' in data:
+        if 'fecha_estimada_puerto' in data and data['fecha_estimada_puerto']:
             orden.fecha_estimada_puerto = datetime.strptime(data['fecha_estimada_puerto'], '%d/%m/%Y').date()
 
-        if 'fecha_estimada_llegada' in data:
+        if 'fecha_estimada_llegada' in data and data['fecha_estimada_llegada']:
             orden.fecha_estimada_llegada = datetime.strptime(data['fecha_estimada_llegada'], '%d/%m/%Y').date()
 
         orden.cod_proveedor = data.get('cod_proveedor', orden.cod_proveedor)
