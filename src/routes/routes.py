@@ -856,7 +856,13 @@ def crear_orden_compra_det():
                 )
                 #detalle.fob_total = order['FOB'] * order['CANTIDAD_PEDIDO']
                 db.session.add(detalle)
-                db.session.commit()
+                try:
+                    # Intenta hacer la confirmación de la sesión
+                    db.session.commit()
+                except Exception as commit_error:
+                    # Captura la excepción si ocurre un error al confirmar
+                    db.session.rollback()  # Realiza un rollback para deshacer cambios pendientes
+                    print(f"Error al confirmar: {str(commit_error)}")
                 #secuencia = obtener_secuencia(order['COD_PO'])
             else:
                 if query is None:
