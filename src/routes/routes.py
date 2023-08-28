@@ -872,6 +872,7 @@ def crear_orden_compra_det():
                 else:
                     unidad_medida_no_existe.append(unidad_medida)
         if cod_po_no_existe:
+            print("Lista de No existentes: ", cod_po_no_existe)
             return jsonify({'mensaje': 'Productos no generados.', 'cod_producto_no_existe': cod_po_no_existe})
         if unidad_medida_no_existe:
             return jsonify({'mensaje': 'Unidades de Medida no existen.', 'unidad_medida_no_existe': unidad_medida_no_existe})
@@ -879,8 +880,7 @@ def crear_orden_compra_det():
             return jsonify({'mensaje': 'Modelo de moto no existe.', 'cod_producto_modelo_no_existe': cod_modelo_no_existe})
         else:
             return jsonify({'mensaje': 'Detalle(s) de orden de compra creados exitosamente', 'cod_po': cod_po})
-            
-            
+
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
         return jsonify({'error': str(e)}), 500
