@@ -805,7 +805,7 @@ def crear_orden_compra_det():
         cod_modelo_no_existe = [] #Lista para almacenar los cod_producto_modelo que no existen
         print(data)
         for order in data['orders']:
-            print(order)
+            print(order['cod_producto_modelo'])
             cod_producto = order['cod_producto'].strip()
             cod_producto_modelo = order['cod_producto_modelo'].strip()
             unidad_medida = order['unidad_medida'].upper()
