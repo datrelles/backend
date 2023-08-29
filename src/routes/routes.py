@@ -1810,20 +1810,15 @@ def crear_orden_compra_total():
                 db.session.commit()
             else:
                 if not query_producto:
-                    cod_po_no_existe.append(cod_producto)
+                    cod_po_no_existe.append(cod_producto+'\n')
                 if not query_modelo:
-                    cod_modelo_no_existe.append(cod_producto_modelo)
+                    cod_modelo_no_existe.append(cod_producto_modelo+'\n')
                 else:
-                    unidad_medida_no_existe.append(unidad_medida)
-
-        if cod_po_no_existe:
-            return jsonify({'mensaje': 'Productos no generados.', 'cod_producto_no_existe': cod_po_no_existe, 'cod_po': cod_po})
-        if unidad_medida_no_existe:
-            return jsonify({'mensaje': 'Unidades de Medida no existen.', 'unidad_medida_no_existe': unidad_medida_no_existe, 'cod_po': cod_po})
-        if cod_modelo_no_existe:
-            return jsonify({'mensaje': 'Modelo de moto no existe.', 'cod_producto_modelo_no_existe': cod_modelo_no_existe, 'cod_po': cod_po})
-
-        return jsonify({'mensaje': 'Orden de compra creada exitosamente', 'cod_po': cod_po})
+                    unidad_medida_no_existe.append(cod_producto+': '+unidad_medida+'\n')
+        return jsonify({'mensaje': 'Orden de compra creada exitosamente', 'cod_po': cod_po,
+                        'cod_producto_no_existe': list(set(cod_po_no_existe)),
+                        'unidad_medida_no_existe': list(set(unidad_medida_no_existe)),
+                        'cod_producto_modelo_no_existe': list(set(cod_modelo_no_existe))})
 
     except ValueError as ve:
         error_message = str(ve)
