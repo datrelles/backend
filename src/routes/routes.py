@@ -866,20 +866,15 @@ def crear_orden_compra_det():
                 #secuencia = obtener_secuencia(order['COD_PO'])
             else:
                 if query is None:
-                    cod_po_no_existe.append(cod_producto)
+                    cod_po_no_existe.append(cod_producto +'\n')
                 if query_modelo is None:
-                    cod_modelo_no_existe.append(cod_producto_modelo)
+                    cod_modelo_no_existe.append(cod_producto_modelo+'\n')
                 else:
-                    unidad_medida_no_existe.append(unidad_medida)
-        if cod_po_no_existe:
-            print("Lista de No existentes: ", cod_po_no_existe)
-            return jsonify({'mensaje': 'Productos no generados.', 'cod_producto_no_existe': cod_po_no_existe})
-        if unidad_medida_no_existe:
-            return jsonify({'mensaje': 'Unidades de Medida no existen.', 'unidad_medida_no_existe': unidad_medida_no_existe})
-        if cod_modelo_no_existe:
-            return jsonify({'mensaje': 'Modelo de moto no existe.', 'cod_producto_modelo_no_existe': cod_modelo_no_existe})
-        else:
-            return jsonify({'mensaje': 'Detalle(s) de orden de compra creados exitosamente', 'cod_po': cod_po})
+                    unidad_medida_no_existe.append(unidad_medida+'\n')
+        return jsonify({'mensaje': 'Orden de compra creada exitosamente', 'cod_po': cod_po,
+                        'cod_producto_no_existe': list(set(cod_po_no_existe)),
+                        'unidad_medida_no_existe': list(set(unidad_medida_no_existe)),
+                        'cod_producto_modelo_no_existe': list(set(cod_modelo_no_existe))})
 
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
@@ -1042,16 +1037,11 @@ def crear_packinglist():
             else:
                 bl_no_existe.append(codigo_bl_house)
 
-        if bl_no_existe:
-            return jsonify({'mensaje': 'Embarque o Bl no existentes.', 'codigo_bl_house': codigo_bl_house})
-        if prod_no_existe:
-            return jsonify({'mensaje': 'Productos no existentes en base de datos, no ingresados.', 'prod_no_existe': prod_no_existe, 'cod_po': cod_po})
-        if cod_prod_no_existe:
-            return jsonify({'mensaje': 'Productos no existentes en la orden de compra y fueron creados exitosamente.', 'cod_producto_no_existe': cod_prod_no_existe, 'cod_po': cod_po})
-        if unidad_medida_no_existe:
-            return jsonify({'mensaje': 'Unidades de Medida no existen.', 'unidad_medida_no_existe': unidad_medida_no_existe, 'cod_po': cod_po})
-        else:
-            return jsonify({'mensaje': 'Packinglist de orden de compra cargado exitosamente.'})
+        return jsonify({'mensaje': 'Packinglist cargado exitosamente.',
+                            'unidad_medida_no_existe': unidad_medida_no_existe,
+                            'cod_producto_no_existe': cod_prod_no_existe,
+                            'prod_no_existe': prod_no_existe,
+                            'bl_no_existe': bl_no_existe})
 
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
