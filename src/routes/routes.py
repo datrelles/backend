@@ -8,7 +8,7 @@ from src.models.productos import Producto
 from src.models.despiece import StDespiece, StDespieceD
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
-from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque, StNaviera
+from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque, StNaviera, StEmbarqueContenedores, StTipoContenedor
 from src.models.tipo_aforo import StTipoAforo
 from src.config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer, event
@@ -18,6 +18,8 @@ import datetime
 from datetime import datetime,date
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
+from decimal import Decimal
+import json
 
 bp = Blueprint('routes', __name__)
 
@@ -475,6 +477,7 @@ def obtener_packinlist():
             unidad_medida = packing.unidad_medida if packing.unidad_medida else ""
             cod_liquidacion = packing.cod_liquidacion if packing.cod_liquidacion else ""
             cod_tipo_liquidacion = packing.cod_tipo_liquidacion if packing.cod_tipo_liquidacion else ""
+            nro_contenedor = packing.nro_contenedor if packing.nro_contenedor else ""
             usuario_crea = packing.usuario_crea if packing.usuario_crea else ""
             fecha_crea = datetime.strftime(packing.fecha_crea,"%d/%m/%Y") if packing.fecha_crea else ""
             usuario_modifica = packing.usuario_modifica if packing.usuario_modifica else ""
@@ -491,6 +494,7 @@ def obtener_packinlist():
                 'unidad_medida': unidad_medida,
                 'cod_liquidacion': cod_liquidacion,
                 'cod_tipo_liquidacion': cod_tipo_liquidacion,
+                'nro_contenedor': nro_contenedor,
                 'usuario_crea': usuario_crea,
                 'fecha_crea': fecha_crea,
                 'usuario_modifica': usuario_modifica,
@@ -840,7 +844,7 @@ def crear_orden_compra_det():
                     cod_producto=cod_producto,
                     cod_producto_modelo=cod_producto_modelo,
                     nombre=nombre if nombre else None,
-                    nombre_i=nombre_i if nombre_i else None,
+                    nombre_i=nombre_i if nombre_i else order['nombre_ingles'],
                     nombre_c=nombre_c if nombre_c else None,
                     nombre_mod_prov = order['nombre_proveedor'],
                     nombre_comercial = order['nombre_comercial'],
@@ -942,11 +946,11 @@ def crear_packinglist():
         unidad_medida_no_existe = []
         prod_no_existe = []
         bl_no_existe = []
-
         for packing in data['packings']:
             unidad_medida = packing['unidad_medida']
             cod_producto = packing['cod_producto']
             codigo_bl_house = packing['codigo_bl_house']
+            contenedor = packing['nro_contenedor']
             secuencia = obtener_secuencia_packing(codigo_bl_house, empresa)
 
             #Verificar si el producto existe en la tabla de StOrdenCompraDet
@@ -954,10 +958,12 @@ def crear_packinglist():
             print(query)
             query_umedida = StUnidadImportacion.query().filter_by(cod_unidad = unidad_medida, empresa = empresa).first()
             query_bl = StEmbarquesBl.query().filter_by(codigo_bl_house = codigo_bl_house, empresa = empresa).first()
-            if query_bl:
+            query_conte = StEmbarqueContenedores.query().filter_by(nro_contenedor = contenedor, codigo_bl_house = codigo_bl_house, empresa = empresa).first()
+            if query_bl and query_conte:
                 if query and query_umedida:
                     packinlist = StPackinglist(
                         codigo_bl_house = codigo_bl_house,
+                        nro_contenedor = contenedor,
                         empresa = empresa,
                         cod_po = cod_po,
                         secuencia = secuencia,
@@ -983,6 +989,7 @@ def crear_packinglist():
                         if despiece:
                             packinlist = StPackinglist(
                                 codigo_bl_house = codigo_bl_house,
+                                nro_contenedor=contenedor,
                                 empresa = empresa,
                                 cod_po = cod_po,
                                 secuencia = secuencia,
@@ -1016,11 +1023,11 @@ def crear_packinglist():
                                 empresa=empresa,
                                 cod_producto=cod_producto,
                                 nombre=nombre if nombre else None,
-                                nombre_i=nombre_i if nombre_i else None,
+                                nombre_i= nombre_i if nombre_i else None,
                                 nombre_c=nombre_c if nombre_c else None,
                                 costo_sistema=costo_sistema if costo_sistema else 0,
-                                cantidad_pedido=-packing['cantidad'],  # Cantidad en negativo
-                                saldo_producto =0,
+                                cantidad_pedido=0,  # Cantidad en negativo
+                                saldo_producto =-packing['cantidad'],
                                 unidad_medida=unidad_medida,
                                 usuario_crea=usuario_crea,
                                 fecha_crea=fecha_crea,
@@ -1035,7 +1042,7 @@ def crear_packinglist():
                         unidad_medida_no_existe.append(unidad_medida)
                 
             else:
-                bl_no_existe.append(codigo_bl_house)
+                bl_no_existe.append(codigo_bl_house + ' '+ contenedor)
 
         return jsonify({'mensaje': 'Packinglist cargado exitosamente.',
                             'unidad_medida_no_existe': unidad_medida_no_existe,
@@ -1046,6 +1053,135 @@ def crear_packinglist():
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
         #logging.error('Ocurrio un error: %s',e)
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/packinglist_contenedor', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def crear_packinglist_contenedor():
+    try:
+        data = request.get_json()
+        fecha_crea = date.today()
+        empresa = data['empresa']
+        nro_contenedor = data['nro_contenedor']
+        query_contenedor = StEmbarqueContenedores.query().filter_by(nro_contenedor=nro_contenedor, empresa=empresa).first()
+        codigo_bl_house = query_contenedor.codigo_bl_house
+        tipo_comprobante = data['tipo_comprobante']
+        usuario_crea = data['usuario_crea'].upper()
+        cod_prod_no_existe = []
+        unidad_medida_no_existe = []
+        prod_no_existe = []
+        bl_no_existe = []
+        for packing in data['packings']:
+            unidad_medida = packing['unidad_medida']
+            cod_producto = packing['cod_producto']
+            secuencia = obtener_secuencia_packing(codigo_bl_house, empresa)
+            # Verificar si el producto existe en la tabla de StOrdenCompraDet
+            query_prod = Producto.query().filter_by(cod_producto=cod_producto, empresa=empresa).first()
+            if query_prod:
+                costo_sistema = query_prod.costo
+                query = StOrdenCompraDet.query().filter_by(cod_producto=cod_producto, cod_po=packing['cod_po'], empresa=empresa).first()
+                print(query)
+                query_umedida = StUnidadImportacion.query().filter_by(cod_unidad=unidad_medida, empresa=empresa).first()
+                query_bl = StEmbarquesBl.query().filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).first()
+                query_conte = StEmbarqueContenedores.query().filter_by(nro_contenedor=nro_contenedor, codigo_bl_house=codigo_bl_house, empresa=empresa).first()
+                if query_bl and query_conte:
+                    if query and query_umedida:
+                        packinlist = StPackinglist(
+                            codigo_bl_house=codigo_bl_house,
+                            nro_contenedor=nro_contenedor,
+                            empresa=empresa,
+                            cod_po=packing['cod_po'],
+                            secuencia=secuencia,
+                            tipo_comprobante=tipo_comprobante,
+                            cod_producto=cod_producto,
+                            cantidad=packing['cantidad'],
+                            fob=packing['fob'],
+                            unidad_medida=unidad_medida,
+                            usuario_crea=usuario_crea,
+                            fecha_crea=fecha_crea,
+                            # usuario_modifica = packing['usuario_modifica'].upper(),
+                            # fecha_modifica = fecha_modifica
+                        )
+                        # Realizar la actualizacion de saldo_producto
+                        query.saldo_producto = query.saldo_producto - packing['cantidad']
+
+                        db.session.add(packinlist)
+                        db.session.commit()
+                    else:
+                        if query is None:
+
+                            despiece = StProductoDespiece.query().filter_by(cod_producto=cod_producto,
+                                                                            empresa=empresa).first()  # usar la empresa
+                            if despiece:
+                                packinlist = StPackinglist(
+                                    codigo_bl_house=codigo_bl_house,
+                                    nro_contenedor=nro_contenedor,
+                                    empresa=empresa,
+                                    cod_po=packing['cod_po'],
+                                    secuencia=secuencia,
+                                    tipo_comprobante=tipo_comprobante,
+                                    cod_producto=cod_producto,
+                                    cantidad=packing['cantidad'],
+                                    fob=packing['fob'],
+                                    unidad_medida=unidad_medida,
+                                    usuario_crea=usuario_crea,
+                                    fecha_crea=fecha_crea,
+                                    # usuario_modifica = packing['usuario_modifica'].upper(),
+                                    # fecha_modifica = fecha_modifica
+                                )
+
+                                if despiece is not None:
+                                    nombre_busq = StDespiece.query().filter_by(cod_despiece=despiece.cod_despiece).first()
+                                    nombre = nombre_busq.nombre_e
+                                    nombre_i = nombre_busq.nombre_i
+                                    nombre_c = nombre_busq.nombre_c
+                                else:
+                                    nombre_busq = Producto.query().filter_by(cod_producto=cod_producto).first()
+                                    nombre = nombre_busq.nombre
+                                    nombre_i = nombre_busq.nombre
+                                    nombre_c = nombre_busq.nombre
+                                # Crear un nuevo registro en StOrdenCompraDet con cantidad en negativo
+                                detalle = StOrdenCompraDet(
+                                    exportar=False,
+                                    cod_po=packing['cod_po'],
+                                    tipo_comprobante='PO',
+                                    secuencia=obtener_secuencia(packing['cod_po']),
+                                    empresa=empresa,
+                                    cod_producto=cod_producto,
+                                    nombre=nombre if nombre else None,
+                                    nombre_i=nombre_i if nombre_i else None,
+                                    nombre_c=nombre_c if nombre_c else None,
+                                    costo_sistema=costo_sistema if costo_sistema else 0,
+                                    cantidad_pedido=0,  # Cantidad en negativo
+                                    saldo_producto=-packing['cantidad'],
+                                    unidad_medida=unidad_medida,
+                                    usuario_crea=usuario_crea,
+                                    fecha_crea=fecha_crea,
+                                )
+                                db.session.add(packinlist)
+                                db.session.add(detalle)
+                                db.session.commit()
+                                cod_prod_no_existe.append(cod_producto)
+                            else:
+                                prod_no_existe.append(cod_producto)
+                        else:
+                            unidad_medida_no_existe.append(unidad_medida)
+
+                else:
+                    bl_no_existe.append(codigo_bl_house + ' ' + nro_contenedor)
+            else:
+                prod_no_existe.append(cod_producto)
+        return jsonify({'mensaje': 'Packinglist cargado exitosamente.',
+                        'unidad_medida_no_existe': unidad_medida_no_existe,
+                        'cod_producto_no_existe': cod_prod_no_existe,
+                        'prod_no_existe': prod_no_existe,
+                        'bl_no_existe': bl_no_existe})
+
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        # logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
 def obtener_secuencia_packing(codigo_bl_house, empresa):
@@ -1614,12 +1750,18 @@ def eliminar_orden_compra_packinglist():
         if empresa:
             packing_query = packing_query.filter_by(empresa=empresa)
 
+        packing_entry = packing_query.first()
+        query = StOrdenCompraDet.query().filter_by(cod_producto=packing_entry.cod_producto, cod_po=cod_po,empresa=empresa).first()
+
         packings_to_delete = packing_query.all()
 
         if not packings_to_delete:
             return jsonify({'mensaje': 'No se encontraron registros para eliminar.'}), 404
 
         for packing in packings_to_delete:
+            query.saldo_producto = query.saldo_producto + Decimal(str(packing_entry.cantidad))
+            if query.cantidad_pedido == 0:
+                db.session.delete(query)
             db.session.delete(packing)
 
         db.session.commit()
@@ -1927,3 +2069,147 @@ def obtener_packinglist_total():
             'fecha_modifica': fecha_modifica
         })
     return jsonify(serialized_packings)
+
+@bp.route('/containers')
+@jwt_required()
+@cross_origin()
+def obtener_containers():
+    query = StEmbarqueContenedores.query()
+    contenedores = query.all()
+    serialized_contenedores = []
+    for contenedor in contenedores:
+        empresa = contenedor.empresa if contenedor.empresa else ""
+        codigo_bl_house = contenedor.codigo_bl_house if contenedor.codigo_bl_house else ""
+        nro_contenedor = contenedor.nro_contenedor if contenedor.nro_contenedor else ""
+        cod_tipo_contenedor = contenedor.cod_tipo_contenedor
+        peso = contenedor.peso if contenedor.peso else ""
+        volumen = contenedor.volumen if contenedor.volumen else ""
+        line_seal = contenedor.line_seal if contenedor.line_seal else ""
+        shipper_seal = contenedor.shipper_seal if contenedor.shipper_seal else ""
+        es_carga_suelta = contenedor.es_carga_suelta if contenedor.es_carga_suelta else ""
+        observaciones = contenedor.observaciones if contenedor.observaciones else ""
+        serialized_contenedores.append({
+            "empresa": empresa,
+            "codigo_bl_house": codigo_bl_house,
+            "nro_contenedor": nro_contenedor,
+            "cod_tipo_contenedor": cod_tipo_contenedor,
+            "peso": peso,
+            "volumen": volumen,
+            "line_seal": line_seal,
+            "shipper_seal": shipper_seal,
+            "es_carga_suelta": es_carga_suelta,
+            "observaciones": observaciones
+        })
+    return jsonify(serialized_contenedores)
+@bp.route('/packings_by_container')
+@jwt_required()
+@cross_origin()
+def obtener_packings_por_contenedor():
+    empresa = request.args.get('empresa', None)
+    nro_contenedor = request.args.get('nro_contenedor', None)
+    try:
+        query = text("""
+            select count(*)
+            from st_packinglist p
+            where p.empresa = :empresa and p.nro_contenedor = :nro_contenedor
+        """)
+        result = db.session.execute(query, {"empresa": empresa, "nro_contenedor": nro_contenedor})
+        row = result.fetchone()
+        print(row)
+        if row:
+            response_data = {"packings": row[0]}
+            # Serializar el diccionario como JSON y devolverlo como respuesta
+            return json.dumps(response_data)
+        return None
+
+    except Exception as e:
+        # Manejar errores
+        print('Error:', e)
+        raise
+
+@bp.route('/tipo_contenedor')
+@jwt_required()
+@cross_origin()
+def obtener_containers_tipo():
+    query = StTipoContenedor.query()
+    tipos = query.all()
+    serialized_tipos = []
+    for tipo in tipos:
+        empresa = tipo.empresa if tipo.empresa else ""
+        cod_tipo_contenedor = tipo.cod_tipo_contenedor if tipo.cod_tipo_contenedor else ""
+        nombre = tipo.nombre if tipo.nombre else ""
+        es_activo = tipo.es_activo if tipo.es_activo else ""
+        serialized_tipos.append({
+            "empresa": empresa,
+            "cod_tipo_contenedor": cod_tipo_contenedor,
+            "nombre": nombre,
+            "es_activo": es_activo
+        })
+    return jsonify(serialized_tipos)
+
+@bp.route('/contenedor/<nro_contenedor>/<empresa>', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def crear_contenedor(nro_contenedor, empresa):
+    try:
+        if not nro_contenedor:
+            return jsonify({'mensaje': 'No existe numero de contenedor.'}), 404
+
+        data = request.get_json()
+
+
+        contenedor = StEmbarqueContenedores(
+            empresa=empresa,
+            nro_contenedor=nro_contenedor,
+            codigo_bl_house=data.get('codigo_bl_house'),
+            cod_tipo_contenedor = data.get('cod_tipo_contenedor'),
+            peso=data.get('peso'),
+            volumen=data.get('volumen'),
+            line_seal=data.get('line_seal'),
+            shipper_seal=data.get('shipper_seal'),
+            es_carga_suelta=data.get('es_carga_suelta'),
+            observaciones=data.get('observaciones'),
+            fecha_crea=date.today(),
+            usuario_crea=data.get('usuario_crea')
+        )
+
+        db.session.add(contenedor)
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Contenedor Creado exitosamente.'})
+
+    except Exception as e:
+        logger.exception(f"Error al crear Contenedor: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/contenedor/<nro_contenedor>/<empresa>', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def actualizar_contenedor(nro_contenedor, empresa):
+    try:
+        contenedor = db.session.query(StEmbarqueContenedores).filter_by(nro_contenedor=nro_contenedor, empresa=empresa).first()
+        if not contenedor:
+            return jsonify({'mensaje': 'El contenedor no existe.'}), 404
+
+        data = request.get_json()
+
+        contenedor.codigo_bl_house = data.get('codigo_bl_house', contenedor.codigo_bl_house)
+        contenedor.nro_contenedor = data.get('nro_contenedor', contenedor.nro_contenedor)
+        contenedor.cod_tipo_contenedor = data.get('cod_tipo_contenedor', contenedor.cod_tipo_contenedor)
+        contenedor.peso = data.get('peso', contenedor.peso)
+        contenedor.volumen = data.get('volumen', contenedor.volumen) #date.today()
+        contenedor.line_seal = data.get('line_seal', contenedor.line_seal)
+        contenedor.shipper_seal = data.get('shipper_seal', contenedor.shipper_seal)
+        contenedor.es_carga_suelta = data.get('es_carga_suelta', contenedor.es_carga_suelta)
+        contenedor.observaciones = data.get('observaciones', contenedor.observaciones)
+        contenedor.fecha_modifica = date.today()
+        contenedor.usuario_modifica = data.get('usuario_modifica', contenedor.usuario_modifica)
+
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Embarque o BL actualizado exitosamente.'})
+
+    except Exception as e:
+        logger.exception(f"Error al actualizar Embarque: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+

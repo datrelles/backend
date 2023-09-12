@@ -1,4 +1,3 @@
-#Pruebas Git
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, request, jsonify
 from numpy.core.defchararray import upper
@@ -281,4 +280,3 @@ def logout():
 if __name__ == '__main__':
     load_dotenv(find_dotenv())
     app.run(host='0.0.0.0', port=5000, debug = True)
-

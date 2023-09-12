@@ -102,3 +102,49 @@ class StNaviera(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
+
+class StEmbarqueContenedores(Base):
+    __tablename__ = 'st_embarque_contenedores'
+    __table_args__ = (
+        Index('pk_st_embarque_contenedores', 'nro_contenedor', 'codigo_bl_house', 'empresa'),
+        Index('udx1_fk_st_emb_cont_st_emb_bl', 'codigo_bl_house', 'empresa'),
+        Index('udx2_st_emb_cont_empresa', 'empresa'),
+        Index('udx3_st_emb_con_st_tipo_con', 'cod_tipo_contenedor', 'empresa'),
+        {'schema': 'stock'}
+    )
+
+    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False, index=True)
+    codigo_bl_house = Column(VARCHAR(30), primary_key=True, nullable=False, index=True)
+    nro_contenedor = Column(VARCHAR(15), primary_key=True, nullable=False, index=True)
+    cod_tipo_contenedor = Column(VARCHAR(10))
+    peso = Column(NUMBER(11,3))
+    volumen = Column(NUMBER(6,2))
+    line_seal = Column(VARCHAR(15))
+    shipper_seal = Column(VARCHAR(15))
+    es_carga_suelta = Column(NUMBER(1))
+    observaciones = Column(VARCHAR(150))
+    usuario_crea = Column(VARCHAR(30))
+    fecha_crea = Column(DateTime)
+    usuario_modifica = Column(VARCHAR(30))
+    fecha_modifica = Column(DateTime)
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class StTipoContenedor(Base):
+    __tablename__ = 'st_tipo_contenedor'
+    __table_args__ = (
+        Index('fk_tipo_cont_empresa', 'empresa'),
+        Index('pk_st_tipo_contenedor', 'cod_tipo_contenedor', 'empresa'),
+        {'schema': 'stock'}
+    )
+
+    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False, index=True)
+    cod_tipo_contenedor = Column(VARCHAR(10), primary_key=True, nullable=False, index=True)
+    nombre = Column(VARCHAR(100), nullable=False)
+    es_activo = Column(NUMBER(1))
+    usuario_crea = Column(VARCHAR(30))
+    fecha_crea = Column(DateTime)
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)

@@ -106,6 +106,7 @@ class StPackinglist(Base):
         Index('ind_packinglist_ocompracab', 'cod_po', 'tipo_comprobante', 'empresa'),
         Index('udx1_packing_st_u_import', 'empresa', 'unidad_medida'),
         Index('udx3_packinglist_tc_valoracion', 'cod_liquidacion', 'cod_tipo_liquidacion', 'empresa'),
+        Index('udx4_packinglist_st_emb_cont', 'nro_contenedor', 'codigo_bl_house', 'empresa'),
         {'schema': 'stock'}
     )
 
@@ -120,6 +121,7 @@ class StPackinglist(Base):
     unidad_medida = Column(VARCHAR(8))
     cod_liquidacion = Column(VARCHAR(9))
     cod_tipo_liquidacion = Column(VARCHAR(3))
+    nro_contenedor = Column(VARCHAR(15))
     usuario_crea = Column(VARCHAR(30), index=True)
     fecha_crea = Column(DateTime)
     usuario_modifica = Column(VARCHAR(30))

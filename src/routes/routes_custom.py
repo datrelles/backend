@@ -5,12 +5,13 @@ from src.models.tipo_comprobante import TipoComprobante
 from src.models.producto_despiece import StProductoDespiece
 from src.models.despiece import StDespiece
 from src.models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StTracking,StPackinglist
-from src.models.embarque_bl import StEmbarquesBl, StTrackingBl, StNaviera
+from src.models.embarque_bl import StEmbarquesBl, StTrackingBl, StNaviera, StEmbarqueContenedores
 from src.config.database import db
 from src.models.tipo_aforo import StTipoAforo
 from src.models.aduana import StAduRegimen
 from sqlalchemy import and_, or_
 import datetime
+from decimal import Decimal
 from datetime import datetime, date
 import logging
 from flask_jwt_extended import jwt_required
@@ -575,6 +576,7 @@ def obtener_packinglist_param():
 
     for packing in packings:
         codigo_bl_house = packing.codigo_bl_house if packing.codigo_bl_house else ""
+        nro_contenedor = packing.nro_contenedor if packing.codigo_bl_house else ""
         secuencia = packing.secuencia if packing.secuencia else ""
         cod_po = packing.cod_po if packing.cod_po else ""
         tipo_comprobante = packing.tipo_comprobante if packing.tipo_comprobante else ""
@@ -594,6 +596,7 @@ def obtener_packinglist_param():
             'codigo_bl_house': codigo_bl_house,
             'cod_po': cod_po,
             'tipo_comprobante': tipo_comprobante,
+            'nro_contenedor': nro_contenedor,
             'empresa': empresa,
             'secuencia': secuencia,
             'cod_producto': cod_producto,
@@ -609,6 +612,66 @@ def obtener_packinglist_param():
         })
     return jsonify(serialized_packings)
 
+
+@bpcustom.route('/packinglist_param_by_container')
+@jwt_required()
+@cross_origin()
+def obtener_packinglist_param_by_container():
+    empresa = request.args.get('empresa', None)
+    nro_contenedor = request.args.get('nro_contenedor', None)
+    secuencia = request.args.get('secuencia', None)
+    cod_po = request.args.get('cod_po', None)
+
+    query = StPackinglist.query()
+    if empresa:
+        query = query.filter(StPackinglist.empresa == empresa)
+    if nro_contenedor:
+        query = query.filter(StPackinglist.nro_contenedor == nro_contenedor)
+    if secuencia:
+        query = query.filter(StPackinglist.secuencia == secuencia)
+    if cod_po:
+        query = query.filter(StPackinglist.cod_po == cod_po)
+
+    packings = query.all()
+    serialized_packings = []
+
+    for packing in packings:
+        codigo_bl_house = packing.codigo_bl_house if packing.codigo_bl_house else ""
+        nro_contenedor = packing.nro_contenedor if packing.codigo_bl_house else ""
+        secuencia = packing.secuencia if packing.secuencia else ""
+        cod_po = packing.cod_po if packing.cod_po else ""
+        tipo_comprobante = packing.tipo_comprobante if packing.tipo_comprobante else ""
+        empresa = packing.empresa if packing.empresa else ""
+        secuencia = packing.secuencia if packing.secuencia else ""
+        cod_producto = packing.cod_producto if packing.cod_producto else ""
+        cantidad = packing.cantidad if packing.cantidad else ""
+        fob = packing.fob if packing.fob else ""
+        unidad_medida = packing.unidad_medida if packing.unidad_medida else ""
+        cod_liquidacion = packing.cod_liquidacion if packing.cod_liquidacion else ""
+        cod_tipo_liquidacion = packing.cod_tipo_liquidacion if packing.cod_tipo_liquidacion else ""
+        usuario_crea = packing.usuario_crea if packing.usuario_crea else ""
+        fecha_crea = datetime.strftime(packing.fecha_crea, "%d/%m/%Y") if packing.fecha_crea else ""
+        usuario_modifica = packing.usuario_modifica if packing.usuario_modifica else ""
+        fecha_modifica = datetime.strftime(packing.fecha_modifica, "%d/%m/%Y") if packing.fecha_modifica else ""
+        serialized_packings.append({
+            'codigo_bl_house': codigo_bl_house,
+            'cod_po': cod_po,
+            'tipo_comprobante': tipo_comprobante,
+            'nro_contenedor': nro_contenedor,
+            'empresa': empresa,
+            'secuencia': secuencia,
+            'cod_producto': cod_producto,
+            'cantidad': cantidad,
+            'fob': fob,
+            'unidad_medida': unidad_medida,
+            'cod_liquidacion': cod_liquidacion,
+            'cod_tipo_liquidacion': cod_tipo_liquidacion,
+            'usuario_crea': usuario_crea,
+            'fecha_crea': fecha_crea,
+            'usuario_modifica': usuario_modifica,
+            'fecha_modifica': fecha_modifica
+        })
+    return jsonify(serialized_packings)
 #METODO CUSTOM PARA ELIMINAR TODA LA ORDEN DE COMPRA
 
 @bpcustom.route('/eliminar_orden_compra_total/<cod_po>/<empresa>/<tipo_comprobante>', methods=['DELETE'])
@@ -930,3 +993,76 @@ def actualizar_registro_packinglist(empresa, cod_po, codigo_bl_house, secuencia)
         logger.exception(f"Error al consultar: {str(e)}")
         #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
+
+@bpcustom.route('/orden_compra_packinglist_by_container', methods=['DELETE'])
+@jwt_required()
+@cross_origin()
+def eliminar_orden_compra_packinglist_por_contenedor():
+    try:
+        nro_contenedor = request.args.get('nro_contenedor')
+        empresa = request.args.get('empresa')
+
+        if not nro_contenedor:
+            return jsonify({'error': 'Se debe proporcionar numero de contenedor para eliminar.'}), 400
+
+        packing_query = db.session.query(StPackinglist)
+        if nro_contenedor:
+            packing_query = packing_query.filter_by(nro_contenedor=nro_contenedor)
+        if empresa:
+            packing_query = packing_query.filter_by(empresa=empresa)
+
+        packings_to_delete = packing_query.all()
+
+        if not packings_to_delete:
+            return jsonify({'mensaje': 'No se encontraron registros para eliminar.'}), 404
+
+        for packing in packings_to_delete:
+            query = StOrdenCompraDet.query().filter_by(cod_po=packing.cod_po, cod_producto=packing.cod_producto, empresa=empresa).first()
+            if query:
+                query.saldo_producto = query.saldo_producto + Decimal(str(packing.cantidad))
+                if query.cantidad_pedido == 0:
+                    db.session.delete(query)
+            db.session.delete(packing)
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Registro de Packinglists de orden de compra eliminado exitosamente.'})
+
+    except Exception as e:
+        logger.exception(f"Error al eliminar: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@bpcustom.route('/container_by_nro')
+@jwt_required()
+@cross_origin()
+def obtener_container_por_nro():
+    nro_contenedor = request.args.get('nro_contenedor', None)
+    query = StEmbarqueContenedores.query()
+    if nro_contenedor:
+        query = query.filter(StEmbarqueContenedores.nro_contenedor == nro_contenedor)
+
+    contenedores = query.all()
+    serialized_contenedores = []
+    for contenedor in contenedores:
+        empresa = contenedor.empresa if contenedor.empresa else ""
+        codigo_bl_house = contenedor.codigo_bl_house if contenedor.codigo_bl_house else ""
+        nro_contenedor = contenedor.nro_contenedor if contenedor.nro_contenedor else ""
+        cod_tipo_contenedor = contenedor.cod_tipo_contenedor
+        peso = contenedor.peso if contenedor.peso else ""
+        volumen = contenedor.volumen if contenedor.volumen else ""
+        line_seal = contenedor.line_seal if contenedor.line_seal else ""
+        shipper_seal = contenedor.shipper_seal if contenedor.shipper_seal else ""
+        es_carga_suelta = contenedor.es_carga_suelta if contenedor.es_carga_suelta is not None else 0
+        observaciones = contenedor.observaciones if contenedor.observaciones else ""
+        serialized_contenedores.append({
+            "empresa": empresa,
+            "codigo_bl_house": codigo_bl_house,
+            "nro_contenedor": nro_contenedor,
+            "cod_tipo_contenedor": cod_tipo_contenedor,
+            "peso": peso,
+            "volumen": volumen,
+            "line_seal": line_seal,
+            "shipper_seal": shipper_seal,
+            "es_carga_suelta": es_carga_suelta,
+            "observaciones": observaciones
+        })
+    return jsonify(serialized_contenedores)
