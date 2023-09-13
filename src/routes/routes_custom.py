@@ -9,7 +9,7 @@ from src.models.embarque_bl import StEmbarquesBl, StTrackingBl, StNaviera, StEmb
 from src.config.database import db
 from src.models.tipo_aforo import StTipoAforo
 from src.models.aduana import StAduRegimen
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, func
 import datetime
 from decimal import Decimal
 from datetime import datetime, date
@@ -388,69 +388,59 @@ def obtener_orden_comrpa_det_param():
     cod_po = request.args.get('cod_po', None)
     tipo_comprobante = request.args.get('tipo_comprobante', None)
 
-    query = StOrdenCompraDet.query()
-    if empresa :
-        query = query.filter(StOrdenCompraDet.empresa == empresa)
-    if cod_po:
-        query = query.filter(StOrdenCompraDet.cod_po == cod_po)
-    if tipo_comprobante:
-        query = query.filter(StOrdenCompraDet.tipo_comprobante == tipo_comprobante)
+    query = db.session.query(
+        StOrdenCompraDet.cod_po,
+        StOrdenCompraDet.secuencia,
+        StOrdenCompraDet.cod_producto,
+        StOrdenCompraDet.nombre,
+        StOrdenCompraDet.costo_sistema,
+        StOrdenCompraDet.fob,
+        StOrdenCompraDet.cantidad_pedido,
+        StOrdenCompraDet.saldo_producto,
+        StOrdenCompraDet.unidad_medida,
+        StOrdenCompraDet.fob_total,
+        StOrdenCompraDet.nombre_i,
+        StOrdenCompraDet.nombre_c,
+        StOrdenCompraDet.exportar,
+        StOrdenCompraDet.nombre_mod_prov,
+        StOrdenCompraDet.nombre_comercial,
+        StOrdenCompraDet.costo_cotizado,
+        StOrdenCompraDet.fecha_costo,
+        Producto.nombre.label("modelo"),
+        StOrdenCompraDet.cod_producto_modelo
+    ).filter(
+        StOrdenCompraDet.empresa == empresa, StOrdenCompraDet.cod_po == cod_po, StOrdenCompraDet.tipo_comprobante == tipo_comprobante
+    ).outerjoin(
+        Producto,
+        and_(Producto.cod_producto == StOrdenCompraDet.cod_producto_modelo, Producto.empresa == StOrdenCompraDet.empresa, Producto.empresa ==empresa)
+    )
+    results = query.all()
 
-    detalles = query.all()
-    serialized_detalles = []
-    for detalle in detalles:
-        cod_po = detalle.cod_po if detalle.cod_po else ""
-        tipo_comprobante = detalle.tipo_comprobante if detalle.tipo_comprobante else ""
-        secuencia = detalle.secuencia if detalle.secuencia else ""
-        empresa = detalle.empresa if detalle.empresa else ""
-        cod_producto = detalle.cod_producto if detalle.cod_producto else ""
-        cod_producto_modelo = detalle.cod_producto_modelo if detalle.cod_producto_modelo else ""
-        nombre = detalle.nombre if detalle.nombre else ""
-        nombre_i = detalle.nombre_i if detalle.nombre_i else ""
-        nombre_c = detalle.nombre_c if detalle.nombre_c else ""
-        nombre_mod_prov = detalle.nombre_mod_prov if detalle.nombre_mod_prov else ""
-        nombre_comercial = detalle.nombre_comercial if detalle.nombre_comercial else ""
-        costo_sistema = detalle.costo_sistema if detalle.costo_sistema else ""
-        costo_cotizado = detalle.costo_cotizado if detalle.costo_cotizado else ""
-        fecha_costo = detalle.fecha_costo if detalle.fecha_costo else ""
-        fob = detalle.fob if detalle.fob else ""
-        cantidad_pedido = detalle.cantidad_pedido if detalle.cantidad_pedido else ""
-        if fob and cantidad_pedido:
-            fob_total = fob * cantidad_pedido
-        else:
-            fob_total = None
-        saldo_producto = detalle.saldo_producto if detalle.saldo_producto else ""
-        unidad_medida = detalle.unidad_medida if detalle.unidad_medida else ""
-        usuario_crea = detalle.usuario_crea if detalle.usuario_crea else ""
-        fecha_crea = detalle.fecha_crea.strftime("%d/%m/%Y") if detalle.fecha_crea else ""
-        usuario_modifica = detalle.usuario_modifica if detalle.usuario_modifica else ""
-        fecha_modifica = detalle.fecha_modifica.strftime("%d/%m/%Y") if detalle.fecha_modifica else ""
-        serialized_detalles.append({
-            'cod_po': cod_po,
-            'tipo_comprobante': tipo_comprobante,
-            'secuencia': secuencia,
-            'empresa': empresa,
-            'cod_producto': cod_producto,
-            'cod_producto_modelo': cod_producto_modelo,
-            'nombre': nombre,
-            'nombre_ingles': nombre_i,
-            'nombre_china': nombre_c,
-            'nombre_mod_prov': nombre_mod_prov,
-            'nombre_comercial': nombre_comercial,
-            'costo_sistema': costo_sistema,
-            'costo_cotizado': costo_cotizado,
-            'fecha_costo': fecha_costo,
-            'fob': fob,
-            'fob_total': fob_total,
-            'cantidad_pedido': cantidad_pedido,
-            'saldo_producto': saldo_producto,
-            'unidad_medida': unidad_medida,
-            'usuario_crea': usuario_crea,
-            'fecha_crea': fecha_crea,
-            'usuario_modifica': usuario_modifica,
-            'fecha_modifica': fecha_modifica,
-        })
-    return jsonify(serialized_detalles)
+    serialized_details = [
+        {
+            "cod_po": result.cod_po,
+            "secuencia": result.secuencia,
+            "cod_producto": result.cod_producto,
+            "nombre": result.nombre,
+            "costo_sistema": result.costo_sistema,
+            "fob": result.fob,
+            "cantidad_pedido": result.cantidad_pedido,
+            "saldo_producto": result.saldo_producto,
+            "unidad_medida": result.unidad_medida,
+            "fob_total": result.fob_total,
+            "nombre_i": result.nombre_i,
+            "nombre_c": result.nombre_c,
+            "exportar": result.exportar,
+            "nombre_mod_prov": result.nombre_mod_prov,
+            "nombre_comercial": result.nombre_comercial,
+            "costo_cotizado": result.costo_cotizado,
+            "fecha_costo": result.fecha_costo,
+            "modelo": result.modelo,
+            "cod_producto_modelo": result.cod_producto_modelo
+        }
+        for result in results
+    ]
+    return jsonify(serialized_details)
 
 @bpcustom.route('/orden_compra_track_param')
 @jwt_required()
@@ -617,60 +607,68 @@ def obtener_packinglist_param():
 @jwt_required()
 @cross_origin()
 def obtener_packinglist_param_by_container():
-    empresa = request.args.get('empresa', None)
     nro_contenedor = request.args.get('nro_contenedor', None)
-    secuencia = request.args.get('secuencia', None)
-    cod_po = request.args.get('cod_po', None)
+    empresa = request.args.get('empresa', None)
 
-    query = StPackinglist.query()
-    if empresa:
-        query = query.filter(StPackinglist.empresa == empresa)
-    if nro_contenedor:
-        query = query.filter(StPackinglist.nro_contenedor == nro_contenedor)
-    if secuencia:
-        query = query.filter(StPackinglist.secuencia == secuencia)
-    if cod_po:
-        query = query.filter(StPackinglist.cod_po == cod_po)
+    query = db.session.query(
+        StPackinglist.codigo_bl_house,
+        StPackinglist.secuencia,
+        StPackinglist.cod_po,
+        StPackinglist.tipo_comprobante,
+        StPackinglist.empresa,
+        StPackinglist.cod_producto,
+        StPackinglist.cantidad,
+        StPackinglist.fob,
+        StPackinglist.unidad_medida,
+        StPackinglist.cod_liquidacion,
+        StPackinglist.cod_tipo_liquidacion,
+        StPackinglist.usuario_crea,
+        func.to_char(StPackinglist.fecha_crea, "DD/MM/YYYY").label("fecha_crea"),
+        StPackinglist.usuario_modifica,
+        func.to_char(StPackinglist.fecha_modifica, "DD/MM/YYYY").label("fecha_modifica"),
+        StOrdenCompraCab.proforma.label("proforma"),
+        Producto.nombre.label("producto"),
+        StEmbarquesBl.cod_item.label("estado")
+    ).filter(
+        StPackinglist.empresa == empresa, StPackinglist.nro_contenedor == nro_contenedor
+    ).outerjoin(
+        StOrdenCompraCab,
+        and_(StOrdenCompraCab.cod_po == StPackinglist.cod_po, StOrdenCompraCab.empresa == StPackinglist.empresa)
+    ).outerjoin(
+        Producto,
+        and_(Producto.cod_producto == StPackinglist.cod_producto, Producto.empresa == StPackinglist.empresa)
+    ).outerjoin(
+        StEmbarquesBl,
+        and_(StEmbarquesBl.codigo_bl_house == StPackinglist.codigo_bl_house,
+             StEmbarquesBl.empresa == StPackinglist.empresa)
+    )
+    results = query.all()
 
-    packings = query.all()
-    serialized_packings = []
+    serialized_packings = [
+        {
+            "proforma": result.proforma,
+            "producto": result.producto,
+            "estado": result.estado,
+            "codigo_bl_house": result.codigo_bl_house,
+            "cod_po": result.cod_po,
+            "tipo_comprobante": result.tipo_comprobante,
+            "empresa": result.empresa,
+            "secuencia": result.secuencia,
+            "cod_producto": result.cod_producto,
+            "cantidad": result.cantidad,
+            "fob": result.fob,
+            "unidad_medida": result.unidad_medida,
+            "cod_liquidacion": result.cod_liquidacion,
+            "cod_tipo_liquidacion": result.cod_tipo_liquidacion,
+            "usuario_crea": result.usuario_crea,
+            "fecha_crea": result.fecha_crea,
+            "usuario_modifica": result.usuario_modifica,
+            "fecha_modifica": result.fecha_modifica,
+        }
+        for result in results
+    ]
 
-    for packing in packings:
-        codigo_bl_house = packing.codigo_bl_house if packing.codigo_bl_house else ""
-        nro_contenedor = packing.nro_contenedor if packing.codigo_bl_house else ""
-        secuencia = packing.secuencia if packing.secuencia else ""
-        cod_po = packing.cod_po if packing.cod_po else ""
-        tipo_comprobante = packing.tipo_comprobante if packing.tipo_comprobante else ""
-        empresa = packing.empresa if packing.empresa else ""
-        secuencia = packing.secuencia if packing.secuencia else ""
-        cod_producto = packing.cod_producto if packing.cod_producto else ""
-        cantidad = packing.cantidad if packing.cantidad else ""
-        fob = packing.fob if packing.fob else ""
-        unidad_medida = packing.unidad_medida if packing.unidad_medida else ""
-        cod_liquidacion = packing.cod_liquidacion if packing.cod_liquidacion else ""
-        cod_tipo_liquidacion = packing.cod_tipo_liquidacion if packing.cod_tipo_liquidacion else ""
-        usuario_crea = packing.usuario_crea if packing.usuario_crea else ""
-        fecha_crea = datetime.strftime(packing.fecha_crea, "%d/%m/%Y") if packing.fecha_crea else ""
-        usuario_modifica = packing.usuario_modifica if packing.usuario_modifica else ""
-        fecha_modifica = datetime.strftime(packing.fecha_modifica, "%d/%m/%Y") if packing.fecha_modifica else ""
-        serialized_packings.append({
-            'codigo_bl_house': codigo_bl_house,
-            'cod_po': cod_po,
-            'tipo_comprobante': tipo_comprobante,
-            'nro_contenedor': nro_contenedor,
-            'empresa': empresa,
-            'secuencia': secuencia,
-            'cod_producto': cod_producto,
-            'cantidad': cantidad,
-            'fob': fob,
-            'unidad_medida': unidad_medida,
-            'cod_liquidacion': cod_liquidacion,
-            'cod_tipo_liquidacion': cod_tipo_liquidacion,
-            'usuario_crea': usuario_crea,
-            'fecha_crea': fecha_crea,
-            'usuario_modifica': usuario_modifica,
-            'fecha_modifica': fecha_modifica
-        })
+
     return jsonify(serialized_packings)
 #METODO CUSTOM PARA ELIMINAR TODA LA ORDEN DE COMPRA
 
