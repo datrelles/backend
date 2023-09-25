@@ -1893,6 +1893,7 @@ def crear_orden_compra_total():
         unidad_medida_no_existe = []
 
         for detalle in data['detalles']:
+            print(detalle['agrupado'])
             cod_producto = detalle['cod_producto'].strip()
             unidad_medida = detalle['unidad_medida']
             cod_producto_modelo = detalle['cod_producto_modelo']
@@ -1920,7 +1921,7 @@ def crear_orden_compra_total():
                     nombre_c = nombre_busq.nombre
 
                 detalle_orden = StOrdenCompraDet(
-                    exportar=detalle['agrupado'],
+                    exportar = 1 if detalle['agrupado'] else 0,
                     cod_po=cod_po,
                     tipo_comprobante='PO',
                     secuencia=secuencia,

@@ -382,7 +382,7 @@ def obtener_orden_compra_cab_param():
 @bpcustom.route('/orden_compra_det_param')
 @jwt_required()
 @cross_origin()
-def obtener_orden_comrpa_det_param():
+def obtener_orden_compra_det_param():
 
     empresa = request.args.get('empresa', None)
     cod_po = request.args.get('cod_po', None)

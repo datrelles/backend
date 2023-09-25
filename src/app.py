@@ -136,7 +136,7 @@ def enterprise_default(id):
         c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur_01 = c.cursor()
         id = str(upper(id))
-        sql = ('select u.empresa_actual from usuario u where u.usuario_oracle = :id')
+        sql = ('select u.empresa_actual, u.agencia_actual from usuario u where u.usuario_oracle = :id')
         cursor = cur_01.execute(sql, [id])
         c.close
         row_headers = [x[0] for x in cursor.description]
@@ -268,6 +268,8 @@ def menu(user,enterprise, system):
     except Exception as ex:
         raise Exception(ex)
     return response_body
+
+
 
 @app.route("/logout",methods=["POST"])
 @cross_origin()
