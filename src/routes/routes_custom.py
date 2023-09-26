@@ -6,6 +6,7 @@ from src.models.producto_despiece import StProductoDespiece
 from src.models.despiece import StDespiece
 from src.models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StTracking,StPackinglist
 from src.models.embarque_bl import StEmbarquesBl, StTrackingBl, StNaviera, StEmbarqueContenedores
+from src.models.entities.vt_proforma_imp_contenedor import VtProformaImpContenedor
 from src.config.database import db
 from src.models.tipo_aforo import StTipoAforo
 from src.models.aduana import StAduRegimen
@@ -1064,3 +1065,26 @@ def obtener_container_por_nro():
             "observaciones": observaciones
         })
     return jsonify(serialized_contenedores)
+
+@bpcustom.route('/view_prof')
+@jwt_required()
+@cross_origin()
+def obtener_vt_proforma_imp_cont():
+    query = VtProformaImpContenedor.query()
+    vista = query.all()
+    serialized = []
+    for registro in vista:
+        empresa = registro.empresa if registro.empresa else ""
+        tipo_proforma = registro.tipo_proforma if registro.tipo_proforma else ""
+        cod_proforma = registro.cod_proforma if registro.cod_proforma else ""
+        secuencia = registro.secuencia if registro.secuencia else ""
+        secuencia_prof = registro.secuencia_prof if registro.secuencia_prof else ""
+
+        serialized.append({
+            "empresa": empresa,
+            "tipo_proforma": tipo_proforma,
+            "cod_proforma": cod_proforma,
+            "secuencia": secuencia,
+            "secuencia_prof": secuencia_prof
+        })
+    return jsonify(serialized)
