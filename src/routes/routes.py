@@ -467,7 +467,6 @@ def obtener_packinlist():
         packings = query.all()
         serialized_packing = []
         for packing in packings:
-            codigo_bl_house = packing.codigo_bl_house if packing.codigo_bl_house else ""
             cod_po = packing.cod_po if packing.cod_po else ""
             tipo_comprobante = packing.tipo_comprobante if packing.tipo_comprobante else ""
             empresa = packing.empresa if packing.empresa else ""
@@ -484,7 +483,6 @@ def obtener_packinlist():
             usuario_modifica = packing.usuario_modifica if packing.usuario_modifica else ""
             fecha_modifica = datetime.strftime(packing.fecha_modifica,"%d/%m/%Y") if packing.fecha_modifica else ""
             serialized_packing.append({
-                'codigo_bl_house': codigo_bl_house,
                 'cod_po': cod_po,
                 'tipo_comprobante': tipo_comprobante,
                 'empresa': empresa,
@@ -930,132 +928,6 @@ def obtener_cod_producto_modelo(empresa, cod_producto):
         # Manejar errores
         print('Error:', e)
         raise
-    
-@bp.route('/packinglist', methods=['POST'])
-@jwt_required()
-@cross_origin()
-def crear_packinglist():
-    try:
-        data = request.get_json()
-        fecha_crea = date.today()
-        #fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
-        empresa = data['empresa']
-        cod_po = data['cod_po']
-        tipo_comprobante = data['tipo_comprobante']
-        usuario_crea=data['usuario_crea'].upper()
-        cod_prod_no_existe = []
-        unidad_medida_no_existe = []
-        prod_no_existe = []
-        bl_no_existe = []
-        for packing in data['packings']:
-            unidad_medida = packing['unidad_medida']
-            cod_producto = packing['cod_producto']
-            codigo_bl_house = packing['codigo_bl_house']
-            contenedor = packing['nro_contenedor']
-            secuencia = obtener_secuencia_packing(codigo_bl_house, empresa)
-
-            #Verificar si el producto existe en la tabla de StOrdenCompraDet
-            query = StOrdenCompraDet.query().filter_by(cod_producto = cod_producto, cod_po = cod_po, empresa = empresa).first()
-            print(query)
-            query_umedida = StUnidadImportacion.query().filter_by(cod_unidad = unidad_medida, empresa = empresa).first()
-            query_bl = StEmbarquesBl.query().filter_by(codigo_bl_house = codigo_bl_house, empresa = empresa).first()
-            query_conte = StEmbarqueContenedores.query().filter_by(nro_contenedor = contenedor, codigo_bl_house = codigo_bl_house, empresa = empresa).first()
-            if query_bl and query_conte:
-                if query and query_umedida:
-                    packinlist = StPackinglist(
-                        codigo_bl_house = codigo_bl_house,
-                        nro_contenedor = contenedor,
-                        empresa = empresa,
-                        cod_po = cod_po,
-                        secuencia = secuencia,
-                        tipo_comprobante = tipo_comprobante,
-                        cod_producto = cod_producto,
-                        cantidad = packing['cantidad'],
-                        fob = packing['fob'],
-                        unidad_medida = unidad_medida,
-                        usuario_crea = usuario_crea,
-                        fecha_crea = fecha_crea,
-                        #usuario_modifica = packing['usuario_modifica'].upper(),
-                        #fecha_modifica = fecha_modifica
-                    )
-                    # Realizar la actualizacion de saldo_producto
-                    query.saldo_producto = query.saldo_producto - packing['cantidad']
-                    
-                    db.session.add(packinlist)
-                    db.session.commit()
-                else:
-                    if query is None:
-                        query_prod = Producto.query().filter_by(cod_producto = cod_producto, empresa = empresa).first()
-                        despiece = StProductoDespiece.query().filter_by(cod_producto=cod_producto, empresa = empresa).first() #usar la empresa
-                        if despiece:
-                            packinlist = StPackinglist(
-                                codigo_bl_house = codigo_bl_house,
-                                nro_contenedor=contenedor,
-                                empresa = empresa,
-                                cod_po = cod_po,
-                                secuencia = secuencia,
-                                tipo_comprobante = tipo_comprobante,
-                                cod_producto = cod_producto,
-                                cantidad = packing['cantidad'],
-                                fob = packing['fob'],
-                                unidad_medida = unidad_medida,
-                                usuario_crea = usuario_crea,
-                                fecha_crea = fecha_crea,
-                                #usuario_modifica = packing['usuario_modifica'].upper(),
-                                #fecha_modifica = fecha_modifica
-                            )
-                            costo_sistema = query_prod.costo
-                            if despiece is not None:
-                                nombre_busq = StDespiece.query().filter_by(cod_despiece =despiece.cod_despiece).first()
-                                nombre = nombre_busq.nombre_e
-                                nombre_i = nombre_busq.nombre_i
-                                nombre_c = nombre_busq.nombre_c
-                            else:
-                                nombre_busq = Producto.query().filter_by(cod_producto = cod_producto).first()
-                                nombre = nombre_busq.nombre
-                                nombre_i = nombre_busq.nombre
-                                nombre_c = nombre_busq.nombre
-                            # Crear un nuevo registro en StOrdenCompraDet con cantidad en negativo
-                            detalle = StOrdenCompraDet(
-                                exportar=False,
-                                cod_po=cod_po,
-                                tipo_comprobante='PO',
-                                secuencia=obtener_secuencia(cod_po),
-                                empresa=empresa,
-                                cod_producto=cod_producto,
-                                nombre=nombre if nombre else None,
-                                nombre_i= nombre_i if nombre_i else None,
-                                nombre_c=nombre_c if nombre_c else None,
-                                costo_sistema=costo_sistema if costo_sistema else 0,
-                                cantidad_pedido=0,  # Cantidad en negativo
-                                saldo_producto =-packing['cantidad'],
-                                unidad_medida=unidad_medida,
-                                usuario_crea=usuario_crea,
-                                fecha_crea=fecha_crea,
-                            )
-                            db.session.add(packinlist)
-                            db.session.add(detalle)
-                            db.session.commit()
-                            cod_prod_no_existe.append(cod_producto)
-                        else:
-                            prod_no_existe.append(cod_producto)
-                    else:
-                        unidad_medida_no_existe.append(unidad_medida)
-                
-            else:
-                bl_no_existe.append(codigo_bl_house + ' '+ contenedor)
-
-        return jsonify({'mensaje': 'Packinglist cargado exitosamente.',
-                            'unidad_medida_no_existe': unidad_medida_no_existe,
-                            'cod_producto_no_existe': cod_prod_no_existe,
-                            'prod_no_existe': prod_no_existe,
-                            'bl_no_existe': bl_no_existe})
-
-    except Exception as e:
-        logger.exception(f"Error al consultar: {str(e)}")
-        #logging.error('Ocurrio un error: %s',e)
-        return jsonify({'error': str(e)}), 500
-
 
 @bp.route('/packinglist_contenedor', methods=['POST'])
 @jwt_required()
@@ -1067,7 +939,6 @@ def crear_packinglist_contenedor():
         empresa = data['empresa']
         nro_contenedor = data['nro_contenedor']
         query_contenedor = StEmbarqueContenedores.query().filter_by(nro_contenedor=nro_contenedor, empresa=empresa).first()
-        codigo_bl_house = query_contenedor.codigo_bl_house
         tipo_comprobante = data['tipo_comprobante']
         usuario_crea = data['usuario_crea'].upper()
         cod_prod_no_existe = []
@@ -1077,7 +948,7 @@ def crear_packinglist_contenedor():
         for packing in data['packings']:
             unidad_medida = packing['unidad_medida']
             cod_producto = packing['cod_producto']
-            secuencia = obtener_secuencia_packing(codigo_bl_house, empresa)
+            secuencia = obtener_secuencia_packing(nro_contenedor, empresa)
             # Verificar si el producto existe en la tabla de StOrdenCompraDet
             query_prod = Producto.query().filter_by(cod_producto=cod_producto, empresa=empresa).first()
             if query_prod:
@@ -1085,12 +956,10 @@ def crear_packinglist_contenedor():
                 query = StOrdenCompraDet.query().filter_by(cod_producto=cod_producto, cod_po=packing['cod_po'], empresa=empresa).first()
                 print(query)
                 query_umedida = StUnidadImportacion.query().filter_by(cod_unidad=unidad_medida, empresa=empresa).first()
-                query_bl = StEmbarquesBl.query().filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).first()
-                query_conte = StEmbarqueContenedores.query().filter_by(nro_contenedor=nro_contenedor, codigo_bl_house=codigo_bl_house, empresa=empresa).first()
-                if query_bl and query_conte:
+                query_conte = StEmbarqueContenedores.query().filter_by(nro_contenedor=nro_contenedor, empresa=empresa).first()
+                if query_conte:
                     if query and query_umedida:
                         packinlist = StPackinglist(
-                            codigo_bl_house=codigo_bl_house,
                             nro_contenedor=nro_contenedor,
                             empresa=empresa,
                             cod_po=packing['cod_po'],
@@ -1117,7 +986,6 @@ def crear_packinglist_contenedor():
                                                                             empresa=empresa).first()  # usar la empresa
                             if despiece:
                                 packinlist = StPackinglist(
-                                    codigo_bl_house=codigo_bl_house,
                                     nro_contenedor=nro_contenedor,
                                     empresa=empresa,
                                     cod_po=packing['cod_po'],
@@ -1171,7 +1039,7 @@ def crear_packinglist_contenedor():
                             unidad_medida_no_existe.append(unidad_medida)
 
                 else:
-                    bl_no_existe.append(codigo_bl_house + ' ' + nro_contenedor)
+                    bl_no_existe.append(nro_contenedor)
             else:
                 prod_no_existe.append(cod_producto)
         return jsonify({'mensaje': 'Packinglist cargado exitosamente.',
@@ -1185,19 +1053,19 @@ def crear_packinglist_contenedor():
         # logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
     
-def obtener_secuencia_packing(codigo_bl_house, empresa):
+def obtener_secuencia_packing(nro_contenedor, empresa):
     # Verificar si el codigo_bl_house existe en la tabla StEmbarquesBl
-    existe_codigo_bl = db.session.query(StEmbarquesBl).filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).first()
+    existe_contenedor = db.session.query(StEmbarqueContenedores).filter_by(nro_contenedor=nro_contenedor, empresa=empresa).first()
 
-    if existe_codigo_bl is not None:
-        print('EXISTE', existe_codigo_bl.codigo_bl_house)
+    if existe_contenedor is not None:
+        print('EXISTE', existe_contenedor.nro_contenedor)
         # Si el codigo_bl_house existe en la tabla StEmbarquesBl, verificar si existe en la tabla StPackinglist
-        existe_codigo_bl_pack = db.session.query(StPackinglist).filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).first()
+        existe_nro_cont_pack = db.session.query(StPackinglist).filter_by(nro_contenedor=nro_contenedor, empresa=empresa).first()
 
-        if existe_codigo_bl_pack is not None:
-            print('EXISTE2', existe_codigo_bl_pack.codigo_bl_house)
+        if existe_nro_cont_pack is not None:
+            print('EXISTE2', existe_nro_cont_pack.nro_contenedor)
             # Si el codigo_bl_house existe en la tabla StPackinglist, obtener el último número de secuencia
-            max_secuencia = db.session.query(func.max(StPackinglist.secuencia)).filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).distinct().scalar()
+            max_secuencia = db.session.query(func.max(StPackinglist.secuencia)).filter_by(nro_contenedor=nro_contenedor, empresa=empresa).distinct().scalar()
             print('MAXIMO', max_secuencia)
             nueva_secuencia = int(max_secuencia) + 1
             print('PROXIMO', nueva_secuencia)
@@ -1209,7 +1077,7 @@ def obtener_secuencia_packing(codigo_bl_house, empresa):
             return nueva_secuencia
     else:
         # Si el codigo_bl_house no existe en la tabla StEmbarquesBl, mostrar mensaje de error
-        raise ValueError('El código BL House no existe.')
+        raise ValueError('El nro_contenedor no existe.')
     
 @bp.route('/orden_compra_track', methods=['POST'])
 @jwt_required()
@@ -1537,11 +1405,10 @@ def actualizar_orden_compra_packinglist(cod_po, empresa):
         cod_producto_no_existe = []
         usuario_modifica = data['usuario_modifica'].upper()
         for order in data['orders']:
-            codigo_bl_house = order['codigo_bl_house']
-            query = StPackinglist.query().filter_by(cod_po=cod_po, empresa=empresa, codigo_bl_house=codigo_bl_house, cod_producto=order['cod_producto']).first()
+            nro_contenedor = order['nro_contenedor']
+            query = StPackinglist.query().filter_by(cod_po=cod_po, empresa=empresa, nro_contenedor=nro_contenedor, cod_producto=order['cod_producto']).first()
             if query:
-                # Actualizar campos en StPackinglist
-                query.codigo_bl_house = codigo_bl_house
+                query.nro_contenedor = nro_contenedor
                 query.tipo_comprobante = order.get('tipo_comprobante', query.tipo_comprobante)
                 query.cod_producto = order.get('cod_producto', query.cod_producto)
                 query.cantidad = order.get('cantidad', query.cantidad)
@@ -2023,10 +1890,9 @@ def secuencia_track_oc(cod_po):
 @cross_origin()
 def obtener_packinglist_total():
     empresa = request.args.get('empresa', None)
-    query = db.session.query(StPackinglist)
 
     query = db.session.query(
-        StPackinglist.codigo_bl_house,
+        StPackinglist.nro_contenedor,
         StPackinglist.secuencia,
         StPackinglist.cod_po,
         StPackinglist.tipo_comprobante,
@@ -2043,7 +1909,6 @@ def obtener_packinglist_total():
         func.to_char(StPackinglist.fecha_modifica, "DD/MM/YYYY").label("fecha_modifica"),
         StOrdenCompraCab.proforma.label("proforma"),
         Producto.nombre.label("producto"),
-        StEmbarquesBl.cod_item.label("estado")
     ).filter(
         StPackinglist.empresa == empresa
     ).outerjoin(
@@ -2052,19 +1917,14 @@ def obtener_packinglist_total():
     ).outerjoin(
         Producto,
         and_(Producto.cod_producto == StPackinglist.cod_producto, Producto.empresa == StPackinglist.empresa)
-    ).outerjoin(
-        StEmbarquesBl,
-        and_(StEmbarquesBl.codigo_bl_house == StPackinglist.codigo_bl_house,
-             StEmbarquesBl.empresa == StPackinglist.empresa)
     )
     results = query.all()
 
     serialized_packings = [
         {
+            "nro_contenedor": result.nro_contenedor,
             "proforma": result.proforma,
             "producto": result.producto,
-            "estado": result.estado,
-            "codigo_bl_house": result.codigo_bl_house,
             "cod_po": result.cod_po,
             "tipo_comprobante": result.tipo_comprobante,
             "empresa": result.empresa,

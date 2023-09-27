@@ -15,6 +15,12 @@ class VtProformaImpContenedor(Base):
     cod_proforma = Column(VARCHAR(10), primary_key=True, nullable=False)
     secuencia = Column(NUMBER(4), primary_key=True, nullable=False)
     secuencia_prof = Column(NUMBER(4), primary_key=True, nullable=False)
+    cantidad = Column(NUMBER(8))
+    valor_pedido = Column(NUMBER(10,2))
+    contenedores = Column(NUMBER(2,2))
+    numero_contenedor = Column(VARCHAR(10))
+    master_bl = Column(VARCHAR(10))
+    house_bl = Column(VARCHAR(10))
 
     @classmethod
     def query(cls):

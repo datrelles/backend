@@ -548,15 +548,12 @@ def obtener_tracking_bl_param():
 @cross_origin()
 def obtener_packinglist_param():
     empresa = request.args.get('empresa', None)
-    codigo_bl_house = request.args.get('codigo_bl_house', None)
     secuencia = request.args.get('secuencia', None)
     cod_po = request.args.get('cod_po', None)
     
     query = StPackinglist.query()
     if empresa:
         query = query.filter(StPackinglist.empresa == empresa)
-    if codigo_bl_house:
-        query = query.filter(StPackinglist.codigo_bl_house == codigo_bl_house)
     if secuencia:
         query = query.filter(StPackinglist.secuencia == secuencia)
     if cod_po:
@@ -566,8 +563,7 @@ def obtener_packinglist_param():
     serialized_packings = []
 
     for packing in packings:
-        codigo_bl_house = packing.codigo_bl_house if packing.codigo_bl_house else ""
-        nro_contenedor = packing.nro_contenedor if packing.codigo_bl_house else ""
+        nro_contenedor = packing.nro_contenedor if packing.nro_contenedor else ""
         secuencia = packing.secuencia if packing.secuencia else ""
         cod_po = packing.cod_po if packing.cod_po else ""
         tipo_comprobante = packing.tipo_comprobante if packing.tipo_comprobante else ""
@@ -584,7 +580,6 @@ def obtener_packinglist_param():
         usuario_modifica = packing.usuario_modifica if packing.usuario_modifica else ""
         fecha_modifica = datetime.strftime(packing.fecha_modifica,"%d/%m/%Y") if packing.fecha_modifica else ""
         serialized_packings.append({
-            'codigo_bl_house': codigo_bl_house,
             'cod_po': cod_po,
             'tipo_comprobante': tipo_comprobante,
             'nro_contenedor': nro_contenedor,
@@ -612,7 +607,7 @@ def obtener_packinglist_param_by_container():
     empresa = request.args.get('empresa', None)
 
     query = db.session.query(
-        StPackinglist.codigo_bl_house,
+        StPackinglist.nro_contenedor,
         StPackinglist.secuencia,
         StPackinglist.cod_po,
         StPackinglist.tipo_comprobante,
@@ -628,8 +623,7 @@ def obtener_packinglist_param_by_container():
         StPackinglist.usuario_modifica,
         func.to_char(StPackinglist.fecha_modifica, "DD/MM/YYYY").label("fecha_modifica"),
         StOrdenCompraCab.proforma.label("proforma"),
-        Producto.nombre.label("producto"),
-        StEmbarquesBl.cod_item.label("estado")
+        Producto.nombre.label("producto")
     ).filter(
         StPackinglist.empresa == empresa, StPackinglist.nro_contenedor == nro_contenedor
     ).outerjoin(
@@ -638,10 +632,6 @@ def obtener_packinglist_param_by_container():
     ).outerjoin(
         Producto,
         and_(Producto.cod_producto == StPackinglist.cod_producto, Producto.empresa == StPackinglist.empresa)
-    ).outerjoin(
-        StEmbarquesBl,
-        and_(StEmbarquesBl.codigo_bl_house == StPackinglist.codigo_bl_house,
-             StEmbarquesBl.empresa == StPackinglist.empresa)
     )
     results = query.all()
 
@@ -649,11 +639,10 @@ def obtener_packinglist_param_by_container():
         {
             "proforma": result.proforma,
             "producto": result.producto,
-            "estado": result.estado,
-            "codigo_bl_house": result.codigo_bl_house,
             "cod_po": result.cod_po,
             "tipo_comprobante": result.tipo_comprobante,
             "empresa": result.empresa,
+            "nro_contenedor": result.nro_contenedor,
             "secuencia": result.secuencia,
             "cod_producto": result.cod_producto,
             "cantidad": result.cantidad,

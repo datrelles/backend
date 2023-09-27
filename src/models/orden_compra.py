@@ -101,16 +101,16 @@ class StOrdenCompraDet(Base):
 class StPackinglist(Base):
     __tablename__ = 'st_packinglist'
     __table_args__ = (
-        Index('udx2_packing_embarques_bl', 'codigo_bl_house', 'empresa'),
+        Index('udx2_packing_embarques_bl', 'nro_contenedor', 'empresa'),
         Index('ind_oackinglist01', 'empresa', 'cod_producto'),
         Index('ind_packinglist_ocompracab', 'cod_po', 'tipo_comprobante', 'empresa'),
         Index('udx1_packing_st_u_import', 'empresa', 'unidad_medida'),
         Index('udx3_packinglist_tc_valoracion', 'cod_liquidacion', 'cod_tipo_liquidacion', 'empresa'),
-        Index('udx4_packinglist_st_emb_cont', 'nro_contenedor', 'codigo_bl_house', 'empresa'),
+        Index('udx4_packinglist_st_emb_cont', 'nro_contenedor', 'empresa'),
         {'schema': 'stock'}
     )
 
-    codigo_bl_house = Column(VARCHAR(30), primary_key=True, nullable=False)
+    nro_contenedor = Column(VARCHAR(15), primary_key=True, nullable=False)
     secuencia = Column(NUMBER(9, 0, False), primary_key=True, nullable=False)
     empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
     cod_po = Column(VARCHAR(9))
@@ -121,7 +121,6 @@ class StPackinglist(Base):
     unidad_medida = Column(VARCHAR(8))
     cod_liquidacion = Column(VARCHAR(9))
     cod_tipo_liquidacion = Column(VARCHAR(3))
-    nro_contenedor = Column(VARCHAR(15))
     usuario_crea = Column(VARCHAR(30), index=True)
     fecha_crea = Column(DateTime)
     usuario_modifica = Column(VARCHAR(30))
