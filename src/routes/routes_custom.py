@@ -6,7 +6,7 @@ from src.models.producto_despiece import StProductoDespiece
 from src.models.despiece import StDespiece
 from src.models.orden_compra import StOrdenCompraCab,StOrdenCompraDet,StTracking,StPackinglist
 from src.models.embarque_bl import StEmbarquesBl, StTrackingBl, StNaviera, StEmbarqueContenedores
-from src.models.entities.vt_proforma_imp_contenedor import VtProformaImpContenedor
+from src.models.entities.vt_detalles_orden_general import VtDetallesOrdenGeneral
 from src.config.database import db
 from src.models.tipo_aforo import StTipoAforo
 from src.models.aduana import StAduRegimen
@@ -1055,25 +1055,66 @@ def obtener_container_por_nro():
         })
     return jsonify(serialized_contenedores)
 
-@bpcustom.route('/view_prof')
+@bpcustom.route('/detalles_general')
 @jwt_required()
 @cross_origin()
-def obtener_vt_proforma_imp_cont():
-    query = VtProformaImpContenedor.query()
+def obtener_vt_detalles_general():
+    query = VtDetallesOrdenGeneral.query()
     vista = query.all()
     serialized = []
     for registro in vista:
-        empresa = registro.empresa if registro.empresa else ""
-        tipo_proforma = registro.tipo_proforma if registro.tipo_proforma else ""
-        cod_proforma = registro.cod_proforma if registro.cod_proforma else ""
-        secuencia = registro.secuencia if registro.secuencia else ""
-        secuencia_prof = registro.secuencia_prof if registro.secuencia_prof else ""
+        cod_po = registro.cod_po if registro.cod_po else ""
+        cod_producto = registro.cod_producto if registro.cod_producto else ""
+        nombre = registro.nombre if registro.nombre else ""
+        modelo = registro.modelo if registro.modelo else ""
+        costo_sistema = registro.costo_sistema if registro.costo_sistema else ""
+        cantidad_pedido = registro.cantidad_pedido if registro.cantidad_pedido else ""
+        saldo_producto = registro.saldo_producto if registro.saldo_producto else ""
+        fob_detalle = registro.fob_detalle if registro.fob_detalle else ""
+        fob_total = registro.fob_total if registro.fob_total else ""
+        proforma = registro.proforma if registro.proforma else ""
+        proveedor = registro.proveedor if registro.proveedor else ""
+        fecha_estimada_produccion = datetime.strftime(registro.fecha_estimada_produccion,"%d/%m/%Y") if registro.fecha_estimada_produccion else ""
+        fecha_estimada_puerto = datetime.strftime(registro.fecha_estimada_puerto,"%d/%m/%Y") if registro.fecha_estimada_puerto else ""
+        fecha_estimada_llegada = datetime.strftime(registro.fecha_estimada_llegada,"%d/%m/%Y") if registro.fecha_estimada_llegada else ""
+        nro_contenedor = registro.nro_contenedor if registro.nro_contenedor else ""
+        codigo_bl_house = registro.codigo_bl_house if registro.codigo_bl_house else ""
+        fecha_embarque = datetime.strftime(registro.fecha_embarque,
+                                                      "%d/%m/%Y") if registro.fecha_embarque else ""
+        fecha_llegada = datetime.strftime(registro.fecha_llegada,
+                                           "%d/%m/%Y") if registro.fecha_llegada else ""
+        fecha_bodega = datetime.strftime(registro.fecha_bodega,
+                                           "%d/%m/%Y") if registro.fecha_bodega else ""
+        cantidad = registro.cantidad if registro.cantidad else ""
+        fob = registro.fob if registro.fob else ""
+        estado_embarque = registro.estado_embarque if registro.estado_embarque else ""
+        estado_orden = registro.estado_orden if registro.estado_orden else ""
 
         serialized.append({
-            "empresa": empresa,
-            "tipo_proforma": tipo_proforma,
-            "cod_proforma": cod_proforma,
-            "secuencia": secuencia,
-            "secuencia_prof": secuencia_prof
+            "cod_po": cod_po,
+            "cod_producto": cod_producto,
+            "nombre": nombre,
+            "modelo": modelo,
+            "costo_sistema": costo_sistema,
+            "cantidad_pedido": cantidad_pedido,
+            "saldo_producto": saldo_producto,
+            "fob_detalle": fob_detalle,
+            "fob_total": fob_total,
+            "proforma": proforma,
+            "proveedor": proveedor,
+            "fecha_estimada_produccion": fecha_estimada_produccion,
+            "fecha_estimada_puerto": fecha_estimada_puerto,
+            "fecha_estimada_llegada": fecha_estimada_llegada,
+            "nro_contenedor": nro_contenedor,
+            "codigo_bl_house": codigo_bl_house,
+            "fecha_embarque": fecha_embarque,
+            "fecha_llegada": fecha_llegada,
+            "fecha_bodega": fecha_bodega,
+            "cantidad": cantidad,
+            "fob": fob,
+            "estado_embarque": estado_embarque,
+            "estado_orden": estado_orden
+
+
         })
     return jsonify(serialized)
