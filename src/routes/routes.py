@@ -946,6 +946,7 @@ def crear_packinglist_contenedor():
         prod_no_existe = []
         bl_no_existe = []
         for packing in data['packings']:
+            print(packing['unidad_medida'])
             unidad_medida = packing['unidad_medida']
             cod_producto = packing['cod_producto']
             secuencia = obtener_secuencia_packing(nro_contenedor, empresa)
@@ -974,9 +975,12 @@ def crear_packinglist_contenedor():
                             # usuario_modifica = packing['usuario_modifica'].upper(),
                             # fecha_modifica = fecha_modifica
                         )
-                        # Realizar la actualizacion de saldo_producto
                         query.saldo_producto = query.saldo_producto - packing['cantidad']
-
+                        if query.fob is None or query.fob >= packing['fob']:
+                            query.fob = packing['fob']
+                        if query.fob_total is None:
+                            query.fob_total = Decimal(0)
+                        query.fob_total = query.fob_total + Decimal(packing['fob']) * Decimal(packing['cantidad'])
                         db.session.add(packinlist)
                         db.session.commit()
                     else:
@@ -1028,6 +1032,8 @@ def crear_packinglist_contenedor():
                                     unidad_medida=unidad_medida,
                                     usuario_crea=usuario_crea,
                                     fecha_crea=fecha_crea,
+                                    fob=packing['fob'],
+                                    fob_total=packing['fob'] * packing['cantidad']
                                 )
                                 db.session.add(packinlist)
                                 db.session.add(detalle)
@@ -1625,12 +1631,15 @@ def eliminar_orden_compra_packinglist():
 
         if not packings_to_delete:
             return jsonify({'mensaje': 'No se encontraron registros para eliminar.'}), 404
-
-        for packing in packings_to_delete:
+        
+        if query:
             query.saldo_producto = query.saldo_producto + Decimal(str(packing_entry.cantidad))
+            query.fob = 0
+            query.fob_total = 0
             if query.cantidad_pedido == 0:
                 db.session.delete(query)
-            db.session.delete(packing)
+
+        db.session.delete(packing_entry)
 
         db.session.commit()
 
