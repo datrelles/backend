@@ -10,13 +10,14 @@ from src.models.entities.vt_detalles_orden_general import VtDetallesOrdenGeneral
 from src.config.database import db
 from src.models.tipo_aforo import StTipoAforo
 from src.models.aduana import StAduRegimen
-from sqlalchemy import and_, or_, func
+from sqlalchemy import and_, or_, func, tuple_
 import datetime
 from decimal import Decimal
 from datetime import datetime, date
 import logging
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
+import requests
 
 bpcustom = Blueprint('routes_custom', __name__)
 
@@ -447,52 +448,41 @@ def obtener_orden_compra_det_param():
 @jwt_required()
 @cross_origin()
 def obtener_orden_compra_track_param():
-
-    empresa = request.args.get('empresa', None)
     cod_po = request.args.get('cod_po', None)
-    tipo_comprobante = request.args.get('tipo_comprobante', None)
-    secuencia = request.args.get('secuencia', None)
+    subquery = (db.session.query(StTracking.cod_item,func.max(StTracking.secuencia).label("max_secuencia")).filter(StTracking.cod_po == cod_po).group_by(StTracking.cod_item).subquery())
+    query = (db.session.query(StTracking.cod_item,StTracking.fecha,StTracking.secuencia).filter(StTracking.cod_po == cod_po).filter(tuple_(StTracking.cod_item, StTracking.secuencia).in_(subquery.select())).all())
 
-    query = StTracking.query()
-    if empresa:
-        query = query.filter(StTracking.empresa == empresa)
-    if cod_po:
-        query = query.filter(StTracking.cod_po == cod_po)
-    if tipo_comprobante:
-        query = query.filter(StTracking.tipo_comprobante == tipo_comprobante)
-    if secuencia:
-        query = query.filter(StTracking.secuencia == secuencia)
+    query2 = TgModeloItem.query().filter(TgModeloItem.empresa == 20).filter(TgModeloItem.cod_modelo == 'IMPR')
+    estados = query2.all()
+    serialized_estados = []
 
-    seguimientos = query.all()
-    serialized_seguimientos = []
-    for seguimiento in seguimientos:
-        cod_po = seguimiento.cod_po if seguimiento.cod_po else ""
-        tipo_comprobante = seguimiento.tipo_comprobante if seguimiento.tipo_comprobante else ""
-        empresa = seguimiento.empresa if seguimiento.empresa else ""
-        secuencia = seguimiento.secuencia if seguimiento.secuencia else ""
-        observaciones = seguimiento.observaciones if seguimiento.observaciones else ""
-        cod_modelo = seguimiento.cod_modelo if seguimiento.cod_modelo else ""
-        cod_item = seguimiento.cod_modelo if seguimiento.cod_modelo else ""
-        fecha = datetime.strftime(seguimiento.fecha,"%d/%m/%Y") if seguimiento else ""
-        usuario_crea = seguimiento.usuario_crea if seguimiento.usuario_crea else ""
-        fecha_crea = datetime.strftime(seguimiento.fecha_crea,"%d/%m/%Y") if seguimiento.fecha_crea else ""
-        usuario_modifica = seguimiento.usuario_modifica if seguimiento.usuario_modifica else ""
-        fecha_modifica = datetime.strftime(seguimiento.fecha_modifica,"%d/%m/%Y") if seguimiento.fecha_modifica else ""
-        serialized_seguimientos.append({
-            'cod_po': cod_po,
-            'tipo_comprobante': tipo_comprobante,
-            'empresa': empresa,
-            'secuencia': secuencia,
-            'observaciones': observaciones,
-            'cod_modelo': cod_modelo,
-            'cod_item': cod_item,
-            'fecha': fecha,
-            'usuario_crea': usuario_crea,
-            'fecha_crea': fecha_crea,
-            'usuario_modifica': usuario_modifica,
-            'fecha_modifica': fecha_modifica,
+    for estado in estados:
+        cod_item = estado.cod_item if estado.cod_item else ""
+        serialized_estados.append({
+            'cod': cod_item
         })
-    return jsonify(serialized_seguimientos)
+
+    serialized_seguimientos = []
+    for seguimiento in query:
+        secuencia = seguimiento.secuencia if seguimiento.secuencia else ""
+        cod_item = seguimiento.cod_item if seguimiento.cod_item else ""
+        fecha = datetime.strftime(seguimiento.fecha, "%d/%m/%Y") if seguimiento.fecha else ""
+        serialized_seguimientos.append({
+            'secuencia': secuencia,
+            'cod': cod_item,
+            'fecha': fecha,
+        })
+    serialized_seguimientos_ordenados = sorted(serialized_seguimientos, key=lambda x: x['cod'])
+
+    codigos_existentes = set(item['cod'] for item in serialized_seguimientos_ordenados)
+
+    for codigo in serialized_estados:
+        cod = codigo['cod']
+        if cod not in codigos_existentes:
+            # Si el código no existe, agregamos un diccionario con secuencia y fecha a None
+            serialized_seguimientos_ordenados.append({'secuencia': None, 'cod': cod, 'fecha': None})
+
+    return sorted(serialized_seguimientos_ordenados, key=lambda x: x['cod'])
 
 @bpcustom.route('/tracking_bl_param')
 @jwt_required()
@@ -503,41 +493,43 @@ def obtener_tracking_bl_param():
         empresa = request.args.get('empresa', None)
         secuencial = request.args.get('secuencial', None)
 
-        query = StTrackingBl.query()
-        if cod_bl_house:
-            query = query.filter(StTrackingBl.cod_bl_house == cod_bl_house)
-        if empresa:
-            query = query.filter(StTrackingBl.empresa == empresa)
-        if secuencial:
-            query = query.filter(StTrackingBl.secuencial == secuencial)
-        
-        track_bls = query.all()
+        subquery = (db.session.query(StTrackingBl.cod_item, func.max(StTrackingBl.secuencial).label("max_secuencia")).filter(
+            StTrackingBl.cod_bl_house == cod_bl_house).group_by(StTrackingBl.cod_item).subquery())
+        query = (db.session.query(StTrackingBl.cod_bl_house, StTrackingBl.cod_item, StTrackingBl.fecha, StTrackingBl.secuencial).filter(
+            StTrackingBl.cod_bl_house == cod_bl_house).filter(
+            tuple_(StTrackingBl.cod_item, StTrackingBl.secuencial).in_(subquery.select())).all())
+
         serialized_bls = []
 
-        for bl in track_bls:
-            cod_bl_house = bl.cod_bl_house if bl.cod_bl_house else ""
-            empresa = bl.empresa if bl.empresa else ""
+        query2 = TgModeloItem.query().filter(TgModeloItem.empresa == 20).filter(TgModeloItem.cod_modelo == 'BL')
+        estados = query2.all()
+        serialized_estados = []
+
+        for estado in estados:
+            cod_item = estado.cod_item if estado.cod_item else ""
+            serialized_estados.append({
+                'cod_item': cod_item
+            })
+
+        for bl in query:
+
             secuencial = bl.secuencial if bl.secuencial else ""
-            observaciones = bl.observaciones if bl.observaciones else ""
-            cod_modelo = bl.cod_modelo if bl.cod_modelo else ""
-            fecha_crea = datetime.strftime(bl.fecha_crea,"%d/%m/%Y") if bl.fecha_crea else ""
-            usuario_modifica = bl.usuario_modifica if bl.usuario_modifica else ""
-            fecha_modifica = datetime.strftime(bl.fecha_modifica,"%d/%m/%Y") if bl.fecha_modifica else ""
             fecha = datetime.strftime(bl.fecha,"%d/%m/%Y") if bl.fecha else ""
             cod_item = bl.cod_item if bl.cod_item else ""
             serialized_bls.append({
-                'cod_bl_house': cod_bl_house,
-                'empresa': empresa,
                 'secuencial': secuencial,
-                'observaciones': observaciones,
-                'cod_modelo': cod_modelo,
-                'fecha_crea': fecha_crea,
-                'usuario_modifica': usuario_modifica,
-                'fecha_modifica': fecha_modifica,
                 'fecha': fecha,
                 'cod_item': cod_item,
             })
-        return jsonify(serialized_bls)
+        codigos_existentes = set(item['cod_item'] for item in serialized_bls)
+
+        for codigo in serialized_estados:
+            cod = codigo['cod_item']
+            if cod not in codigos_existentes:
+                # Si el código no existe, agregamos un diccionario con secuencia y fecha a None
+                serialized_bls.append({'secuencia': None, 'cod_item': cod, 'fecha': None})
+
+        return sorted(serialized_bls, key=lambda x: x['cod_item'])
         
     except Exception as e:
         logger.exception(f"Error al eliminar: {str(e)}")
@@ -1024,9 +1016,13 @@ def eliminar_orden_compra_packinglist_por_contenedor():
 @cross_origin()
 def obtener_container_por_nro():
     nro_contenedor = request.args.get('nro_contenedor', None)
+    cod_bl_house = request.args.get('cod_bl_house', None)
     query = StEmbarqueContenedores.query()
     if nro_contenedor:
         query = query.filter(StEmbarqueContenedores.nro_contenedor == nro_contenedor)
+
+    if cod_bl_house:
+        query = query.filter(StEmbarqueContenedores.codigo_bl_house == cod_bl_house)
 
     contenedores = query.all()
     serialized_contenedores = []
