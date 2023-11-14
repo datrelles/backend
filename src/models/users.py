@@ -152,6 +152,7 @@ class Usuario(Base):
     e_mail = Column(VARCHAR(60))
     password = Column(VARCHAR(110))
     empresa = deferred(relationship(Empresa, backref = 'Usuario'))
+    celular = Column(VARCHAR(20))
     @classmethod
     def query(cls):
         return db.session.query(cls)
