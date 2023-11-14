@@ -1000,6 +1000,8 @@ def eliminar_orden_compra_packinglist_por_contenedor():
             query = StOrdenCompraDet.query().filter_by(cod_po=packing.cod_po, cod_producto=packing.cod_producto, empresa=empresa).first()
             if query:
                 query.saldo_producto = query.saldo_producto + Decimal(str(packing.cantidad))
+                query.fob = 0
+                query.fob_total = 0
                 if query.cantidad_pedido == 0:
                     db.session.delete(query)
             db.session.delete(packing)

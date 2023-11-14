@@ -3,7 +3,7 @@ from flask import request, jsonify, Blueprint
 from src import oracle
 
 
-auth = Blueprint("auth", __name__)
+auth = Blueprint("auth2", __name__)
 
 
 @auth.route("/get-token", methods=["POST"])

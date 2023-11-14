@@ -20,6 +20,7 @@ from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, u
 ###################################################
 from src.config.database import db
 from src.routes.routes import bp
+from src.routes.routes_auth import au
 from src.routes.routes_custom import bpcustom
 ###################################################
 
@@ -47,6 +48,7 @@ db.init_app(app)
 
 app.register_blueprint(bp)
 app.register_blueprint(bpcustom)
+app.register_blueprint(au, url_prefix="/auth")
 #############################################################################
 
 jwt = JWTManager(app)
