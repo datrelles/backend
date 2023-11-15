@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, current_app
 from flask_jwt_extended import jwt_required
 from sqlalchemy import desc
-from datetime import datetime
+from datetime import datetime, timedelta
 from src.config.database import db
 from flask_cors import cross_origin
 from src.models.auth2.autorizacion import TiOpenAuthorization
@@ -11,10 +11,9 @@ import logging
 from src.models.entities.User import User
 import secrets
 import string
-
 au = Blueprint('routes_auth', __name__)
 logger = logging.getLogger(__name__)
-
+from flask_jwt_extended import create_access_token
 def generate_random_token():
     # Generar 6 números aleatorios
     random_numbers = ''.join(secrets.choice(string.digits) for _ in range(6))
@@ -119,7 +118,8 @@ def set_auth(usuario):
         email = user.e_mail
         cuenta_whatsapp = data.get('cuenta_whatsapp', None)
         nro_whatsapp = user.celular
-        ip_autentica = data.get('ip_autentica', None)
+        ip_autentica = request.headers.get('X-Forwarded-For') if request.headers.get(
+            'X-Forwarded-For') else request.remote_addr
         fecha_registro = datetime.now()
         nombre_host = data.get('nombre_host', None)
 
@@ -159,13 +159,12 @@ def set_auth(usuario):
 
 
 @au.route('/verify_authorization/<usuario>', methods=['PUT'])
-@jwt_required()
 @cross_origin()
 def verify_auth(usuario):
     try:
         data = request.get_json()
-        if not data.get('mantiene_sesion') or data.get('mantiene_sesion')=='':
-            return jsonify({'error': 'Informacion de sesion faltante'}), 404
+        #if not data.get('mantiene_sesion') or data.get('mantiene_sesion')=='':
+         #   return jsonify({'error': 'Informacion de sesion faltante'}), 404
 
         usuario = usuario.upper()
         user = db.session.query(Usuario).filter_by(usuario_oracle=usuario).first()
@@ -182,16 +181,52 @@ def verify_auth(usuario):
         if len(token)!=7 or token[-1].islower() or token[-1].isdigit():
             return jsonify({'error': 'Formato incorrecto de token'}), 404
 
+        print(token)
+        print(auth.token)
         if token == auth.token:
-            auth.valida = 1
+            if datetime.now() - auth.fecha_registro < timedelta(minutes=10):
+                auth.valida = 1
+                access_token = create_access_token(identity=usuario)
+                print(access_token)
+                db.session.commit()
+                return {
+                    "access_token": access_token
+
+                }
+            else:
+                return jsonify({'error': 'Token expirado'}), 404
         else:
             return jsonify({'error': 'Token Invalido'}), 404
 
+        #mantiene_sesion = data.get('mantiene_sesion', None)
+        #auth.mantiene_sesion = mantiene_sesion
+
+    except Exception as e:
+        logger.exception(f"Error al editar registro: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@au.route('/verify_sesion/<usuario>', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def verify_session(usuario):
+    try:
+        data = request.get_json()
+        if not data.get('mantiene_sesion') or data.get('mantiene_sesion')=='':
+            return jsonify({'error': 'Informacion de sesion faltante'}), 404
+
+        usuario = usuario.upper()
+        user = db.session.query(Usuario).filter_by(usuario_oracle=usuario).first()
+
+        if not user:
+            return jsonify({'error': 'El usuario no existe.'}), 404
+
+        auth = db.session.query(TiOpenAuthorization).filter_by(usuario_oracle=usuario)
+        auth = auth.order_by(desc(TiOpenAuthorization.fecha_registro))
+        auth = auth.first()
         mantiene_sesion = data.get('mantiene_sesion', None)
         auth.mantiene_sesion = mantiene_sesion
         db.session.commit()
-
-        return jsonify({'Success': 'Registro de Autorizacion Actualizado'})
+        return jsonify({'saveDevice': 'successful'})
 
     except Exception as e:
         logger.exception(f"Error al editar registro: {str(e)}")
