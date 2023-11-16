@@ -211,6 +211,7 @@ def verify_auth(usuario):
 def verify_session(usuario):
     try:
         data = request.get_json()
+        so=data.get('navegador')
         if not data.get('mantiene_sesion') or data.get('mantiene_sesion')=='':
             return jsonify({'error': 'Informacion de sesion faltante'}), 404
 
@@ -225,6 +226,8 @@ def verify_session(usuario):
         auth = auth.first()
         mantiene_sesion = data.get('mantiene_sesion', None)
         auth.mantiene_sesion = mantiene_sesion
+        auth.navegador_so=so
+
         db.session.commit()
         return jsonify({'saveDevice': 'successful'})
 
