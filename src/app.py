@@ -1,6 +1,7 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, request, jsonify
 from numpy.core.defchararray import upper
+from flask_mail import Mail, Message
 
 import oracle
 from routes.web_services import web_services
@@ -22,17 +23,29 @@ from src.config.database import db
 from src.routes.routes import bp
 from src.routes.routes_auth import au
 from src.routes.routes_custom import bpcustom
+
 ###################################################
 
 dotenv.load_dotenv()
 
 app = Flask(__name__)
+
+#####################mail################################
+
+app.config['MAIL_SERVER'] = 'mail.massline.com.ec'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USERNAME'] = ''
+app.config['MAIL_PASSWORD'] = ''
+app.config['MAIL_USE_TLS'] = False
+app.config['MAIL_USE_SSL'] = False
+mail = Mail(app)
+###################################################
+
 app.config["JWT_SECRET_KEY"] = "please-remember-me"
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=2)
 app.config['CORS_HEADERS'] = 'Content-Type'
 scheduler = BackgroundScheduler()
 
-###################################################
 os.environ["NLS_LANG"] = ".UTF8"
 
 # Configuración de la base de datos
@@ -50,6 +63,7 @@ app.register_blueprint(bp)
 app.register_blueprint(bpcustom)
 app.register_blueprint(au, url_prefix="/auth")
 #############################################################################
+
 
 jwt = JWTManager(app)
 CORS(app)
