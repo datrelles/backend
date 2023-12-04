@@ -42,7 +42,7 @@ mail = Mail(app)
 ###################################################
 
 app.config["JWT_SECRET_KEY"] = "please-remember-me"
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=15)
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=30)
 app.config['CORS_HEADERS'] = 'Content-Type'
 scheduler = BackgroundScheduler()
 
