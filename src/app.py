@@ -42,7 +42,7 @@ mail = Mail(app)
 ###################################################
 
 app.config["JWT_SECRET_KEY"] = "please-remember-me"
-app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=5)
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=30)
 app.config['CORS_HEADERS'] = 'Content-Type'
 scheduler = BackgroundScheduler()
 
@@ -99,23 +99,6 @@ def create_token():
             return {"msg": "Wrong username"}, 401
     except Exception as ex:
         raise Exception(ex)
-
-@app.after_request
-@cross_origin()
-def refresh_expiring_jwts(response):
-    try:
-        exp_timestamp = get_jwt()["exp"]
-        now = datetime.now(timezone.utc)
-        target_timestamp = datetime.timestamp(now + timedelta(days=5))
-        if target_timestamp > exp_timestamp:
-            access_token = create_access_token(identity=get_jwt_identity())
-            data = response.get_json()
-            if type(data) is dict:
-                data["access_token"] = access_token
-                response.data = json.dumps(data)
-        return response
-    except (RuntimeError, KeyError):
-        return response
 
 @app.route('/enterprise/<id>')
 @jwt_required()
