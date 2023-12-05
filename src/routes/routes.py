@@ -5,6 +5,7 @@ from src.models.tipo_comprobante import TipoComprobante
 from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
 from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StTracking, StPackinglist
 from src.models.productos import Producto
+from src.models.formula import StFormula, StFormulaD
 from src.models.despiece import StDespiece, StDespieceD
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
@@ -908,7 +909,31 @@ def obtener_secuencia(cod_po):
     else:
         # Si el cod_po no existe en la tabla StOrdenCompraCab, mostrar mensaje de error
         raise ValueError('La Orden de Compra no existe.')
-    
+
+
+def obtener_secuencia_formule(cod_formula):
+    existe_cod_formula = db.session.query(StFormula).filter_by(cod_formula=cod_formula).first()
+
+    if existe_cod_formula is not None:
+        print('EXISTE', existe_cod_formula.cod_formula)
+        existe_formula_det = db.session.query(StFormulaD).filter_by(cod_formula=cod_formula).first()
+
+        if existe_formula_det is not None:
+            print('EXISTE2', existe_formula_det.cod_formula)
+            max_secuencia = db.session.query(func.max(StFormulaD.secuencia)).filter_by(
+                cod_formula=cod_formula).distinct().scalar()
+            print('MAXIMO', max_secuencia)
+            nueva_secuencia = int(max_secuencia) + 1
+            print('PROXIMO', nueva_secuencia)
+            return nueva_secuencia
+        else:
+            nueva_secuencia = 1
+            print('Secuencia de inicio', nueva_secuencia)
+            return nueva_secuencia
+    else:
+        raise ValueError('La Formula no existe.')
+
+
 #Funcion para obtener el cod_producto_modelo segun el cod_producto
 def obtener_cod_producto_modelo(empresa, cod_producto):
     try:

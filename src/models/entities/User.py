@@ -12,4 +12,4 @@ class User(UserMixin):
     def check_password(self, hashed_password, password):
         return check_password_hash(hashed_password, password)
 
-# print(generate_password_hash('bangbang'))
+# print(generate_password_hash('G3renciaB1'))
