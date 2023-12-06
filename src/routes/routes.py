@@ -2097,3 +2097,13 @@ def actualizar_contenedor(nro_contenedor, empresa):
         logger.exception(f"Error al actualizar Embarque: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
+@bp.route('/comprobante/electronico', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def insertFortLote():
+    try:
+        palabra='word'
+
+    except Exception as e:
+        return jsonify({'error', str(e)}), 500
