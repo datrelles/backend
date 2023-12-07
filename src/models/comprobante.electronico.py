@@ -1,17 +1,28 @@
-from sqlalchemy import Column, DateTime, Index, VARCHAR, text, CHAR
+from sqlalchemy import Column, DateTime, Index, VARCHAR, text, CHAR, Float
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
 
 Base = declarative_base(metadata = db.metadata)
 
-class StPuertosEmbarque(Base):
-    __tablename__ = 'st_puertos_embarque'
-    __table_args__ = {'schema': 'stock'}
+class tc_doc_elec_recibidos(Base):
+    __tablename__ = 'tc_doc_elec_recibidos'
+    __table_args__ =(
+        Index("RUC_COMPROBANTE","RUC_EMISOR", "SERIE_COMPROBANTE"),
+        {'schema': 'computo'})
 
-    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
-    cod_puerto = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
-    descripcion = Column(VARCHAR(100))
+    ruc_emisor = Column(VARCHAR(13), primary_key=True)
+    serie_comprobante = Column(VARCHAR(50), primary_key=True)
+    comprobante = Column(VARCHAR(50))
+    razon_social_emisor = Column(VARCHAR(255))
+    fecha_emision = Column(DateTime)
+    fecha_autorizacion = Column(DateTime)
+    tipo_emision = Column(VARCHAR(50))
+    numero_documento_modificado = Column(VARCHAR(50))
+    identificacion_receptor = Column(VARCHAR(13))
+    clave_acceso = Column(VARCHAR(100))
+    numero_autorizacion = Column(VARCHAR(100))
+    importe_total = Column(Float)
 
     @classmethod
     def query(cls):
