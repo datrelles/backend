@@ -10,6 +10,7 @@ from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
 from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque, StNaviera, StEmbarqueContenedores, StTipoContenedor
 from src.models.tipo_aforo import StTipoAforo
+# from src.models.comprobante_electronico import tc_doc_elec_recibidos
 from src.config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer, event
 from sqlalchemy.orm import scoped_session
@@ -2103,7 +2104,16 @@ def actualizar_contenedor(nro_contenedor, empresa):
 @cross_origin()
 def insertFortLote():
     try:
-        palabra='word'
+        # Obtén el JSON enviado desde el front-end
+        dataSri = request.get_json()
 
+        # Verifica si se recibió correctamente el JSON
+        if dataSri:
+            # Puedes acceder a los datos del JSON usando dataSri
+            palabra = dataSri.get('palabra', 'word')  # Obtén el valor de 'palabra' o usa 'word' por defecto
+            print(palabra)
+            return jsonify({'message': 'success'})
+        else:
+            return jsonify({'error': 'No se recibió el JSON esperado'}), 400
     except Exception as e:
-        return jsonify({'error', str(e)}), 500
+        return jsonify({'error': str(e)}), 500
