@@ -10,10 +10,11 @@ from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
 from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque, StNaviera, StEmbarqueContenedores, StTipoContenedor
 from src.models.tipo_aforo import StTipoAforo
-# from src.models.comprobante_electronico import tc_doc_elec_recibidos
+from src.models.comprobante_electronico import tc_doc_elec_recibidos
 from src.config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer, event
 from sqlalchemy.orm import scoped_session
+from sqlalchemy import and_, or_, func, tuple_
 import logging
 import datetime
 from datetime import datetime,date
@@ -2105,15 +2106,95 @@ def actualizar_contenedor(nro_contenedor, empresa):
 def insertFortLote():
     try:
         # Obtén el JSON enviado desde el front-end
-        dataSri = request.get_json()
-
+        data = request.get_json()
+        query = tc_doc_elec_recibidos.query()
         # Verifica si se recibió correctamente el JSON
-        if dataSri:
-            # Puedes acceder a los datos del JSON usando dataSri
-            palabra = dataSri.get('palabra', 'word')  # Obtén el valor de 'palabra' o usa 'word' por defecto
-            print(palabra)
-            return jsonify({'message': 'success'})
+        if data:
+            # Puedes acceder a los datos del JSON usando dataSr
+            for item in data:
+                existing_entry = query.filter(
+                    tc_doc_elec_recibidos.ruc_emisor == item['RUC_EMISOR'],
+                    tc_doc_elec_recibidos.serie_comprobante == item['SERIE_COMPROBANTE']
+                ).first()
+
+                if existing_entry:
+                    pass
+                else:
+
+                    fecha_emision = datetime.strptime(item['FECHA_EMISION'], '%d/%m/%Y')
+                    fecha_autorizacion = datetime.strptime(item['FECHA_AUTORIZACION'], '%d/%m/%Y %H:%M:%S')
+                    importe_total = float(item.get('IMPORTE_TOTAL', '0')) if item.get('IMPORTE_TOTAL', '0') != '' else 0
+                    new_entry = tc_doc_elec_recibidos(
+                        ruc_emisor=item.get('RUC_EMISOR'),
+                        serie_comprobante=item['SERIE_COMPROBANTE'],
+                        comprobante=item['COMPROBANTE'].upper(),
+                        razon_social_emisor=item['RAZON_SOCIAL_EMISOR'].upper(),
+                        fecha_emision=fecha_emision,
+                        fecha_autorizacion=fecha_autorizacion,
+                        tipo_emision=item['TIPO_EMISION'],
+                        numero_documento_modificado=item.get('NUMERO_DOCUMENTO_MODIFICADO', ''),
+                        identificacion_receptor=item['IDENTIFICACION_RECEPTOR'],
+                        clave_acceso=item['CLAVE_ACCESO'],
+                        numero_autorizacion=item['NUMERO_AUTORIZACION'],
+                        importe_total=importe_total
+                    )
+                    db.session.add(new_entry)
+                    db.session.commit()
         else:
             return jsonify({'error': 'No se recibió el JSON esperado'}), 400
+        return jsonify({'message': 'success'})
     except Exception as e:
+            # En lugar de devolver un mensaje genérico, imprime el error para obtener más información
+            print(str(e))
+            return jsonify({'error': 'Server Error'}), 500
+
+
+@bp.route('/doc_elec_recibidos', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def obtener_doc_elec_recibidos():
+    try:
+        #query = tc_doc_elec_recibidos.query().slice(0, 100)  # Utiliza el método query de la clase tc_doc_elec_recibidos
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        
+        print(start_date_str)
+        print(end_date_str)
+        if start_date_str and end_date_str:
+            start_date = datetime.strptime(start_date_str, "%d/%m/%Y")
+            end_date = datetime.strptime(end_date_str, "%d/%m/%Y")
+
+            query = tc_doc_elec_recibidos.query()
+            documentos = query.filter(and_(
+            tc_doc_elec_recibidos.fecha_emision >= start_date,
+            tc_doc_elec_recibidos.fecha_emision <= end_date
+            ))
+
+            serialized_documentos = []
+
+            for documento in documentos:
+                serialized_documentos.append({
+                    'ruc_emisor': documento.ruc_emisor,
+                    'serie_comprobante': documento.serie_comprobante,
+                    'comprobante': documento.comprobante,
+                    'razon_social_emisor': documento.razon_social_emisor,
+                    'fecha_emision': documento.fecha_emision.strftime("%d/%m/%Y") if documento.fecha_emision else "",
+                    'fecha_autorizacion': documento.fecha_autorizacion.strftime(
+                        "%d/%m/%Y") if documento.fecha_autorizacion else "",
+                    'tipo_emision': documento.tipo_emision,
+                    'numero_documento_modificado': documento.numero_documento_modificado,
+                    'identificacion_receptor': documento.identificacion_receptor,
+                    'clave_acceso': documento.clave_acceso,
+                    'numero_autorizacion': documento.numero_autorizacion,
+                    'importe_total': float(documento.importe_total) if documento.importe_total is not None else None
+                })
+
+            return jsonify(serialized_documentos)
+        else:
+                return jsonify('without date')
+
+
+
+    except Exception as e:
+        logger.exception(f"Error al actualizar Embarque: {str(e)}")
         return jsonify({'error': str(e)}), 500

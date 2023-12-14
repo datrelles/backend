@@ -7,12 +7,13 @@ Base = declarative_base(metadata = db.metadata)
 
 class tc_doc_elec_recibidos(Base):
     __tablename__ = 'tc_doc_elec_recibidos'
-    __table_args__ =(
-        Index("RUC_COMPROBANTE","RUC_EMISOR", "SERIE_COMPROBANTE"),
-        {'schema': 'computo'})
+    __table_args__ = (
+        Index("RUC_COMPROBANTE","ruc_emisor", "serie_comprobante"),
+        {'schema': 'computo'}
+    )
 
-    ruc_emisor = Column(VARCHAR(13), primary_key=True)
-    serie_comprobante = Column(VARCHAR(50), primary_key=True)
+    ruc_emisor = Column(VARCHAR(13), primary_key=True, nullable=False)
+    serie_comprobante = Column(VARCHAR(50), primary_key=True, nullable=False)
     comprobante = Column(VARCHAR(50))
     razon_social_emisor = Column(VARCHAR(255))
     fecha_emision = Column(DateTime)

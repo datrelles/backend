@@ -173,8 +173,7 @@ def branch(id,en):
         return json.dumps(agencias_ordenadas)
     except Exception as ex:
         raise Exception(ex)
-    return response_body
-
+    return response_body 
 @app.route('/modules/<user>/<enterprise>')
 @jwt_required()
 @cross_origin()
