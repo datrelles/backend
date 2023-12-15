@@ -1131,8 +1131,8 @@ def obtener_productos_por_categoria():
         cod_item = data.get('cod_item', None)
         cod_modelo_cat1 = data.get('cod_modelo_cat1', None)
         cod_item_cat1 = data.get('cod_item_cat1', None)
-        print(empresa,"/",cod_modelo_cat , "/", cod_item_cat, "/", cod_modelo, "/", cod_item, "/", cod_modelo_cat1,"/",cod_item_cat1)
         if not cod_modelo_cat or not cod_item_cat or not cod_modelo or not cod_item or not cod_modelo_cat1 or not cod_item_cat1:
+
             return jsonify({'error': 'Faltan valores por ingresar.'}), 404
 
         query = Producto.query()
@@ -1245,6 +1245,128 @@ def obtener_productos_por_categoria():
         return jsonify({'error': str(e)}), 500
 
 
+@bpcustom.route('/productos_by_cod', methods=['POST'])
+# @jwt_required()
+@cross_origin()
+def obtener_productos_por_codigo():
+    try:
+        data = request.get_json()
+        empresa = data.get('empresa', None)
+        cod_producto = data.get('cod_producto', None)
+        print(cod_producto)
+        if not cod_producto:
+            return jsonify({'error': 'Falta ingresar el codigo de producto.'}), 404
+
+        query = Producto.query()
+
+        if empresa:
+            query = query.filter(Producto.empresa == empresa)
+
+        query = query.filter(Producto.cod_producto.like(f'%{cod_producto}%'))
+        query = query.filter(Producto.activo == 'S')
+
+        productos = query.all()
+        serialized_productos = []
+
+        for producto in productos:
+            empresa = producto.empresa if producto.empresa else ""
+            cod_producto = producto.cod_producto if producto.cod_producto else ""
+            tipo_inventario = producto.tipo_inventario if producto.tipo_inventario else ""
+            cod_unidad = producto.cod_unidad if producto.cod_unidad else ""
+            cod_marca = producto.cod_marca if producto.cod_marca else ""
+            cod_alterno = producto.cod_alterno if producto.cod_alterno else ""
+            nombre = producto.nombre if producto.nombre else ""
+            cod_barra = producto.cod_barra if producto.cod_barra else ""
+            useridc = producto.useridc if producto.useridc else ""
+            niv_cod_nivel = producto.niv_cod_nivel if producto.niv_cod_nivel else ""
+            niv_secuencia = producto.niv_secuencia if producto.niv_secuencia else ""
+            niv_cat_emp_empresa = producto.niv_cat_emp_empresa if producto.niv_cat_emp_empresa else ""
+            niv_cat_cod_categoria = producto.niv_cat_cod_categoria if producto.niv_cat_cod_categoria else ""
+            promedio = producto.promedio if producto.promedio else ""
+            presentacion = producto.presentacion if producto.presentacion else ""
+            volumen = producto.volumen if producto.volumen else ""
+            grado = producto.grado if producto.grado else ""
+            iva = producto.iva if producto.iva else ""
+            referencia = producto.referencia if producto.referencia else ""
+            partida = producto.partida if producto.partida else ""
+            minimo = producto.minimo if producto.minimo else ""
+            maximo = producto.maximo if producto.maximo else ""
+            costo = producto.costo if producto.costo else ""
+            dolar = producto.dolar if producto.dolar else ""
+            activo = producto.activo if producto.activo else ""
+            alcohol = producto.alcohol if producto.alcohol else ""
+            cod_unidad_r = producto.cod_unidad_r if producto.cod_unidad_r else ""
+            cod_modelo = producto.cod_modelo if producto.cod_modelo else ""
+            cod_item = producto.cod_item if producto.cod_item else ""
+            es_fabricado = producto.es_fabricado if producto.es_fabricado else ""
+            cod_modelo_cat = producto.cod_modelo_cat if producto.cod_modelo_cat else ""
+            cod_item_cat = producto.cod_item_cat if producto.cod_item_cat else ""
+            cod_unidad_f = producto.cod_unidad_f if producto.cod_unidad_f else ""
+            cantidad = producto.cantidad if producto.cantidad else ""
+            cantidad_i = producto.cantidad_i if producto.cantidad_i else ""
+            serie = producto.serie if producto.serie else ""
+            es_express = producto.es_express if producto.es_express else ""
+            precio = producto.precio if producto.precio else ""
+            cod_modelo_cat1 = producto.cod_modelo_cat1 if producto.cod_modelo_cat1 else ""
+            cod_item_cat1 = producto.cod_item_cat1 if producto.cod_item_cat1 else ""
+            ice = producto.ice if producto.ice else ""
+            control_lote = producto.control_lote if producto.control_lote else ""
+            es_grupo_modelo = producto.es_grupo_modelo if producto.es_grupo_modelo else ""
+            cod_producto_modelo = producto.cod_producto_modelo if producto.cod_producto_modelo else ""
+            serialized_productos.append({
+                'empresa': empresa,
+                'cod_producto': cod_producto,
+                'tipo_inventario': tipo_inventario,
+                'cod_marca': cod_marca,
+                'cod_unidad': cod_unidad,
+                'cod_alterno': cod_alterno,
+                'nombre': nombre,
+                'cod_barra': cod_barra,
+                'useridc': useridc,
+                'niv_cod_nivel': niv_cod_nivel,
+                'niv_secuencia': niv_secuencia,
+                'niv_cat_emp_empresa': niv_cat_emp_empresa,
+                'niv_cat_cod_categoria': niv_cat_cod_categoria,
+                'promedio': promedio,
+                'presentacion': presentacion,
+                'volumen': volumen,
+                'grado': grado,
+                'iva': iva,
+                'referencia': referencia,
+                'partida': partida,
+                'minimo': minimo,
+                'maximo': maximo,
+                'costo': costo,
+                'dolar': dolar,
+                'activo': activo,
+                'alcohol': alcohol,
+                'cod_unidad_r': cod_unidad_r,
+                'cod_modelo': cod_modelo,
+                'cod_item': cod_item,
+                'es fabricado': es_fabricado,
+                'cod_modelo_cat': cod_modelo_cat,
+                'cod_item_cat': cod_item_cat,
+                'cod_unidad_f': cod_unidad_f,
+                'cantidad': cantidad,
+                'cantidad_i': cantidad_i,
+                'serie': serie,
+                'es_express': es_express,
+                'precio': precio,
+                'cod_modelo_cat1': cod_modelo_cat1,
+                'cod_item_cat1': cod_item_cat1,
+                'ice': ice,
+                'control_lote': control_lote,
+                'es_grupo_modelo': es_grupo_modelo,
+                'cod_producto_modelo': cod_producto_modelo
+            })
+        return jsonify(serialized_productos)
+
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        # logging.error('Ocurrio un error: %s',e)
+        return jsonify({'error': str(e)}), 500
+
+
 @bpcustom.route('/formule', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -1328,6 +1450,31 @@ def formule_d():
 
     return jsonify(serialized_formulad)
 
+@bpcustom.route('/formule_d', methods=['DELETE'])
+@jwt_required()
+@cross_origin()
+def formule_d_delete():
+    data = request.get_json()
+    empresa = data.get('empresa', None)
+    cod_formula = data.get('cod_formula', None)
+    secuencia = data.get('secuencia', None)
+
+    query = StFormulaD.query()
+    if empresa:
+        query = query.filter(StFormulaD.empresa == empresa)
+    if cod_formula:
+        query = query.filter(StFormulaD.cod_formula == cod_formula)
+    if secuencia:
+        query = query.filter(StFormulaD.secuencia == secuencia)
+
+    formulad = query.first()
+
+    db.session.delete(formulad)
+
+    db.session.commit()
+
+    return jsonify({'Success': 'Detalle de Formula Eliminado'})
+
 @bpcustom.route('/formule_total', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -1343,7 +1490,7 @@ def formule_total():
         cod_producto=data['formula']['cod_producto'],
         cod_unidad='U',
         cantidad_produccion=1,
-        activa=1,
+        activa=data['formula']['activa'],
         mano_obra=data['formula']['mano_obra'],
         costo_standard=data['formula']['costo_standard'],
     )
@@ -1361,7 +1508,7 @@ def formule_total():
             cod_unidad_f='U',
             cantidad_f=detalle['cantidad_f'],
             debito_credito=detalle['debito_credito'],
-            costo_standard=detalle['costo_standard']
+            costo_standard=0
         )
         db.session.add(detalle_formula)
         db.session.commit()
@@ -1374,9 +1521,9 @@ def formule_total():
 def formule_edit():
     try:
         data = request.get_json()
-        empresa = data.get('empresa', None)
-        cod_formula = data.get('cod_formula', None)
-        cod_producto = data.get('cod_producto', None)
+        empresa = data['formula']['empresa']
+        cod_formula = data['formula']['cod_formula']
+        cod_producto = data['formula']['cod_producto']
 
         query = StFormula.query()
         if empresa:
@@ -1391,14 +1538,28 @@ def formule_edit():
         if not formula:
             return jsonify({'error': 'No existe la formula'}), 404
 
-        formula.nombre = data.get('nombre', formula.nombre)
-        formula.activa = data.get('activa', formula.activa)
-        formula.mano_obra = data.get('mano_obra', formula.mano_obra)
-        formula.costo_standard = data.get('costo_standard', formula.costo_standard)
-
+        formula.nombre = data['formula']['nombre'] if data['formula']['nombre'] else formula.nombre
+        formula.activa = data['formula']['activa'] if data['formula']['activa'] else formula.activa
+        formula.cod_producto = data['formula']['cod_producto'] if data['formula']['cod_producto'] else formula.cod_producto
         db.session.commit()
 
+        for detalle in data['detalles']:
+            if 'secuencia' not in detalle:
+                detalle_formula = StFormulaD(
+                    empresa=empresa,
+                    cod_formula=cod_formula,
+                    secuencia=obtener_secuencia_formule(cod_formula),
+                    cod_producto_f=detalle['cod_producto_f'],
+                    cod_unidad_f='U',
+                    cantidad_f=detalle['cantidad_f'],
+                    debito_credito=detalle['debito_credito'],
+                    costo_standard=0
+                )
+                db.session.add(detalle_formula)
+                db.session.commit()
+
         return jsonify({'Success': 'Formula correctamente actualizada'})
+
 
     except Exception as e:
         logger.exception(f"Error al actualizar Formula: {str(e)}")
