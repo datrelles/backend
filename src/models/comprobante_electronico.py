@@ -9,7 +9,7 @@ class tc_doc_elec_recibidos(Base):
     __tablename__ = 'tc_doc_elec_recibidos'
     __table_args__ = (
         Index("RUC_COMPROBANTE","ruc_emisor", "serie_comprobante"),
-        {'schema': 'computo'}
+        {'schema': 'contabilidad'}
     )
 
     ruc_emisor = Column(VARCHAR(13), primary_key=True, nullable=False)
