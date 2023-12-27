@@ -19,6 +19,8 @@ from datetime import datetime, date
 import logging
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
+from src import oracle
+from os import getenv
 
 bpcustom = Blueprint('routes_custom', __name__)
 
@@ -1264,6 +1266,7 @@ def obtener_productos_por_codigo():
 
         query = query.filter(Producto.cod_producto.like(f'%{cod_producto}%'))
         query = query.filter(Producto.activo == 'S')
+        query = query.filter(Producto.cod_item_cat.in_(['Z', 'R']))
 
         productos = query.all()
         serialized_productos = []
@@ -1516,7 +1519,7 @@ def formule_total():
     return jsonify({'cod_formula': cod_formula})
 
 @bpcustom.route('/formule_edit', methods=['PUT'])
-# @jwt_required()
+@jwt_required()
 @cross_origin()
 def formule_edit():
     try:
@@ -1563,4 +1566,41 @@ def formule_edit():
 
     except Exception as e:
         logger.exception(f"Error al actualizar Formula: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@bpcustom.route('/validar_existencia', methods=['POST'])
+# @jwt_required()
+@cross_origin()
+def validate_existance():
+
+    try:
+        data = request.get_json()
+        cod_producto = data.get('cod_producto', None)
+        empresa = data.get('empresa', None)
+        cod_agencia = data.get('cod_agencia', None)
+        print(cod_agencia)
+        db = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cursor = db.cursor()
+        cursor.execute("""
+                    SELECT KS_INVENTARIO.consulta_existencia(
+                        :param1,
+                        :param2,
+                        :param3,
+                        :param4,
+                        TO_DATE(:param5, 'YYYY/MM/DD'),
+                        :param6,
+                        :param7,
+                        :param8 
+                    ) AS resultado
+                    FROM dual
+                """,
+                       param1=empresa, param2=cod_agencia, param3=cod_producto, param4='U', param5=date.today(), param6=1, param7='Z',
+                       param8=1)
+        db.close
+        result = cursor.fetchone()
+        cursor.close()
+        return jsonify({'cantidad_inventario': result[0]})
+
+    except Exception as e:
+        logger.exception(f"Error al obtener : {str(e)}")
         return jsonify({'error': str(e)}), 500

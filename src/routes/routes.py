@@ -23,7 +23,6 @@ from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 from decimal import Decimal
 import json
-from sqlalchemy.orm import joinedload
 from sqlalchemy import and_
 bp = Blueprint('routes', __name__)
 
