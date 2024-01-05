@@ -124,7 +124,7 @@ def enterprise(id):
         return json.dumps(empresas_ordenadas)
     except Exception as ex:
         raise Exception(ex)
-    return response_body
+    return jsonify(response_body)
 
 
 @app.route('/enterprise_default/<id>')
@@ -146,7 +146,7 @@ def enterprise_default(id):
         return json.dumps(empresas)
     except Exception as ex:
         raise Exception(ex)
-    return response_body
+    return jsonify(response_body)
 
 
 @app.route('/branch/<id>/<en>')
@@ -173,7 +173,7 @@ def branch(id,en):
         return json.dumps(agencias_ordenadas)
     except Exception as ex:
         raise Exception(ex)
-    return response_body 
+    return jsonify(response_body)
 @app.route('/modules/<user>/<enterprise>')
 @jwt_required()
 @cross_origin()
@@ -210,7 +210,7 @@ def module(user,enterprise):
         return json.dumps(modulos)
     except Exception as ex:
         raise Exception(ex)
-    return response_body
+    return jsonify(response_body)
 
 @app.route('/menus/<user>/<enterprise>/<system>')
 @jwt_required()
@@ -265,7 +265,7 @@ def menu(user,enterprise, system):
 
     except Exception as ex:
         raise Exception(ex)
-    return response_body
+    return jsonify(response_body)
 
 
 
