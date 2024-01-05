@@ -261,7 +261,7 @@ def menu(user,enterprise, system):
                     "RUTA": item["RUTA"]
                 })
 
-        return json.dumps(list(result.values()), indent=2)
+        return jsonify(list(result.values()))
 
     except Exception as ex:
         raise Exception(ex)
