@@ -69,7 +69,6 @@ jwt = JWTManager(app)
 CORS(app, resources={
     r"/*": {
         "origins": "*",  # Allows all origins
-        "methods": ["POST", "GET"],  # Allow only POST and GET methods
         "allow_headers": ["Content-Type", "Authorization"],  # Specify allowed headers
         "supports_credentials": True  # Optional, for cookies and authorization headers
     }
