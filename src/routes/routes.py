@@ -2029,7 +2029,7 @@ def obtener_packings_por_contenedor():
         if row:
             response_data = {"packings": row[0]}
             # Serializar el diccionario como JSON y devolverlo como respuesta
-            return json.dumps(response_data)
+            return jsonify(response_data)
         return None
 
     except Exception as e:

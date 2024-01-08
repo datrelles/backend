@@ -127,7 +127,7 @@ def enterprise(id):
         for result in array:
             empresas.append(dict(zip(row_headers, result)))
         empresas_ordenadas = sorted(empresas, key=lambda k: k['NOMBRE'])
-        return json.dumps(empresas_ordenadas)
+        return jsonify(empresas_ordenadas)
     except Exception as ex:
         raise Exception(ex)
     return jsonify(response_body)
@@ -149,7 +149,7 @@ def enterprise_default(id):
         empresas = []
         for result in array:
             empresas.append(dict(zip(row_headers, result)))
-        return json.dumps(empresas)
+        return jsonify(empresas)
     except Exception as ex:
         raise Exception(ex)
     return jsonify(response_body)
@@ -176,7 +176,7 @@ def branch(id,en):
         for result in array:
             agencias.append(dict(zip(row_headers, result)))
         agencias_ordenadas = sorted(agencias, key=lambda k: k['NOMBRE'])
-        return json.dumps(agencias_ordenadas)
+        return jsonify(agencias_ordenadas)
     except Exception as ex:
         raise Exception(ex)
     return jsonify(response_body)
@@ -213,7 +213,7 @@ def module(user,enterprise):
         for result in array:
             modulos.append(dict(zip(row_headers, result)))
         modulos = sorted(modulos, key=lambda k: k['SISTEMA'])
-        return json.dumps(modulos)
+        return jsonify(modulos)
     except Exception as ex:
         raise Exception(ex)
     return jsonify(response_body)
