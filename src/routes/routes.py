@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from src.models.users import Usuario, Empresa
 from src.models.tipo_comprobante import TipoComprobante
 from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
-from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StTracking, StPackinglist
+from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StTracking, StPackinglist, stProformaImpFp
 from src.models.productos import Producto
 from src.models.formula import StFormula, StFormulaD
 from src.models.despiece import StDespiece, StDespieceD
@@ -1901,8 +1901,6 @@ def crear_o_actualizar_registro_tracking_oc(session):
 
 # Registrar el evento before_commit en la sesión de SQLAlchemy para crear o actualizar registros en StTracking
 event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_oc)
-
-
 def secuencia_track_oc(cod_po):
     existe_cod_po = db.session.query(StTracking).filter_by(cod_po=cod_po).first()
 
@@ -1919,6 +1917,115 @@ def secuencia_track_oc(cod_po):
         nueva_secuencia = 1
         print('Secuencia de inicio', nueva_secuencia)
         return nueva_secuencia
+#BOX FORMAS DE PAGO
+@bp.route('/crear_anticipo_forma_de_pago_general', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def crear_anticipo_forma_de_pago_general():
+    try:
+        data = request.json
+        print(float(data['pct_valor']))
+        data['valor'] = float(data['valor'])
+        data['saldo'] = float(data['saldo'])
+        data['pct_valor'] = float(data['pct_valor'])
+        data['dias_vencimiento'] = int(data['dias_vencimiento'])
+        max_secuencia = db.session.query(func.max(stProformaImpFp.secuencia)).filter_by(
+            cod_proforma=data['cod_proforma']).scalar()
+
+        if max_secuencia is None:
+            data['secuencia'] = 1
+        else:
+            data['secuencia'] = max_secuencia + 1
+
+        nueva_proforma = stProformaImpFp(
+            empresa=data['empresa'],
+            cod_proforma=data['cod_proforma'],
+            secuencia=data['secuencia'],
+            tipo_proforma=data['tipo_proforma'],
+            fecha_vencimiento=datetime.strptime(data['fecha_vencimiento'], '%Y-%m-%d'),
+            valor=data['valor'],
+            saldo=data['saldo'],
+            descripcion=data['descripcion'],
+            cod_forma_pago=data['cod_forma_pago'],
+            dias_vencimiento=data['dias_vencimiento'],
+            pct_valor=data['pct_valor']
+        )
+
+        db.session.add(nueva_proforma)
+        db.session.commit()
+
+        return jsonify({"data": "Registro añadido correctamente"})
+
+    except Exception as e:
+        error_message = f"Error al procesar la solicitud: {str(e)}"
+        return jsonify({"error": error_message}), 500
+
+@bp.route('/actualizar_anticipo_forma_de_pago_general/<int:secuencia>/<string:cod_proforma>', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def actualizar_anticipo_forma_de_pago_general(secuencia, cod_proforma):
+    data = request.json
+    proforma_actualizada = db.session.query(stProformaImpFp).filter_by(secuencia=secuencia, cod_proforma=cod_proforma).first()
+
+    if proforma_actualizada:
+        proforma_actualizada.empresa = data['empresa']
+        proforma_actualizada.tipo_proforma = data['tipo_proforma']
+        proforma_actualizada.fecha_vencimiento = datetime.strptime(data['fecha_vencimiento'], '%Y-%m-%d')
+        proforma_actualizada.valor = float(data['valor'])
+        proforma_actualizada.saldo = data['saldo']
+        proforma_actualizada.descripcion = data['descripcion']
+        proforma_actualizada.cod_forma_pago = data['cod_forma_pago']
+        proforma_actualizada.dias_vencimiento = data['dias_vencimiento']
+        proforma_actualizada.pct_valor = float(data['pct_valor'])
+
+        db.session.commit()
+        return jsonify({"message": "Registro actualizado exitosamente."})
+    else:
+        return jsonify({"error": "No se encontró el registro para actualizar."}), 404
+
+
+@bp.route('/proformas_por_cod_proforma/<string:cod_proforma>', methods=['GET'])
+@jwt_required()
+def obtener_proformas_por_cod_proforma(cod_proforma):
+    proformas = db.session.query(stProformaImpFp).filter_by(cod_proforma=cod_proforma).order_by(stProformaImpFp.secuencia).all()
+    if not proformas:
+        return jsonify({'mensaje': 'No se encontraron proformas para el código proporcionado'}), 404
+
+    proformas_data = []
+    for proforma in proformas:
+        proformas_data.append({
+            'empresa': proforma.empresa,
+            'cod_proforma': proforma.cod_proforma,
+            'secuencia': proforma.secuencia,
+            'tipo_proforma': proforma.tipo_proforma,
+            'fecha_vencimiento': proforma.fecha_vencimiento.strftime('%Y-%m-%d'),
+            'valor': proforma.valor,
+            'saldo': proforma.saldo,
+            'descripcion': proforma.descripcion,
+            'cod_forma_pago': proforma.cod_forma_pago,
+            'dias_vencimiento': proforma.dias_vencimiento,
+            'pct_valor': proforma.pct_valor
+        })
+    #print(proformas_data)
+    return jsonify({'proformas': proformas_data})
+
+@bp.route('/proformas_delete_anticipo', methods=['DELETE'])
+@jwt_required()
+def delete_anticipo():
+    data = request.json
+    secuenciaToDelete=data["secuencia"]
+    codProformaToDelete=data["cod_proforma"]
+    print(data)
+    if stProformaImpFp.eliminar_registro(secuenciaToDelete, codProformaToDelete):
+        return "Registro eliminado Correctamente"
+    else:
+        return "No se pudo eliminar Registro"
+
+    #proformas = db.session.query(stProformaImpFp).filter_by(cod_proforma=cod_proforma).all()
+    #print(proformas)
+
+
+    return jsonify({'proformas': 'proformas_data'})
 
 @bp.route('/packinglist_total')
 @jwt_required()
@@ -2222,3 +2329,4 @@ def obtener_doc_elec_recibidos():
     except Exception as e:
         logger.exception(f"Error al actualizar Embarque: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
