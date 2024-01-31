@@ -22,6 +22,7 @@ class StFormula(Base):
     activa = Column(VARCHAR(1))
     mano_obra = Column(NUMBER(14,2))
     costo_standard = Column(NUMBER(14, 3))
+    debito_credito = Column(NUMBER(1))
     @classmethod
     def query(cls):
         return db.session.query(cls)

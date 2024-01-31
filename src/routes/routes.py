@@ -981,11 +981,9 @@ def crear_packinglist_contenedor():
             if query_prod:
                 costo_sistema = query_prod.costo
                 query = StOrdenCompraDet.query().filter_by(cod_producto=cod_producto, cod_po=packing['cod_po'], empresa=empresa).first()
-                print(query)
-                query_umedida = StUnidadImportacion.query().filter_by(cod_unidad=unidad_medida, empresa=empresa).first()
                 query_conte = StEmbarqueContenedores.query().filter_by(nro_contenedor=nro_contenedor, empresa=empresa).first()
                 if query_conte:
-                    if query and query_umedida:
+                    if query :
                         packinlist = StPackinglist(
                             nro_contenedor=nro_contenedor,
                             empresa=empresa,
@@ -995,18 +993,19 @@ def crear_packinglist_contenedor():
                             cod_producto=cod_producto,
                             cantidad=packing['cantidad'],
                             fob=packing['fob'],
-                            unidad_medida=unidad_medida,
+                            unidad_medida=query_prod.cod_unidad if query_prod.cod_unidad else unidad_medida,
                             usuario_crea=usuario_crea,
                             fecha_crea=fecha_crea,
                             # usuario_modifica = packing['usuario_modifica'].upper(),
                             # fecha_modifica = fecha_modifica
                         )
                         query.saldo_producto = query.saldo_producto - packing['cantidad']
-                        if query.fob is None or query.fob >= packing['fob']:
+                        if query.fob is None or float(query.fob) == 0:
                             query.fob = packing['fob']
                         if query.fob_total is None:
                             query.fob_total = Decimal(0)
                         query.fob_total = query.fob_total + Decimal(packing['fob']) * Decimal(packing['cantidad'])
+                        query.costo_sistema = costo_sistema
                         db.session.add(packinlist)
                         db.session.commit()
                     else:
@@ -1024,7 +1023,7 @@ def crear_packinglist_contenedor():
                                     cod_producto=cod_producto,
                                     cantidad=packing['cantidad'],
                                     fob=packing['fob'],
-                                    unidad_medida=unidad_medida,
+                                    unidad_medida=query_prod.cod_unidad if query_prod.cod_unidad else unidad_medida,
                                     usuario_crea=usuario_crea,
                                     fecha_crea=fecha_crea,
                                     # usuario_modifica = packing['usuario_modifica'].upper(),
@@ -1055,7 +1054,7 @@ def crear_packinglist_contenedor():
                                     costo_sistema=costo_sistema if costo_sistema else 0,
                                     cantidad_pedido=0,  # Cantidad en negativo
                                     saldo_producto=-packing['cantidad'],
-                                    unidad_medida=unidad_medida,
+                                    unidad_medida=query_prod.cod_unidad if query_prod.cod_unidad else unidad_medida, #setear el cod unidad del producto en vez del cod unidad ingresado por excel
                                     usuario_crea=usuario_crea,
                                     fecha_crea=fecha_crea,
                                     fob=packing['fob'],
@@ -1066,9 +1065,10 @@ def crear_packinglist_contenedor():
                                 db.session.commit()
                                 cod_prod_no_existe.append(cod_producto)
                             else:
-                                prod_no_existe.append(cod_producto)
+                                 prod_no_existe.append(cod_producto)
                         else:
-                            unidad_medida_no_existe.append(unidad_medida)
+
+                            unidad_medida_no_existe.append(cod_producto +" "+ unidad_medida)
 
                 else:
                     bl_no_existe.append(nro_contenedor)
