@@ -2027,6 +2027,79 @@ def delete_anticipo():
 
     return jsonify({'proformas': 'proformas_data'})
 
+@bp.route('/anticipos_por_cod_proforma/<string:cod_proforma>', methods=['GET'])
+@jwt_required()
+def obtener_anticipos_por_cod_proforma(cod_proforma):
+    proformas = db.session.query(stProformaImpFp).filter_by(cod_proforma=cod_proforma, cod_forma_pago='ANT').order_by(stProformaImpFp.secuencia).all()
+    if not proformas:
+        return jsonify({'mensaje': 'No se encontraron proformas para el código proporcionado'}), 404
+
+    proformas_data = []
+    for proforma in proformas:
+        proformas_data.append({
+            'empresa': proforma.empresa,
+            'cod_proforma': proforma.cod_proforma,
+            'secuencia': proforma.secuencia,
+            'tipo_proforma': proforma.tipo_proforma,
+            'fecha_vencimiento': proforma.fecha_vencimiento.strftime('%Y-%m-%d'),
+            'valor': proforma.valor,
+            'saldo': proforma.saldo,
+            'descripcion': proforma.descripcion,
+            'cod_forma_pago': proforma.cod_forma_pago,
+            'dias_vencimiento': proforma.dias_vencimiento,
+            'pct_valor': proforma.pct_valor
+        })
+    #print(proformas_data)
+    return jsonify({'proformas': proformas_data})
+
+@bp.route('/pagar_anticipo_forma_de_pago_general', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def pagar_anticipo_forma_de_pago_general():
+    try:
+        data = request.json
+
+        p_cod_empresa = float(data["p_cod_empresa"])
+        p_tipo_proforma = data["p_tipo_proforma"]
+        p_cod_proforma = data["p_cod_proforma"]
+        p_usuario = data["p_usuario"]
+        print(data)
+        #Ejecutar el procedimiento PL/SQL
+        query = """
+                       DECLARE
+                            tipo_pago VARCHAR(100);
+                            cod_pago VARCHAR (100);
+                       BEGIN
+                         ks_prof_importacion_rep.genera_orden_pago(
+                           p_cod_empresa => :p_cod_empresa,
+                           p_tipo_proforma => :p_tipo_proforma,
+                           p_cod_proforma => :p_cod_proforma,
+                           p_usuario => :p_usuario,
+                           p_tipo_opago => tipo_pago,
+                           p_cod_opago => cod_pago
+                         );
+                         -- Asigna los valores de las variables a los parámetros de salida
+                         :tipo_pago := tipo_pago;
+                         :cod_pago := cod_pago;
+                       END;
+                       """
+        with engine.connect() as conn:
+            result = conn.execute(text(query), {
+                'p_cod_empresa': p_cod_empresa,
+                'p_tipo_proforma': p_tipo_proforma,
+                'p_cod_proforma': p_cod_proforma,
+                'p_usuario': p_usuario,
+                'tipo_pago': None,
+                'cod_pago': None
+            })
+            print(result)
+        return jsonify({"data": "Pago generado correctamente"})
+
+    except Exception as e:
+        error_message = f"Error al procesar la solicitud: {str(e)}"
+        return jsonify({"error": error_message}), 500
+
+
 @bp.route('/packinglist_total')
 @jwt_required()
 @cross_origin()
