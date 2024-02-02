@@ -236,6 +236,7 @@ def obtener_estados_param():
     empresa = request.args.get('empresa', None)
     cod_modelo = request.args.get('cod_modelo', None)
     cod_item = request.args.get('cod_item', None)
+    tipo = request.args.get('tipo', None)
 
     query = TgModeloItem.query()
     if empresa:
@@ -244,6 +245,8 @@ def obtener_estados_param():
         query = query.filter(TgModeloItem.cod_modelo == cod_modelo)
     if cod_item:
         query = query.filter(TgModeloItem.cod_item == cod_item)
+    if tipo:
+        query = query.filter(TgModeloItem.tipo == tipo)
 
     estados = query.all()
     serialized_estados = []
@@ -506,7 +509,7 @@ def obtener_tracking_bl_param():
 
         serialized_bls = []
 
-        query2 = TgModeloItem.query().filter(TgModeloItem.empresa == 20).filter(TgModeloItem.cod_modelo == 'BL')
+        query2 = TgModeloItem.query().filter(TgModeloItem.empresa == 20).filter(TgModeloItem.cod_modelo == 'BL').filter(TgModeloItem.tipo == 'A')
         estados = query2.all()
         serialized_estados = []
 
@@ -789,6 +792,7 @@ def obtener_embarques_param():
             cod_aforo = embarque.cod_aforo
             cod_regimen = embarque.cod_regimen
             nro_mrn = embarque.nro_mrn if embarque.nro_mrn else ""
+            bl_house_manual = embarque.bl_house_manual if embarque.bl_house_manual else ""
             serialized_embarques.append({
                 'empresa': empresa,
                 'codigo_bl_master': codigo_bl_master,
@@ -815,7 +819,8 @@ def obtener_embarques_param():
                 'cod_item': cod_item,
                 'cod_aforo': cod_aforo,
                 'cod_regimen': cod_regimen,
-                'nro_mrn': nro_mrn
+                'nro_mrn': nro_mrn,
+                'bl_house_manual': bl_house_manual
             })
         return jsonify(serialized_embarques)
 

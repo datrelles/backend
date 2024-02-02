@@ -22,6 +22,8 @@ from datetime import datetime,date
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 from decimal import Decimal
+from src import oracle
+from os import getenv
 import json
 from sqlalchemy import and_
 bp = Blueprint('routes', __name__)
@@ -623,6 +625,7 @@ def obtener_embarques():
             cod_aforo = embarque.cod_aforo
             cod_regimen = embarque.cod_regimen
             nro_mrn = embarque.nro_mrn if embarque.nro_mrn else ""
+            bl_house_manual = embarque.bl_house_manual if embarque.bl_house_manual else ""
             serialized_embarques.append({
                 'empresa': empresa,
                 'codigo_bl_master': codigo_bl_master,
@@ -649,7 +652,8 @@ def obtener_embarques():
                 'cod_item': cod_item,
                 'cod_aforo': cod_aforo,
                 'cod_regimen': cod_regimen,
-                'nro_mrn': nro_mrn
+                'nro_mrn': nro_mrn,
+                'bl_house_manual': bl_house_manual
             })
         return jsonify(serialized_embarques)
 
@@ -1153,16 +1157,33 @@ def crear_embarque():
         fecha_embarque = parse_date(data.get('fecha_embarque'))
         fecha_llegada = parse_date(data.get('fecha_llegada'))
         fecha_bodega = parse_date(data.get('fecha_bodega'))
+        if fecha_embarque is None:
+            return jsonify({'error': 'Ingrese fecha de embarque'})
 
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cursor = db1.cursor()
+        cursor.execute("""
+                            SELECT KS_EMBARQUES_BL.OBT_SECUENCIA_BL(
+                                :param1,
+                                :param2
+                            ) AS resultado
+                            FROM dual
+                        """,
+                       param1=data['empresa'], param2=fecha_embarque)
+        db1.close
+        result = cursor.fetchone()
+        cursor.close()
+        codigo_bl_house = result[0]
+        print(codigo_bl_house)
         embarque = StEmbarquesBl(
             empresa=data['empresa'],
             codigo_bl_master=data['codigo_bl_master'],
-            codigo_bl_house=data['codigo_bl_house'],
+            codigo_bl_house=codigo_bl_house,
             cod_proveedor=data['cod_proveedor'],
             fecha_embarque=fecha_embarque,
             fecha_llegada=fecha_llegada,
             fecha_bodega=fecha_bodega,
-            numero_tracking=data.get('numero_tracking'),
+            numero_tracking=data.get('codigo_bl_master')[-4:],
             naviera=data.get('naviera'),
             estado=data['estado'],
             agente=data.get('agente'),
@@ -1178,13 +1199,14 @@ def crear_embarque():
             cod_item=data['cod_item'],
             cod_aforo=data.get('cod_aforo'),
             cod_regimen = data.get('cod_regimen'),
-            nro_mrn = data.get('nro_mrn')
+            nro_mrn = data.get('nro_mrn'),
+            bl_house_manual = data.get('bl_house_manual')
         )
 
         db.session.add(embarque)
         db.session.commit()
 
-        return jsonify({'mensaje': "Embarque o BL creado exitosamente"})
+        return jsonify({'codigo_bl_house': codigo_bl_house})
 
     except ValueError as ve:
         error_message = str(ve)
@@ -1795,7 +1817,6 @@ def crear_orden_compra_total():
         unidad_medida_no_existe = []
 
         for detalle in data['detalles']:
-            print(detalle['agrupado'])
             cod_producto = detalle['cod_producto'].strip()
             unidad_medida = detalle['unidad_medida']
             cod_producto_modelo = detalle['cod_producto_modelo']
@@ -1998,6 +2019,7 @@ def obtener_containers():
         shipper_seal = contenedor.shipper_seal if contenedor.shipper_seal else ""
         es_carga_suelta = contenedor.es_carga_suelta if contenedor.es_carga_suelta else ""
         observaciones = contenedor.observaciones if contenedor.observaciones else ""
+
         serialized_contenedores.append({
             "empresa": empresa,
             "codigo_bl_house": codigo_bl_house,
@@ -2080,7 +2102,9 @@ def crear_contenedor(nro_contenedor, empresa):
             es_carga_suelta=data.get('es_carga_suelta'),
             observaciones=data.get('observaciones'),
             fecha_crea=date.today(),
-            usuario_crea=data.get('usuario_crea')
+            usuario_crea=data.get('usuario_crea'),
+            cod_item= '3',
+            cod_modelo='BL'
         )
 
         db.session.add(contenedor)
