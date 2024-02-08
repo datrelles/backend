@@ -12,7 +12,7 @@ class VtDetallesOrdenGeneral(Base):
 
     cod_po = Column(VARCHAR(10), primary_key=True, nullable=False)
     cod_producto = Column(VARCHAR(14), primary_key=True, nullable=False)
-    modelo = Column(VARCHAR(200), primary_key=True, nullable=False)
+    nro_contenedor = Column(VARCHAR(15), primary_key=True, nullable=False)
     nombre = Column(VARCHAR(200))
     costo_sistema = Column(NUMBER(16,6))
     costo_cotizado = Column(NUMBER(16,6))
@@ -25,7 +25,7 @@ class VtDetallesOrdenGeneral(Base):
     fecha_estimada_produccion = Column(DateTime)
     fecha_estimada_puerto = Column(DateTime)
     fecha_estimada_llegada = Column(DateTime)
-    nro_contenedor = Column(VARCHAR(15))
+    modelo = Column(VARCHAR(200))
     codigo_bl_house = Column(VARCHAR(30))
     fecha_embarque = Column(DateTime)
     fecha_llegada = Column(DateTime)
