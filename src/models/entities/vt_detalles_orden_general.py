@@ -15,6 +15,7 @@ class VtDetallesOrdenGeneral(Base):
     modelo = Column(VARCHAR(200), primary_key=True, nullable=False)
     nombre = Column(VARCHAR(200))
     costo_sistema = Column(NUMBER(16,6))
+    costo_cotizado = Column(NUMBER(16,6))
     cantidad_pedido = Column(NUMBER(9))
     saldo_producto = Column(NUMBER(16,6))
     fob_detalle = Column(NUMBER(16,6))

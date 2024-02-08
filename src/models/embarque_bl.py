@@ -132,6 +132,9 @@ class StEmbarqueContenedores(Base):
     fecha_bodega = Column(DateTime)
     cod_modelo = Column(VARCHAR(8))
     cod_item = Column(VARCHAR(3))
+    es_repuestos = Column(NUMBER(1))
+    es_motos = Column(NUMBER(1))
+    fecha_salida = Column(DateTime)
     @classmethod
     def query(cls):
         return db.session.query(cls)

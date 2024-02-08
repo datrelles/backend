@@ -790,19 +790,35 @@ def asigna_cod_comprobante(p_cod_empresa, p_cod_tipo_comprobante, p_cod_agencia)
     return comprobante_code
 
 
-@bp.route('/orden_compra_det', methods=['POST'])
+@bp.route('/orden_compra_det_aprob', methods=['POST'])
 @jwt_required()
 @cross_origin()
-def crear_orden_compra_det():
+def crear_orden_compra_det_aprob():
     try:
         data = request.get_json()
-        #print(data)
-        fecha_crea = date.today()#funcion para que se asigne la fecha actual al momento de crear el detalle de la oden de compra
-        #fecha_modifica = date.today()
-
+        fecha_crea = date.today()
         empresa = data['empresa']
         cod_po = data['cod_po']
         usuario_crea=data['usuario_crea'].upper()
+
+        #####################################Eliminar los detalles previos##########################################################
+
+        detalles_query = db.session.query(StOrdenCompraDet)
+        if cod_po:
+            detalles_query = detalles_query.filter_by(cod_po=cod_po)
+        if empresa:
+            detalles_query = detalles_query.filter_by(empresa=empresa)
+
+        detalles_to_delete = detalles_query.all()
+
+        # if not detalles_to_delete:
+        #     return jsonify({'mensaje': 'No se encontraron registros para eliminar.'}), 404
+
+        for detalle in detalles_to_delete:
+            db.session.delete(detalle)
+        db.session.commit()
+
+        ###########################################################################################################################
         
         # Verificar si el usuario existe en la base de datos
         usuario = Usuario.query().filter_by(usuario_oracle=usuario_crea).first()
@@ -841,7 +857,7 @@ def crear_orden_compra_det():
                     nombre_c = nombre_busq.nombre
 
                 detalle = StOrdenCompraDet(
-                    exportar=order['agrupado'],
+                    exportar= 1 if order['agrupado'] == 'TRUE' else 0,
                     cod_po=cod_po,
                     tipo_comprobante ='PO',
                     secuencia=secuencia,
@@ -854,14 +870,14 @@ def crear_orden_compra_det():
                     nombre_mod_prov = order['nombre_proveedor'],
                     nombre_comercial = order['nombre_comercial'],
                     costo_sistema=costo_sistema if costo_sistema else 0,
-                    #fob=order['FOB'] if order['FOB'] else "",
                     cantidad_pedido=order['pedido'],
+                    costo_cotizado=order['costo_cotizado'],
                     saldo_producto=order['pedido'],
                     unidad_medida=unidad_medida,
                     usuario_crea=usuario_crea,
                     fecha_crea=fecha_crea,
-                    #usuario_modifica=order['usuario_modifica'].upper(),
-                    #fecha_modifica=fecha_modifica,
+                    usuario_modifica=usuario_crea,
+                    fecha_modifica=date.today(),
                 )
                 #detalle.fob_total = order['FOB'] * order['CANTIDAD_PEDIDO']
                 db.session.add(detalle)
@@ -880,6 +896,108 @@ def crear_orden_compra_det():
                     cod_modelo_no_existe.append(cod_producto_modelo+'\n')
                 else:
                     unidad_medida_no_existe.append(unidad_medida+'\n')
+        return jsonify({'mensaje': 'Orden de compra creada exitosamente', 'cod_po': cod_po,
+                        'cod_producto_no_existe': list(set(cod_po_no_existe)),
+                        'unidad_medida_no_existe': list(set(unidad_medida_no_existe)),
+                        'cod_producto_modelo_no_existe': list(set(cod_modelo_no_existe))})
+
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/orden_compra_det', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def crear_orden_compra_det():
+    try:
+        data = request.get_json()
+        # print(data)
+        fecha_crea = date.today()  # funcion para que se asigne la fecha actual al momento de crear el detalle de la oden de compra
+        # fecha_modifica = date.today()
+
+        empresa = data['empresa']
+        cod_po = data['cod_po']
+        usuario_crea = data['usuario_crea'].upper()
+
+        # Verificar si el usuario existe en la base de datos
+        usuario = Usuario.query().filter_by(usuario_oracle=usuario_crea).first()
+        if not usuario:
+            return jsonify({'mensaje': 'El usuario no existe.'}), 404
+
+        cod_po_no_existe = []  # Lista para almacenar los codigo de productos que no existen
+        unidad_medida_no_existe = []  # Lista para almacenar las unidades mal ingresadas
+        cod_modelo_no_existe = []  # Lista para almacenar los cod_producto_modelo que no existen
+        print(data)
+        for order in data['orders']:
+            print(order['cod_producto_modelo'])
+            cod_producto = order['cod_producto'].strip()
+            cod_producto_modelo = order['cod_producto_modelo'].strip()
+            unidad_medida = order['unidad_medida'].upper()
+
+            # Verificar si el producto existe en la tabla de Productos
+            query = Producto.query().filter_by(cod_producto=cod_producto).first()
+            query_umedida = StUnidadImportacion.query().filter_by(cod_unidad=unidad_medida).first()
+            query_modelo = Producto.query().filter_by(cod_producto=cod_producto_modelo).first()
+            if query and query_umedida and query_modelo:
+                secuencia = obtener_secuencia(cod_po)
+                costo_sistema = query.costo
+
+                # Consultar la tabla StDespiece para obtener los valores correspondientes
+                despiece = StProductoDespiece.query().filter_by(cod_producto=order['cod_producto'],
+                                                                empresa=empresa).first()  # usar la empresa
+                if despiece is not None:
+                    nombre_busq = StDespieceD.query().filter_by(cod_despiece=despiece.cod_despiece,
+                                                                secuencia=despiece.secuencia).first()
+                    nombre = nombre_busq.nombre_e
+                    nombre_i = nombre_busq.nombre_i
+                    nombre_c = nombre_busq.nombre_c
+                else:
+                    nombre_busq = Producto.query().filter_by(cod_producto=order['cod_producto']).first()
+                    nombre = nombre_busq.nombre
+                    nombre_i = nombre_busq.nombre
+                    nombre_c = nombre_busq.nombre
+
+                detalle = StOrdenCompraDet(
+                    exportar=order['agrupado'],
+                    cod_po=cod_po,
+                    tipo_comprobante='PO',
+                    secuencia=secuencia,
+                    empresa=empresa,
+                    cod_producto=cod_producto,
+                    cod_producto_modelo=cod_producto_modelo,
+                    nombre=nombre if nombre else None,
+                    nombre_i=nombre_i if nombre_i else order['nombre_ingles'],
+                    nombre_c=nombre_c if nombre_c else None,
+                    nombre_mod_prov=order['nombre_proveedor'],
+                    nombre_comercial=order['nombre_comercial'],
+                    costo_sistema=costo_sistema if costo_sistema else 0,
+                    # fob=order['FOB'] if order['FOB'] else "",
+                    cantidad_pedido=order['pedido'],
+                    saldo_producto=order['pedido'],
+                    unidad_medida=unidad_medida,
+                    usuario_crea=usuario_crea,
+                    fecha_crea=fecha_crea,
+                    # usuario_modifica=order['usuario_modifica'].upper(),
+                    # fecha_modifica=fecha_modifica,
+                )
+                # detalle.fob_total = order['FOB'] * order['CANTIDAD_PEDIDO']
+                db.session.add(detalle)
+                try:
+                    # Intenta hacer la confirmación de la sesión
+                    db.session.commit()
+                except Exception as commit_error:
+                    # Captura la excepción si ocurre un error al confirmar
+                    db.session.rollback()  # Realiza un rollback para deshacer cambios pendientes
+                    print(f"Error al confirmar: {str(commit_error)}")
+                # secuencia = obtener_secuencia(order['COD_PO'])
+            else:
+                if query is None:
+                    cod_po_no_existe.append(cod_producto + '\n')
+                if query_modelo is None:
+                    cod_modelo_no_existe.append(cod_producto_modelo + '\n')
+                else:
+                    unidad_medida_no_existe.append(unidad_medida + '\n')
         return jsonify({'mensaje': 'Orden de compra creada exitosamente', 'cod_po': cod_po,
                         'cod_producto_no_existe': list(set(cod_po_no_existe)),
                         'unidad_medida_no_existe': list(set(unidad_medida_no_existe)),
@@ -2019,6 +2137,12 @@ def obtener_containers():
         shipper_seal = contenedor.shipper_seal if contenedor.shipper_seal else ""
         es_carga_suelta = contenedor.es_carga_suelta if contenedor.es_carga_suelta else ""
         observaciones = contenedor.observaciones if contenedor.observaciones else ""
+        fecha_bodega = datetime.strftime(contenedor.fecha_bodega,"%d/%m/%Y") if contenedor.fecha_bodega else ""
+        cod_modelo = contenedor.cod_modelo if contenedor.cod_modelo else ""
+        cod_item = contenedor.cod_item if contenedor.cod_item else ""
+        es_repuestos = contenedor.es_repuestos if contenedor.es_repuestos else ""
+        es_motos = contenedor.es_motos if contenedor.es_motos else ""
+        fecha_salida = datetime.strftime(contenedor.fecha_salida,"%d/%m/%Y") if contenedor.fecha_salida else ""
 
         serialized_contenedores.append({
             "empresa": empresa,
@@ -2030,7 +2154,13 @@ def obtener_containers():
             "line_seal": line_seal,
             "shipper_seal": shipper_seal,
             "es_carga_suelta": es_carga_suelta,
-            "observaciones": observaciones
+            "observaciones": observaciones,
+            "fecha_bodega": fecha_bodega,
+            "cod_modelo": cod_modelo,
+            "cod_item": cod_item,
+            "es_repuestos": es_repuestos,
+            "es_motos": es_motos,
+            "fecha_salida": fecha_salida
         })
     return jsonify(serialized_contenedores)
 @bp.route('/packings_by_container')
@@ -2104,7 +2234,11 @@ def crear_contenedor(nro_contenedor, empresa):
             fecha_crea=date.today(),
             usuario_crea=data.get('usuario_crea'),
             cod_item= '3',
-            cod_modelo='BL'
+            cod_modelo='BL',
+            fecha_bodega=parse_date(data.get('fecha_bodega')),
+            es_repuestos=data.get('es_repuestos'),
+            es_motos=data.get('es_motos'),
+            fecha_salida=parse_date(data.get('fecha_salida'))
         )
 
         db.session.add(contenedor)
@@ -2138,6 +2272,12 @@ def actualizar_contenedor(nro_contenedor, empresa):
         contenedor.observaciones = data.get('observaciones', contenedor.observaciones)
         contenedor.fecha_modifica = date.today()
         contenedor.usuario_modifica = data.get('usuario_modifica', contenedor.usuario_modifica)
+        contenedor.fecha_bodega = data.get('fecha_bodega', contenedor.fecha_bodega)
+        contenedor.cod_modelo = data.get('cod_modelo', contenedor.cod_modelo)
+        contenedor.cod_item = data.get('cod_item', contenedor.cod_item)
+        contenedor.es_repuestos = data.get('es_repuestos', contenedor.es_repuestos)
+        contenedor.es_motos = data.get('es_motos', contenedor.es_motos)
+        contenedor.fecha_salida = data.get('fecha_salida', contenedor.fecha_salida)
 
         db.session.commit()
 

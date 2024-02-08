@@ -1049,6 +1049,12 @@ def obtener_container_por_nro():
         shipper_seal = contenedor.shipper_seal if contenedor.shipper_seal else ""
         es_carga_suelta = contenedor.es_carga_suelta if contenedor.es_carga_suelta is not None else 0
         observaciones = contenedor.observaciones if contenedor.observaciones else ""
+        fecha_bodega = contenedor.fecha_bodega if contenedor.fecha_bodega else ""
+        cod_modelo = contenedor.cod_modelo if contenedor.cod_modelo else ""
+        cod_item = contenedor.cod_item if contenedor.cod_item else ""
+        es_repuestos = contenedor.es_repuestos if contenedor.es_repuestos else ""
+        es_motos = contenedor.es_motos if contenedor.es_motos else ""
+        fecha_salida = contenedor.fecha_salida if contenedor.fecha_salida else ""
         serialized_contenedores.append({
             "empresa": empresa,
             "codigo_bl_house": codigo_bl_house,
@@ -1059,7 +1065,13 @@ def obtener_container_por_nro():
             "line_seal": line_seal,
             "shipper_seal": shipper_seal,
             "es_carga_suelta": es_carga_suelta,
-            "observaciones": observaciones
+            "observaciones": observaciones,
+            "fecha_bodega": fecha_bodega,
+            "cod_modelo": cod_modelo,
+            "cod_item": cod_item,
+            "es_repuestos": es_repuestos,
+            "es_motos": es_motos,
+            "fecha_salida": fecha_salida
         })
     return jsonify(serialized_contenedores)
 
@@ -1077,6 +1089,7 @@ def obtener_vt_detalles_general():
         modelo = registro.modelo if registro.modelo else ""
         costo_sistema = registro.costo_sistema if registro.costo_sistema else ""
         cantidad_pedido = registro.cantidad_pedido if registro.cantidad_pedido else ""
+        costo_cotizado = registro.costo_cotizado if registro.costo_cotizado else ""
         saldo_producto = registro.saldo_producto if registro.saldo_producto else ""
         fob_detalle = registro.fob_detalle if registro.fob_detalle else ""
         fob_total = registro.fob_total if registro.fob_total else ""
@@ -1104,6 +1117,7 @@ def obtener_vt_detalles_general():
             "nombre": nombre,
             "modelo": modelo,
             "costo_sistema": costo_sistema,
+            "costo_cotizado": costo_cotizado,
             "cantidad_pedido": cantidad_pedido,
             "saldo_producto": saldo_producto,
             "fob_detalle": fob_detalle,
