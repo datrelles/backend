@@ -2197,12 +2197,12 @@ def obtener_anticipos_por_cod_proforma(cod_proforma):
 def pagar_anticipo_forma_de_pago_general():
     try:
         data = request.json
-
+        print(data)
         p_cod_empresa = float(data["p_cod_empresa"])
         p_tipo_proforma = data["p_tipo_proforma"]
         p_cod_proforma = data["p_cod_proforma"]
         p_usuario = data["p_usuario"]
-        print(data)
+
         #Ejecutar el procedimiento PL/SQL
         query = """
                        DECLARE
@@ -2236,6 +2236,7 @@ def pagar_anticipo_forma_de_pago_general():
 
     except Exception as e:
         error_message = f"Error al procesar la solicitud: {str(e)}"
+        print(str(e))
         return jsonify({"error": error_message}), 500
 
 
