@@ -57,6 +57,7 @@ class StEmbarquesBl(Base):
     cod_aforo = Column(NUMBER(2, 0, False))
     cod_regimen = Column(NUMBER(3, 0, False), index=True)
     nro_mrn = Column(VARCHAR(40))
+    bl_house_manual = Column(VARCHAR(30))
 
     @classmethod
     def query(cls):
@@ -110,6 +111,7 @@ class StEmbarqueContenedores(Base):
         Index('udx1_fk_st_emb_cont_st_emb_bl', 'codigo_bl_house', 'empresa'),
         Index('udx2_st_emb_cont_empresa', 'empresa'),
         Index('udx3_st_emb_con_st_tipo_con', 'cod_tipo_contenedor', 'empresa'),
+        Index('udx4_st_emb_cont_tg_mod_item', 'cod_modelo', 'cod_item', 'empresa'),
         {'schema': 'stock'}
     )
 
@@ -127,10 +129,41 @@ class StEmbarqueContenedores(Base):
     fecha_crea = Column(DateTime)
     usuario_modifica = Column(VARCHAR(30))
     fecha_modifica = Column(DateTime)
+    fecha_bodega = Column(DateTime)
+    cod_modelo = Column(VARCHAR(8))
+    cod_item = Column(VARCHAR(3))
+    es_repuestos = Column(NUMBER(1))
+    es_motos = Column(NUMBER(1))
+    fecha_salida = Column(DateTime)
     @classmethod
     def query(cls):
         return db.session.query(cls)
 
+class StTrackingContenedores(Base):
+    __tablename__ = 'st_tracking_contenedores'
+    __table_args__ = (
+        Index('idx1_track_cont_tg_modelo_item', 'cod_item', 'cod_modelo', 'empresa'),
+        Index('pk_st_tracking_contenedores', 'nro_contenedor', 'empresa', 'secuencial'),
+        Index('idx3_track_cont_empresa', 'empresa'),
+        Index('idx4_track_cont_st_emb_cont', 'nro_contenedor', 'empresa', 'codigo_bl_house'),
+        {'schema': 'stock'}
+    )
+
+    nro_contenedor = Column(VARCHAR(30), primary_key=True, nullable=False)
+    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False, index=True)
+    secuencial = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
+    observaciones = Column(CHAR(150))
+    cod_modelo = Column(VARCHAR(8))
+    usuario_crea = Column(VARCHAR(30))
+    fecha_crea = Column(DateTime)
+    usuario_modifica = Column(VARCHAR(30))
+    fecha_modifica = Column(DateTime)
+    fecha = Column(DateTime)
+    cod_item = Column(VARCHAR(3))
+    codigo_bl_house = Column(VARCHAR(30))
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
 class StTipoContenedor(Base):
     __tablename__ = 'st_tipo_contenedor'
     __table_args__ = (

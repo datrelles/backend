@@ -236,6 +236,7 @@ def obtener_estados_param():
     empresa = request.args.get('empresa', None)
     cod_modelo = request.args.get('cod_modelo', None)
     cod_item = request.args.get('cod_item', None)
+    tipo = request.args.get('tipo', None)
 
     query = TgModeloItem.query()
     if empresa:
@@ -244,6 +245,8 @@ def obtener_estados_param():
         query = query.filter(TgModeloItem.cod_modelo == cod_modelo)
     if cod_item:
         query = query.filter(TgModeloItem.cod_item == cod_item)
+    if tipo:
+        query = query.filter(TgModeloItem.tipo == tipo)
 
     estados = query.all()
     serialized_estados = []
@@ -506,7 +509,7 @@ def obtener_tracking_bl_param():
 
         serialized_bls = []
 
-        query2 = TgModeloItem.query().filter(TgModeloItem.empresa == 20).filter(TgModeloItem.cod_modelo == 'BL')
+        query2 = TgModeloItem.query().filter(TgModeloItem.empresa == 20).filter(TgModeloItem.cod_modelo == 'BL').filter(TgModeloItem.tipo == 'A')
         estados = query2.all()
         serialized_estados = []
 
@@ -789,6 +792,7 @@ def obtener_embarques_param():
             cod_aforo = embarque.cod_aforo
             cod_regimen = embarque.cod_regimen
             nro_mrn = embarque.nro_mrn if embarque.nro_mrn else ""
+            bl_house_manual = embarque.bl_house_manual if embarque.bl_house_manual else ""
             serialized_embarques.append({
                 'empresa': empresa,
                 'codigo_bl_master': codigo_bl_master,
@@ -815,7 +819,8 @@ def obtener_embarques_param():
                 'cod_item': cod_item,
                 'cod_aforo': cod_aforo,
                 'cod_regimen': cod_regimen,
-                'nro_mrn': nro_mrn
+                'nro_mrn': nro_mrn,
+                'bl_house_manual': bl_house_manual
             })
         return jsonify(serialized_embarques)
 
@@ -1044,6 +1049,12 @@ def obtener_container_por_nro():
         shipper_seal = contenedor.shipper_seal if contenedor.shipper_seal else ""
         es_carga_suelta = contenedor.es_carga_suelta if contenedor.es_carga_suelta is not None else 0
         observaciones = contenedor.observaciones if contenedor.observaciones else ""
+        fecha_bodega = contenedor.fecha_bodega if contenedor.fecha_bodega else ""
+        cod_modelo = contenedor.cod_modelo if contenedor.cod_modelo else ""
+        cod_item = contenedor.cod_item if contenedor.cod_item else ""
+        es_repuestos = contenedor.es_repuestos if contenedor.es_repuestos else ""
+        es_motos = contenedor.es_motos if contenedor.es_motos else ""
+        fecha_salida = contenedor.fecha_salida if contenedor.fecha_salida else ""
         serialized_contenedores.append({
             "empresa": empresa,
             "codigo_bl_house": codigo_bl_house,
@@ -1054,7 +1065,13 @@ def obtener_container_por_nro():
             "line_seal": line_seal,
             "shipper_seal": shipper_seal,
             "es_carga_suelta": es_carga_suelta,
-            "observaciones": observaciones
+            "observaciones": observaciones,
+            "fecha_bodega": fecha_bodega,
+            "cod_modelo": cod_modelo,
+            "cod_item": cod_item,
+            "es_repuestos": es_repuestos,
+            "es_motos": es_motos,
+            "fecha_salida": fecha_salida
         })
     return jsonify(serialized_contenedores)
 
@@ -1072,6 +1089,7 @@ def obtener_vt_detalles_general():
         modelo = registro.modelo if registro.modelo else ""
         costo_sistema = registro.costo_sistema if registro.costo_sistema else ""
         cantidad_pedido = registro.cantidad_pedido if registro.cantidad_pedido else ""
+        costo_cotizado = registro.costo_cotizado if registro.costo_cotizado else ""
         saldo_producto = registro.saldo_producto if registro.saldo_producto else ""
         fob_detalle = registro.fob_detalle if registro.fob_detalle else ""
         fob_total = registro.fob_total if registro.fob_total else ""
@@ -1099,6 +1117,7 @@ def obtener_vt_detalles_general():
             "nombre": nombre,
             "modelo": modelo,
             "costo_sistema": costo_sistema,
+            "costo_cotizado": costo_cotizado,
             "cantidad_pedido": cantidad_pedido,
             "saldo_producto": saldo_producto,
             "fob_detalle": fob_detalle,
