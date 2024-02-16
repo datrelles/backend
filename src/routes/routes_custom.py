@@ -1081,65 +1081,66 @@ def obtener_container_por_nro():
 def obtener_vt_detalles_general():
     query = VtDetallesOrdenGeneral.query()
     vista = query.all()
-    serialized = []
+
+    # Diccionario para almacenar los registros agrupados por clave
+    grouped_records = {}
+
     for registro in vista:
-        cod_po = registro.cod_po if registro.cod_po else ""
-        cod_producto = registro.cod_producto if registro.cod_producto else ""
-        nombre = registro.nombre if registro.nombre else ""
-        modelo = registro.modelo if registro.modelo else ""
-        costo_sistema = registro.costo_sistema if registro.costo_sistema else ""
-        cantidad_pedido = registro.cantidad_pedido if registro.cantidad_pedido else ""
-        costo_cotizado = registro.costo_cotizado if registro.costo_cotizado else ""
-        saldo_producto = registro.saldo_producto if registro.saldo_producto else ""
-        fob_detalle = registro.fob_detalle if registro.fob_detalle else ""
-        fob_total = registro.fob_total if registro.fob_total else ""
-        proforma = registro.proforma if registro.proforma else ""
-        proveedor = registro.proveedor if registro.proveedor else ""
-        fecha_estimada_produccion = datetime.strftime(registro.fecha_estimada_produccion,"%d/%m/%Y") if registro.fecha_estimada_produccion else ""
-        fecha_estimada_puerto = datetime.strftime(registro.fecha_estimada_puerto,"%d/%m/%Y") if registro.fecha_estimada_puerto else ""
-        fecha_estimada_llegada = datetime.strftime(registro.fecha_estimada_llegada,"%d/%m/%Y") if registro.fecha_estimada_llegada else ""
-        nro_contenedor = registro.nro_contenedor if registro.nro_contenedor else ""
-        codigo_bl_house = registro.codigo_bl_house if registro.codigo_bl_house else ""
-        fecha_embarque = datetime.strftime(registro.fecha_embarque,
-                                                      "%d/%m/%Y") if registro.fecha_embarque else ""
-        fecha_llegada = datetime.strftime(registro.fecha_llegada,
-                                           "%d/%m/%Y") if registro.fecha_llegada else ""
-        fecha_bodega = datetime.strftime(registro.fecha_bodega,
-                                           "%d/%m/%Y") if registro.fecha_bodega else ""
-        cantidad = registro.cantidad if registro.cantidad else ""
-        fob = registro.fob if registro.fob else ""
-        estado_embarque = registro.estado_embarque if registro.estado_embarque else ""
-        estado_orden = registro.estado_orden if registro.estado_orden else ""
+        clave = (
+            registro.cod_po,
+            registro.cod_producto,
+            registro.nombre,
+            registro.modelo,
+            registro.costo_sistema,
+            registro.costo_cotizado,
+            registro.cantidad_pedido,
+            registro.saldo_producto,
+            registro.fob_detalle,
+            registro.fob_total,
+            registro.proforma,
+            registro.proveedor,
+            registro.fecha_estimada_produccion,
+            registro.fecha_estimada_puerto,
+            registro.fecha_estimada_llegada
+        )
 
-        serialized.append({
-            "cod_po": cod_po,
-            "cod_producto": cod_producto,
-            "nombre": nombre,
-            "modelo": modelo,
-            "costo_sistema": costo_sistema,
-            "costo_cotizado": costo_cotizado,
-            "cantidad_pedido": cantidad_pedido,
-            "saldo_producto": saldo_producto,
-            "fob_detalle": fob_detalle,
-            "fob_total": fob_total,
-            "proforma": proforma,
-            "proveedor": proveedor,
-            "fecha_estimada_produccion": fecha_estimada_produccion,
-            "fecha_estimada_puerto": fecha_estimada_puerto,
-            "fecha_estimada_llegada": fecha_estimada_llegada,
-            "nro_contenedor": nro_contenedor,
-            "codigo_bl_house": codigo_bl_house,
-            "fecha_embarque": fecha_embarque,
-            "fecha_llegada": fecha_llegada,
-            "fecha_bodega": fecha_bodega,
-            "cantidad": cantidad,
-            "fob": fob,
-            "estado_embarque": estado_embarque,
-            "estado_orden": estado_orden
+        if clave not in grouped_records:
+            grouped_records[clave] = {
+                "cantidad_pedido": registro.cantidad_pedido,
+                "cod_po": registro.cod_po,
+                "cod_producto": registro.cod_producto,
+                "costo_cotizado": registro.costo_cotizado,
+                "costo_sistema": registro.costo_sistema,
+                "fecha_estimada_llegada": datetime.strftime(registro.fecha_estimada_llegada,"%d/%m/%Y") if registro.fecha_estimada_llegada else "",
+                "fecha_estimada_produccion": datetime.strftime(registro.fecha_estimada_produccion,"%d/%m/%Y") if registro.fecha_estimada_produccion else "",
+                "fecha_estimada_puerto": datetime.strftime(registro.fecha_estimada_puerto,"%d/%m/%Y") if registro.fecha_estimada_puerto else "",
+                "fob_detalle": registro.fob_detalle,
+                "fob_total": registro.fob_total,
+                "modelo": registro.modelo,
+                "nombre": registro.nombre,
+                "proforma": registro.proforma,
+                "proveedor": registro.proveedor,
+                "saldo_producto": registro.saldo_producto,
+                "estado_orden": registro.estado_orden,
+                "containers": []
+            }
 
-
+        grouped_records[clave]["containers"].append({
+            "nro_contenedor": registro.nro_contenedor,
+            "codigo_bl_house": registro.codigo_bl_house,
+            "fecha_embarque": datetime.strftime(registro.fecha_embarque,"%d/%m/%Y") if registro.fecha_embarque else "",
+            "fecha_llegada": datetime.strftime(registro.fecha_llegada,"%d/%m/%Y") if registro.fecha_llegada else "",
+            "fecha_bodega": datetime.strftime(registro.fecha_bodega,"%d/%m/%Y") if registro.fecha_bodega else "",
+            "cantidad": registro.total_precio_container,
+            "fob": registro.cantidad_container,
+            "estado_embarque": registro.estado_embarque
         })
+
+    # Convertir el diccionario en una lista de registros
+    serialized = list(grouped_records.values())
+
     return jsonify(serialized)
+
 
 @bpcustom.route('/productos_by_cat', methods=['POST'])
 @jwt_required()
