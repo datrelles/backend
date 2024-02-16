@@ -245,3 +245,40 @@ class StTracking(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
+
+class stProformaImpFp(Base):
+    __tablename__ = 'st_proforma_imp_fp'
+    __table_args__ = (
+        Index('ind_proforma_imp_fp01', 'cod_proforma', 'tipo_proforma', 'empresa'),
+        Index('pk_proforma_imp_fp', 'cod_proforma', 'secuencia', 'empresa', 'tipo_proforma'),
+        {'schema': 'stock'}
+    )
+    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
+    cod_proforma = Column(VARCHAR(9), primary_key=True, nullable=False)
+    secuencia = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
+    tipo_proforma = Column(VARCHAR(2), primary_key=True, nullable=False)
+    fecha_vencimiento = Column(DateTime)
+    valor = Column(NUMBER(14, 2, False))
+    saldo = Column(NUMBER(14, 2, False))
+    descripcion = Column(VARCHAR(100))
+    cod_forma_pago = Column(VARCHAR(3))
+    dias_vencimiento = Column(NUMBER(5, 0))
+    pct_valor = Column(NUMBER(10, 6))
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+    @classmethod
+    def eliminar_registro(cls, secuencia, cod_proforma):
+        try:
+            registro = cls.query().filter_by(secuencia=secuencia, cod_proforma=cod_proforma).first()
+            if registro:
+                db.session.delete(registro)
+                db.session.commit()
+                return True
+            else:
+                return False
+        except Exception as e:
+            print(f"Error al eliminar el registro: {e}")
+            db.session.rollback()
+            return False
