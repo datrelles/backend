@@ -1088,6 +1088,7 @@ def obtener_vt_detalles_general():
     for registro in vista:
         clave = (
             registro.cod_po,
+            registro.secuencia,
             registro.cod_producto,
             registro.nombre,
             registro.modelo,
@@ -1108,6 +1109,7 @@ def obtener_vt_detalles_general():
             grouped_records[clave] = {
                 "cantidad_pedido": registro.cantidad_pedido,
                 "cod_po": registro.cod_po,
+                "secuencia": registro.secuencia,
                 "cod_producto": registro.cod_producto,
                 "costo_cotizado": registro.costo_cotizado,
                 "costo_sistema": registro.costo_sistema,
