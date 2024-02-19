@@ -10,6 +10,7 @@ class VtDetallesOrdenGeneral(Base):
     __tablename__ = 'vt_detalles_orden_general'
     __table_args__ = {'schema': 'stock'}
     id = Column(VARCHAR(10), primary_key=True, nullable=False, index=True)
+    secuencia = Column(NUMBER(9))
     cod_po = Column(VARCHAR(10))
     cod_producto = Column(VARCHAR(14))
     nombre = Column(VARCHAR(200))
