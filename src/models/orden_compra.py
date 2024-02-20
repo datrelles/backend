@@ -125,6 +125,7 @@ class StPackinglist(Base):
     fecha_crea = Column(DateTime)
     usuario_modifica = Column(VARCHAR(30))
     fecha_modifica = Column(DateTime)
+    codigo_bl_house = Column(VARCHAR(30))
 
     @classmethod
     def query(cls):
