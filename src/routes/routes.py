@@ -12,6 +12,7 @@ from src.models.unidad_importacion import StUnidadImportacion
 from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque, StNaviera, StEmbarqueContenedores, StTipoContenedor
 from src.models.tipo_aforo import StTipoAforo
 from src.models.comprobante_electronico import tc_doc_elec_recibidos
+from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, st_casos_tipo_problema
 from src.config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer, event
 from sqlalchemy.orm import scoped_session
@@ -2567,4 +2568,161 @@ def obtener_doc_elec_recibidos():
     except Exception as e:
         logger.exception(f"Error al actualizar Embarque: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+#WARRANTY MODULES
+
+@bp.route('/checkInfoForCodeEngine/<code>', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def chekInfoForCodeEngine(code):
+    print(code)
+    codeEngine = st_prod_packing_list.query().filter(
+        st_prod_packing_list.empresa == 20,
+        st_prod_packing_list.es_anulado == 0,
+        func.replace(st_prod_packing_list.cod_motor, ' ', '').like(f'%{code}%')
+    ).limit(10).all()
+    # Construir los datos a devolver en formato JSON
+    data = [{"COD_MOTOR": registro.cod_motor, "COD_CHASIS": registro.cod_chasis} for registro in codeEngine]
+    print(data)
+    return jsonify(data)
+
+
+@bp.route('/getInfoForCodeEngine/<code>', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def getInfoForCodeEngine(code):
+    print(code)
+    codeEngine = st_prod_packing_list.query().filter(
+        st_prod_packing_list.empresa == 20,
+        st_prod_packing_list.es_anulado == 0,
+        func.replace(st_prod_packing_list.cod_motor, ' ', '').like(f'%{code}%')
+    ).limit(10).all()
+    # Construir los datos a devolver en formato JSON
+    data = [{"COD_MOTOR": registro.cod_motor, "COD_CHASIS": registro.cod_chasis} for registro in codeEngine]
+    print(data)
+    return jsonify(data)
+
+@bp.route('/getInfoCasosPostventas', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def getInfoCasosPostventas():
+    filtros_params = request.args.to_dict()
+    #Filter initial by enterprise
+    query = st_casos_postventa.query().filter(
+        st_casos_postventa.empresa == 20,
+    )
+#data processing date prior to consultation
+
+    start_date = datetime.strptime(filtros_params['start_date'], '%d/%m/%Y') if filtros_params['start_date'] else None
+    finish_date = datetime.strptime(filtros_params['finish_date'], '%d/%m/%Y') if filtros_params['finish_date'] else None
+    cod_provincia = filtros_params['cod_provincia'] if filtros_params['cod_provincia'] else None
+    cod_canton = filtros_params['cod_canton'] if filtros_params['cod_canton'] else None
+    warranty_status = filtros_params['warranty_status'] if filtros_params['warranty_status'] else None
+    case_status = filtros_params['case_status'] if filtros_params['case_status'] else None
+
+# Filter date range
+    if start_date is not None and finish_date is not None:
+        query = query.filter(
+            st_casos_postventa.fecha.between(start_date, finish_date)
+        )
+#Filter by City (Cantón) and Province
+    if cod_provincia is not None:
+        query = query.filter(
+              st_casos_postventa.codigo_provincia == cod_provincia
+        )
+    if cod_canton is not None:
+        query = query.filter(
+            st_casos_postventa.codigo_canton == cod_canton
+        )
+#Filter warranty status
+    if warranty_status is not None:
+        query = query.filter(
+            st_casos_postventa.aplica_garantia == warranty_status
+        )
+#Filter by case status
+    if case_status is not None:
+        query = query.filter(
+                st_casos_postventa.estado == case_status
+        )
+    casos_postventas = query.all()
+#Construir los datos a devolver en formato JSON
+    casos_json = []
+    for caso in casos_postventas:
+        caso_dict = {
+            "cod_comprobante": caso.cod_comprobante,
+            "tipo_comprobante": caso.tipo_comprobante,
+            "nombre_caso": caso.nombre_caso,
+            "descripcion": caso.descripcion,
+            "codigo_nacion": caso.codigo_nacion,
+            "codigo_provincia": caso.codigo_provincia,
+            "codigo_canton": caso.codigo_canton,
+            "nombre_cliente": caso.nombre_cliente,
+            "cod_producto": caso.cod_producto,
+            "cod_motor": caso.cod_motor,
+            "kilometraje": caso.kilometraje,
+            "codigo_taller": caso.codigo_taller,
+            "codigo_responsable": caso.codigo_responsable,
+            "cod_tipo_problema": caso.cod_tipo_problema,
+            "aplica_garantia": caso.aplica_garantia,
+            "adicionado_por": caso.adicionado_por,
+            "cod_distribuidor": caso.cod_distribuidor,
+            "manual_garantia": caso.manual_garantia,
+            "estado": caso.estado,
+            "usuario_cierra": caso.usuario_cierra,
+            "observacion_final": caso.observacion_final,
+            "identificacion_cliente": caso.identificacion_cliente,
+            "telefono_contacto1": caso.telefono_contacto1,
+            "telefono_contacto2": caso.telefono_contacto2,
+            "telefono_contacto3": caso.telefono_contacto3,
+            "e_mail1": caso.e_mail1,
+            "e_mail2": caso.e_mail2,
+            "cod_tipo_identificacion": caso.cod_tipo_identificacion,
+            "cod_agente": caso.cod_agente,
+            "cod_pedido": caso.cod_pedido,
+            "cod_tipo_pedido": caso.cod_tipo_pedido,
+            "numero_guia": caso.numero_guia,
+            "cod_distribuidor_cli": caso.cod_distribuidor_cli,
+            "es_cliente_contactado": caso.es_cliente_contactado,
+            "cod_canal": caso.cod_canal,
+            "referencia": caso.referencia,
+            "aplica_excepcion": caso.aplica_excepcion,
+            "cod_empleado": caso.cod_empleado,
+            "cod_tipo_persona": caso.cod_tipo_persona
+        }
+        # Tratamiento para fecha_adicion
+        if caso.fecha_adicion:
+            caso_dict["fecha_adicion"] = caso.fecha_adicion.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            caso_dict["fecha_adicion"] = None
+
+        # Tratamiento para fecha_cierre
+        if caso.fecha_cierre:
+            caso_dict["fecha_cierre"] = caso.fecha_cierre.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            caso_dict["fecha_cierre"] = None
+
+        # Tratamiento para fecha_venta
+        if caso.fecha_venta:
+            caso_dict["fecha_venta"] = caso.fecha_venta.strftime('%Y-%m-%d')
+        else:
+            caso_dict["fecha_venta"] = None
+
+        # Tratamiento para fecha
+        if caso.fecha:
+            caso_dict["fecha"] = caso.fecha.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            caso_dict["fecha"] = None
+
+        query2 = vt_casos_postventas.query().filter(
+            vt_casos_postventas.empresa == 20,
+            vt_casos_postventas.cod_comprobante == caso_dict["cod_comprobante"],
+        )
+
+        vt_casos = query2.first()
+        if vt_casos.porcentaje_avance:
+            caso_dict["porcentaje"] = vt_casos.porcentaje_avance
+        print(vt_casos.porcentaje_avance)
+        casos_json.append(caso_dict)
+    #print(casos_json)
+    return jsonify(casos_json)
 
