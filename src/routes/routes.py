@@ -1119,6 +1119,7 @@ def crear_packinglist_contenedor():
                             unidad_medida=query_prod.cod_unidad if query_prod.cod_unidad else unidad_medida,
                             usuario_crea=usuario_crea,
                             fecha_crea=fecha_crea,
+                            codigo_bl_house=query_contenedor.codigo_bl_house
                             # usuario_modifica = packing['usuario_modifica'].upper(),
                             # fecha_modifica = fecha_modifica
                         )
@@ -1149,6 +1150,7 @@ def crear_packinglist_contenedor():
                                     unidad_medida=query_prod.cod_unidad if query_prod.cod_unidad else unidad_medida,
                                     usuario_crea=usuario_crea,
                                     fecha_crea=fecha_crea,
+                                    codigo_bl_house=query_contenedor.codigo_bl_house
                                     # usuario_modifica = packing['usuario_modifica'].upper(),
                                     # fecha_modifica = fecha_modifica
                                 )
