@@ -170,7 +170,6 @@ class vt_casos_postventas(Base):
     fecha_cierre_previo = Column(DateTime)
     fecha_venta = Column(DateTime)
     es_cliente_contactado = Column(VARCHAR(2))  # Decoded value from 1 or 0 to 'SI' or 'NO'
-
     @classmethod
     def query(cls):
         return db.session.query(cls)
@@ -190,6 +189,26 @@ class st_casos_tipo_problema(Base):
     modificado_por = Column(VARCHAR(30))
     fecha_modificacion = Column(DateTime)
     descripcion = Column(VARCHAR(300), nullable=False)
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class st_casos_url(Base):
+    __tablename__ = 'ST_CASOS_URL'
+    __table_args__ = (
+        Index("PK_ST_CASOS_URL", "empresa", "cod_comprobante", "tipo_comprobante", "secuencial"),
+    )
+    empresa = Column(NUMBER(precision=4), nullable=False, primary_key=True)
+    cod_comprobante = Column(VARCHAR(9), nullable=False, primary_key=True)
+    tipo_comprobante = Column(VARCHAR(2), nullable=False, primary_key=True)
+    secuencial = Column(VARCHAR(6), nullable=False, primary_key=True)
+    url_photos = Column(VARCHAR(300), nullable=False)
+    url_videos = Column(VARCHAR(300), nullable=False)
+    fecha_adicion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    adicionado_por = Column(VARCHAR(30), nullable=False, server_default=text("USER"))
+    modificado_por = Column(VARCHAR(30))
+    fecha_modificacion = Column(DateTime)
 
     @classmethod
     def query(cls):

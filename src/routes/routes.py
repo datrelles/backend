@@ -12,7 +12,7 @@ from src.models.unidad_importacion import StUnidadImportacion
 from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque, StNaviera, StEmbarqueContenedores, StTipoContenedor
 from src.models.tipo_aforo import StTipoAforo
 from src.models.comprobante_electronico import tc_doc_elec_recibidos
-from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, st_casos_tipo_problema
+from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, st_casos_tipo_problema, st_casos_url
 from src.config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer, event
 from sqlalchemy.orm import scoped_session
@@ -25,6 +25,7 @@ from flask_cors import cross_origin
 from decimal import Decimal
 from src import oracle
 from os import getenv
+from sqlalchemy.exc import SQLAlchemyError
 import json
 from sqlalchemy import and_
 bp = Blueprint('routes', __name__)
@@ -2572,7 +2573,6 @@ def obtener_doc_elec_recibidos():
         return jsonify({'error': str(e)}), 500
 
 #WARRANTY MODULES
-
 @bp.route('/checkInfoForCodeEngine/<code>', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -2587,8 +2587,6 @@ def chekInfoForCodeEngine(code):
     data = [{"COD_MOTOR": registro.cod_motor, "COD_CHASIS": registro.cod_chasis} for registro in codeEngine]
     print(data)
     return jsonify(data)
-
-
 @bp.route('/getInfoForCodeEngine/<code>', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -2613,7 +2611,7 @@ def getInfoCasosPostventas():
     query = st_casos_postventa.query().filter(
         st_casos_postventa.empresa == 20,
     )
-#data processing date prior to consultation
+    #data processing date prior to consultation
 
     start_date = datetime.strptime(filtros_params['start_date'], '%d/%m/%Y') if filtros_params['start_date'] else None
     finish_date = datetime.strptime(filtros_params['finish_date'], '%d/%m/%Y') if filtros_params['finish_date'] else None
@@ -2727,4 +2725,152 @@ def getInfoCasosPostventas():
         casos_json.append(caso_dict)
     #print(casos_json)
     return jsonify(casos_json)
+
+@bp.route('/casosTipo/<cp_code>', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def casosTipoFunction(cp_code):
+    try:
+        cases = st_casos_tipo_problema.query().filter(
+            st_casos_tipo_problema.cod_comprobante == cp_code,
+            st_casos_tipo_problema.empresa == 20
+        )
+        cases_json = []
+        for case in cases:
+            case_dict = {
+                "cod_comprobante": case.cod_comprobante,
+                "codigo_problema": case.codigo_duracion,
+                "estado": case.estado,
+                "adicionado_by": case.adicionado_por,
+                "descripcion": case.descripcion
+            }
+            cases_json.append(case_dict)
+
+        return jsonify(cases_json)
+
+    except Exception as e:
+        print(e)
+        error_msg = "An error occurred while processing the request."
+        return jsonify({"error": e}), 500
+
+@bp.route('/casosTipoImages/<code_cp>', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def url_media(code_cp):
+    try:
+        url = st_casos_url.query().filter(
+            st_casos_url.empresa == 20,
+            st_casos_url.cod_comprobante == code_cp,
+            st_casos_url.tipo_comprobante == 'CP'
+        ).first()
+        print(url)
+        images = url.url_photos
+        videos = url.url_videos
+        dic = {
+            "images": images,
+            "videos": videos
+        }
+        print(dic)
+        return jsonify(dic)
+
+    except Exception as e:
+        return jsonify(e)
+
+@bp.route('/view_casos/<code_cp>', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_info_casos_post_view_ventas(code_cp):
+    try:
+        filtros_params = request.args.to_dict()
+        query = vt_casos_postventas.query().filter(
+            vt_casos_postventas.cod_comprobante == code_cp
+        )
+
+        casos_postventas = query.all()
+
+        # Convertir resultados a formato JSON
+        casos_json = []
+        for caso in casos_postventas:
+            caso_dict = {
+                "empresa": caso.empresa,
+                "tipo_comprobante": caso.tipo_comprobante,
+                "cod_comprobante": caso.cod_comprobante,
+                "fecha": caso.fecha.strftime('%Y-%m-%d %H:%M:%S'),
+                "nombre_caso": caso.nombre_caso,
+                "descripcion": caso.descripcion,
+                "codigo_responsable": caso.codigo_responsable,
+                "responsable": caso.responsable,
+                "nombre_cliente": caso.nombre_cliente,
+                "cod_producto": caso.cod_producto,
+                "cod_motor": caso.cod_motor,
+                "kilometraje": caso.kilometraje,
+                "codigo_taller": caso.codigo_taller,
+                "taller": caso.taller,
+                "cod_tipo_problema": caso.cod_tipo_problema,
+                "aplica_garantia": caso.aplica_garantia,
+                "cod_distribuidor": caso.cod_distribuidor,
+                "distribuidor": caso.distribuidor,
+                "manual_garantia": caso.manual_garantia,
+                "estado": caso.estado,
+                "nombre_estado": caso.nombre_estado,
+                "fecha_cierre": caso.fecha_cierre.strftime('%Y-%m-%d %H:%M:%S') if caso.fecha_cierre else None,
+                "usuario_cierra": caso.usuario_cierra,
+                "observacion_final": caso.observacion_final,
+                "identificacion_cliente": caso.identificacion_cliente,
+                "telefono_contacto1": caso.telefono_contacto1,
+                "telefono_contacto2": caso.telefono_contacto2,
+                "telefono_contacto3": caso.telefono_contacto3,
+                "e_mail1": caso.e_mail1,
+                "e_mail2": caso.e_mail2,
+                "producto": caso.producto,
+                "provincia": caso.provincia,
+                "canton": caso.canton,
+                "dias_transcurridos": caso.dias_transcurridos,
+                "porcentaje_avance": caso.porcentaje_avance,
+                "tipo_problema": caso.tipo_problema,
+                "numero_guia": caso.numero_guia,
+                "codigo_provincia": caso.codigo_provincia,
+                "codigo_canton": caso.codigo_canton,
+                "fecha_cierre_previo": caso.fecha_cierre_previo.strftime(
+                    '%Y-%m-%d %H:%M:%S') if caso.fecha_cierre_previo else None,
+                "fecha_venta": caso.fecha_venta.strftime('%Y-%m-%d') if caso.fecha_venta else None,
+                "es_cliente_contactado": caso.es_cliente_contactado,
+            }
+            casos_json.append(caso_dict)
+
+        return jsonify(casos_json)
+
+    except SQLAlchemyError as e:
+        error_msg = "Error en la base de datos: {}".format(str(e))
+        return jsonify({"error": error_msg}), 500
+
+    except Exception as e:
+        error_msg = "Error inesperado: {}".format(str(e))
+        return jsonify({"error": error_msg}), 500
+
+@bp.route('/update_status_tipo_problema', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def update_estado_casos():
+    try:
+        params = request.args.to_dict()
+        update_status = st_casos_tipo_problema.query().filter(
+            st_casos_tipo_problema.empresa == 20,
+            st_casos_tipo_problema.cod_comprobante == params["cod_comprobante"],
+            st_casos_tipo_problema.codigo_duracion == params["cod_duracion"],
+        ).first()
+        if update_status:
+            update_status.estado=params["status"]
+            db.session.commit()
+            return jsonify({"message": "Estado actualizado correctamente"}), 200
+        else:
+            return jsonify({"error": "No se encontro los resultados"}), 500
+
+    except SQLAlchemyError as e:
+        error_msg = "Error en la base de datos: {}".format(str(e))
+        return jsonify({"error": error_msg}), 500
+
+    except Exception as e:
+        error_msg = "Error inesperado: {}".format(str(e))
+        return jsonify({"error": error_msg}), 500
 
