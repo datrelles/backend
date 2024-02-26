@@ -1077,6 +1077,58 @@ def obtener_cod_producto_modelo(empresa, cod_producto):
         print('Error:', e)
         raise
 
+@bp.route('/generar_orden_compra', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def generar_orden_compra():
+    try:
+        data = request.json
+        print(data)
+        p_cod_empresa = float(data["p_cod_empresa"])
+        p_tipo_proforma = data["p_tipo_proforma"]
+        p_cod_proforma = data["p_cod_proforma"]
+        p_cod_agencia = data["p_cod_agencia"]
+        p_usuario = data["p_usuario"]
+
+        #Ejecutar el procedimiento PL/SQL
+        query = """
+                       DECLARE
+                            p_tipo_compra VARCHAR(100);
+                            p_cod_compra VARCHAR (100);
+                       BEGIN
+                         ks_prof_importacion_rep.genera_orden_compra(
+                           p_cod_empresa => :p_cod_empresa,
+                           p_tipo_proforma => :p_tipo_proforma,
+                           p_cod_proforma => :p_cod_proforma,
+                           p_cod_agencia => :p_cod_agencia,
+                           P_USUARIO => :P_USUARIO,
+                           p_tipo_compra => p_tipo_compra,
+                           p_cod_compra => p_cod_compra
+                         );
+                         -- Asigna los valores de las variables a los parámetros de salida
+                         :p_tipo_compra := p_tipo_compra;
+                         :p_cod_compra := p_cod_compra;
+                       END;
+                       """
+        with engine.connect() as conn:
+            result = conn.execute(text(query), {
+                'p_cod_empresa': p_cod_empresa,
+                'p_tipo_proforma': p_tipo_proforma,
+                'p_cod_proforma': p_cod_proforma,
+                'p_cod_agencia': p_cod_agencia,
+                'P_USUARIO': p_usuario,
+                'p_tipo_compra': None,
+                'p_cod_compra': None
+            })
+            conn.commit()
+            print(result)
+        return jsonify({"data": "Orden de Compra generada correctamente"})
+
+    except Exception as e:
+        error_message = f"Error al procesar la solicitud: {str(e)}"
+        print(str(e))
+        return jsonify({"error": error_message}), 500
+
 @bp.route('/packinglist_contenedor', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -1198,6 +1250,7 @@ def crear_packinglist_contenedor():
                     bl_no_existe.append(nro_contenedor)
             else:
                 prod_no_existe.append(cod_producto)
+        query_contenedor.cod_item = 'A'
         return jsonify({'mensaje': 'Packinglist cargado exitosamente.',
                         'unidad_medida_no_existe': unidad_medida_no_existe,
                         'cod_producto_no_existe': cod_prod_no_existe,
