@@ -236,7 +236,7 @@ def obtener_estados_param():
     empresa = request.args.get('empresa', None)
     cod_modelo = request.args.get('cod_modelo', None)
     cod_item = request.args.get('cod_item', None)
-    tipo = request.args.get('tipo', None)
+    tipos = request.args.getlist('tipos[]', None)
 
     query = TgModeloItem.query()
     if empresa:
@@ -245,8 +245,8 @@ def obtener_estados_param():
         query = query.filter(TgModeloItem.cod_modelo == cod_modelo)
     if cod_item:
         query = query.filter(TgModeloItem.cod_item == cod_item)
-    if tipo:
-        query = query.filter(TgModeloItem.tipo == tipo)
+    if tipos:
+        query = query.filter(TgModeloItem.tipo.in_(tipos))
 
     estados = query.all()
     serialized_estados = []
@@ -268,6 +268,7 @@ def obtener_estados_param():
             'orden': orden
         })
     return jsonify(serialized_estados)
+
 
 #METODO PARA OBTENER LAS NAVIERAS CON PARAMETROS
 @bpcustom.route('/naviera_param')
