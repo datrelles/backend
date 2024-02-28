@@ -9,11 +9,11 @@ from src.models.formula import StFormula, StFormulaD
 from src.models.despiece import StDespiece, StDespieceD
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
-from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque, StNaviera, StEmbarqueContenedores, StTipoContenedor
+from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque, StNaviera, StEmbarqueContenedores, StTipoContenedor, StTrackingContenedores
 from src.models.tipo_aforo import StTipoAforo
 from src.models.comprobante_electronico import tc_doc_elec_recibidos
 from src.config.database import db,engine,session
-from sqlalchemy import func, text,bindparam,Integer, event
+from sqlalchemy import func, text, bindparam, Integer, event, desc
 from sqlalchemy.orm import scoped_session
 from sqlalchemy import and_, or_, func, tuple_
 import logging
@@ -1691,14 +1691,29 @@ def actualizar_embarque(codigo_bl_house, empresa):
 
         # Verificar si el campo 'cod_item' está presente en el JSON antes de asignarlo
         if 'cod_item' in data:
+            if embarque.cod_item != data['cod_item']:
+                tracking = StTrackingBl(
+                  cod_bl_house=codigo_bl_house,
+                  empresa=empresa,
+                  observaciones="Tracking BackEnd",
+                  cod_modelo=data.get('cod_modelo'),
+                  usuario_crea=data.get('modificado_por'),
+                  fecha_crea=date.today(),
+                  fecha=date.today(),
+                  cod_item=data['cod_item'],
+                  secuencial= db.session.query(StTrackingBl).filter_by(cod_bl_house=codigo_bl_house, empresa=empresa).order_by(desc(StTrackingBl.secuencial)).first().secuencial + 1
+                )
+                db.session.add(tracking)
+
             embarque.cod_item = data['cod_item']
+
 
         # Verificar si el campo 'estado' está presente en el JSON antes de asignarlo
         if 'estado' in data:
             embarque.estado = data['estado']
 
         embarque.cod_proveedor = data.get('cod_proveedor', embarque.cod_proveedor)
-        embarque.numero_tracking = data.get('numero_tracking', embarque.numero_tracking)
+        embarque.numero_tracking = data.get('codigo_bl_master')[-4:] if data.get('codigo_bl_master') else embarque.numero_tracking
         embarque.naviera = data.get('naviera', embarque.naviera)
         embarque.agente = data.get('agente', embarque.agente)
         embarque.fecha_modificacion = date.today()
@@ -1717,6 +1732,8 @@ def actualizar_embarque(codigo_bl_house, empresa):
         embarque.cod_aforo = data.get('cod_aforo', embarque.cod_aforo)
         embarque.cod_regimen = data.get('cod_regimen', embarque.cod_regimen)
         embarque.nro_mrn = data.get('nro_mrn', embarque.nro_mrn)
+        embarque.bl_house_manual = data.get('bl_house_manual', embarque.bl_house_manual)
+        embarque.codigo_bl_master = data.get('codigo_bl_master', embarque.codigo_bl_master)
 
         # Obtener el valor del campo valor en la tabla StTipoAforo
         tipo_aforo = db.session.query(StTipoAforo).filter_by(cod_aforo=embarque.cod_aforo).first()
@@ -2469,13 +2486,27 @@ def crear_contenedor(nro_contenedor, empresa):
             observaciones=data.get('observaciones'),
             fecha_crea=date.today(),
             usuario_crea=data.get('usuario_crea'),
-            cod_item= '3',
+            cod_item= 1,
             cod_modelo='BL',
             fecha_bodega=parse_date(data.get('fecha_bodega')),
             es_repuestos=data.get('es_repuestos'),
             es_motos=data.get('es_motos'),
-            fecha_salida=parse_date(data.get('fecha_salida'))
+            fecha_salida=datetime.strptime(data.get('fecha_salida'), '%d/%m/%Y').date()
         )
+
+        tracking = StTrackingContenedores(
+            nro_contenedor=nro_contenedor,
+            empresa=empresa,
+            secuencial=1,
+            observaciones="Tracking BackEnd",
+            cod_modelo='BL',
+            usuario_crea=data.get('modificado_por'),
+            fecha_crea=date.today(),
+            fecha=date.today(),
+            cod_item=1,
+            codigo_bl_house=data.get('codigo_bl_house')
+        )
+        db.session.add(tracking)
 
         db.session.add(contenedor)
         db.session.commit()
@@ -2497,6 +2528,23 @@ def actualizar_contenedor(nro_contenedor, empresa):
 
         data = request.get_json()
 
+        if 'cod_item' in data:
+            if contenedor.cod_item != data['cod_item']:
+                tracking = StTrackingContenedores(
+                  nro_contenedor=data.get('nro_contenedor', contenedor.nro_contenedor),
+                  empresa=empresa,
+                  secuencial=db.session.query(StTrackingContenedores).filter_by(nro_contenedor=nro_contenedor,empresa=empresa).order_by(desc(StTrackingContenedores.secuencial)).first().secuencial + 1 if db.session.query(StTrackingContenedores).filter_by(nro_contenedor=nro_contenedor,empresa=empresa).order_by(desc(StTrackingContenedores.secuencial)).first() else 1,
+                  observaciones="Tracking BackEnd",
+                  cod_modelo=data.get('cod_modelo'),
+                  usuario_crea=data.get('modificado_por'),
+                  fecha_crea=date.today(),
+                  fecha=date.today(),
+                  cod_item=data['cod_item'],
+                  codigo_bl_house=data.get('codigo_bl_house', contenedor.codigo_bl_house)
+                )
+                db.session.add(tracking)
+            contenedor.cod_item = data['cod_item']
+
         contenedor.codigo_bl_house = data.get('codigo_bl_house', contenedor.codigo_bl_house)
         contenedor.nro_contenedor = data.get('nro_contenedor', contenedor.nro_contenedor)
         contenedor.cod_tipo_contenedor = data.get('cod_tipo_contenedor', contenedor.cod_tipo_contenedor)
@@ -2510,10 +2558,9 @@ def actualizar_contenedor(nro_contenedor, empresa):
         contenedor.usuario_modifica = data.get('usuario_modifica', contenedor.usuario_modifica)
         contenedor.fecha_bodega = data.get('fecha_bodega', contenedor.fecha_bodega)
         contenedor.cod_modelo = data.get('cod_modelo', contenedor.cod_modelo)
-        contenedor.cod_item = data.get('cod_item', contenedor.cod_item)
         contenedor.es_repuestos = data.get('es_repuestos', contenedor.es_repuestos)
         contenedor.es_motos = data.get('es_motos', contenedor.es_motos)
-        contenedor.fecha_salida = data.get('fecha_salida', contenedor.fecha_salida)
+        contenedor.fecha_salida = datetime.strptime(data.get('fecha_salida'), '%d/%m/%Y').date() if data.get('fecha_salida') else contenedor.fecha_salida
 
         db.session.commit()
 
