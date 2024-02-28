@@ -12,7 +12,7 @@ from src.models.unidad_importacion import StUnidadImportacion
 from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque, StNaviera, StEmbarqueContenedores, StTipoContenedor
 from src.models.tipo_aforo import StTipoAforo
 from src.models.comprobante_electronico import tc_doc_elec_recibidos
-from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, st_casos_tipo_problema, st_casos_url
+from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, st_casos_tipo_problema, st_casos_url, ARProvincias, ArCiudades
 from src.config.database import db,engine,session
 from sqlalchemy import func, text,bindparam,Integer, event
 from sqlalchemy.orm import scoped_session
@@ -2126,7 +2126,6 @@ def actualizar_anticipo_forma_de_pago_general(secuencia, cod_proforma):
     else:
         return jsonify({"error": "No se encontró el registro para actualizar."}), 404
 
-
 @bp.route('/proformas_por_cod_proforma/<string:cod_proforma>', methods=['GET'])
 @jwt_required()
 def obtener_proformas_por_cod_proforma(cod_proforma):
@@ -2166,8 +2165,6 @@ def delete_anticipo():
 
     #proformas = db.session.query(stProformaImpFp).filter_by(cod_proforma=cod_proforma).all()
     #print(proformas)
-
-
     return jsonify({'proformas': 'proformas_data'})
 
 @bp.route('/anticipos_por_cod_proforma/<string:cod_proforma>', methods=['GET'])
@@ -2242,7 +2239,6 @@ def pagar_anticipo_forma_de_pago_general():
         error_message = f"Error al procesar la solicitud: {str(e)}"
         print(str(e))
         return jsonify({"error": error_message}), 500
-
 
 @bp.route('/packinglist_total')
 @jwt_required()
@@ -2572,7 +2568,7 @@ def obtener_doc_elec_recibidos():
         logger.exception(f"Error al actualizar Embarque: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-#WARRANTY MODULES
+#WARRANTY MODULES------------------------------------------------------------
 @bp.route('/checkInfoForCodeEngine/<code>', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -2719,9 +2715,12 @@ def getInfoCasosPostventas():
         )
 
         vt_casos = query2.first()
-        if vt_casos.porcentaje_avance:
-            caso_dict["porcentaje"] = vt_casos.porcentaje_avance
-        print(vt_casos.porcentaje_avance)
+        if vt_casos is not None:
+            if vt_casos.porcentaje_avance is None:
+                caso_dict["porcentaje"] = 0
+            else:
+                caso_dict["porcentaje"] = vt_casos.porcentaje_avance
+            caso_dict["taller"] = vt_casos.taller
         casos_json.append(caso_dict)
     #print(casos_json)
     return jsonify(casos_json)
@@ -2763,14 +2762,12 @@ def url_media(code_cp):
             st_casos_url.cod_comprobante == code_cp,
             st_casos_url.tipo_comprobante == 'CP'
         ).first()
-        print(url)
         images = url.url_photos
         videos = url.url_videos
         dic = {
             "images": images,
             "videos": videos
         }
-        print(dic)
         return jsonify(dic)
 
     except Exception as e:
@@ -2785,7 +2782,6 @@ def get_info_casos_post_view_ventas(code_cp):
         query = vt_casos_postventas.query().filter(
             vt_casos_postventas.cod_comprobante == code_cp
         )
-
         casos_postventas = query.all()
 
         # Convertir resultados a formato JSON
@@ -2859,8 +2855,17 @@ def update_estado_casos():
             st_casos_tipo_problema.cod_comprobante == params["cod_comprobante"],
             st_casos_tipo_problema.codigo_duracion == params["cod_duracion"],
         ).first()
+        update_status_st_casos_postventa= st_casos_postventa.query().filter(
+            st_casos_postventa.empresa==20,
+            st_casos_postventa.cod_comprobante == params["cod_comprobante"]
+        ).first()
+
         if update_status:
-            update_status.estado=params["status"]
+            update_status.estado = params["status"]
+            number_help = update_status_st_casos_postventa.aplica_garantia
+            if number_help != 1 and params["status"] == '1':
+                update_status_st_casos_postventa.aplica_garantia = params["status"]
+                update_status_st_casos_postventa.estado = 'P'
             db.session.commit()
             return jsonify({"message": "Estado actualizado correctamente"}), 200
         else:
@@ -2873,4 +2878,51 @@ def update_estado_casos():
     except Exception as e:
         error_msg = "Error inesperado: {}".format(str(e))
         return jsonify({"error": error_msg}), 500
+
+@bp.route('/get_info_provinces', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_info_provinces():
+    try:
+        query_provinces = ARProvincias.query().all()
+        data_provinces = []
+        for province in query_provinces:
+            province_dict = {
+                "codigo_provincia": province.codigo_provincia,
+                "descripcion": province.descripcion
+            }
+            data_provinces.append(province_dict)
+        return jsonify(data_provinces)
+    except SQLAlchemyError as e:
+        # En caso de un error de base de datos, se puede devolver un mensaje de error apropiado
+        return jsonify({"error": "Error de base de datos al obtener información de provincias"}), 500
+    except Exception as e:
+        # Otros errores que no sean de base de datos pueden ser manejados aquí
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud"}), 500
+
+
+@bp.route('/get_info_city_by_province/<codigo_provincia>', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_info_cities(codigo_provincia):
+    try:
+        query_cities_by_provinces = ArCiudades.query().filter(
+            ArCiudades.codigo_provincia == codigo_provincia
+        ).all()
+        data_cities = []
+        for city in query_cities_by_provinces:
+            city_dict = {
+                "codigo_ciudad": city.codigo_ciudad,
+                "codigo_provincia": city.codigo_provincia,
+                "descripcion": city.descripcion
+            }
+            data_cities.append(city_dict)
+        return jsonify(data_cities)
+    except SQLAlchemyError as e:
+        # En caso de un error de base de datos, se puede devolver un mensaje de error apropiado
+        return jsonify({"error": "Error de base de datos al obtener información de ciudades por provincia"}), 500
+    except Exception as e:
+        # Otros errores que no sean de base de datos pueden ser manejados aquí
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud"}), 500
+#----------------------------------------------------------------------------F
 

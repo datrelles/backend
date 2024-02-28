@@ -213,3 +213,41 @@ class st_casos_url(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
+
+class ARProvincias(Base):
+    __tablename__ = 'AR_PROVINCIAS'
+    __table_args__ = {'schema': 'JAHER'}
+
+    codigo_provincia = Column(NUMBER(precision=4), primary_key=True)
+    descripcion = Column(VARCHAR(50), nullable=False)
+    anulado = Column(VARCHAR(1), nullable=False)
+    adicionado_por = Column(VARCHAR(30), nullable=False, server_default='USER')
+    fecha_adicion = Column(DateTime, nullable=False, server_default='SYSDATE')
+    modificado_por = Column(VARCHAR(30))
+    fecha_modificacion = Column(DateTime)
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class ArCiudades(Base):
+    __tablename__ = 'AR_CIUDADES'
+    __table_args__ = {'schema': 'JAHER'}
+
+    codigo_ciudad = Column(NUMBER(precision=4), primary_key=True, nullable=False)
+    codigo_provincia = Column(NUMBER(precision=4), primary_key=True, nullable=False)
+    descripcion = Column(VARCHAR(50), nullable=False)
+    anulado = Column(VARCHAR(1), nullable=False)
+    adicionado_por = Column(VARCHAR(30), nullable=False, server_default=text("USER"))
+    fecha_adicion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    modificado_por = Column(VARCHAR(30))
+    fecha_modificacion = Column(DateTime)
+
+    # Define relationship to AR_PROVINCIAS table if needed
+    # provincia = relationship("ArProvincias", back_populates="ciudades")
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+
