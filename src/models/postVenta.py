@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Index, VARCHAR, text, CHAR,Float
+from sqlalchemy import Column, DateTime, Index, VARCHAR, NVARCHAR, text, CHAR,Float, Unicode
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
@@ -214,21 +214,6 @@ class st_casos_url(Base):
     def query(cls):
         return db.session.query(cls)
 
-class ARProvincias(Base):
-    __tablename__ = 'AR_PROVINCIAS'
-    __table_args__ = {'schema': 'JAHER'}
-
-    codigo_provincia = Column(NUMBER(precision=4), primary_key=True)
-    descripcion = Column(VARCHAR(50), nullable=False)
-    anulado = Column(VARCHAR(1), nullable=False)
-    adicionado_por = Column(VARCHAR(30), nullable=False, server_default='USER')
-    fecha_adicion = Column(DateTime, nullable=False, server_default='SYSDATE')
-    modificado_por = Column(VARCHAR(30))
-    fecha_modificacion = Column(DateTime)
-
-    @classmethod
-    def query(cls):
-        return db.session.query(cls)
 
 class ArCiudades(Base):
     __tablename__ = 'AR_CIUDADES'
@@ -249,5 +234,48 @@ class ArCiudades(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
+
+class ADprovincias(Base):
+    __tablename__ = 'AD_PROVINCIAS'
+    __table_args__ = (
+        Index("AD_PROVINCIAS_01_IDX", "codigo_nacion"),
+        Index("AD_PROVINCIAS_02_IDX", "codigo_region"),
+        {'schema': 'JAHER'}
+
+    )
+    codigo_provincia = Column(VARCHAR(6), primary_key=True)
+    codigo_nacion = Column(NUMBER(3), nullable=False, primary_key=True)
+    descripcion = Column(VARCHAR(100))
+    codigo_region = Column(NUMBER(3), nullable=False)
+    sigla = Column(VARCHAR(3))
+    adicionado_por = Column(VARCHAR(30), nullable=False)
+    fecha_adicion = Column(DateTime, nullable=False)
+    modificado_por = Column(VARCHAR(30))
+    fecha_modificacion = Column(DateTime)
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class ADcantones(Base):
+    __tablename__ = 'AD_CANTONES'
+    __table_args__ = (
+        Index("AD_CANTONES_01_IDX", "codigo_provincia", "codigo_nacion"),
+    )
+
+    codigo_canton = Column(VARCHAR(4), primary_key=True)
+    codigo_provincia = Column(VARCHAR(6), primary_key=True)
+    codigo_nacion = Column(NUMBER(3), primary_key=True)
+    descripcion = Column(VARCHAR(50), nullable=False)
+    sigla = Column(VARCHAR(3))
+    adicionado_por = Column(VARCHAR(30), nullable=False, server_default=text("USER"))
+    fecha_adicion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    modificado_por = Column(VARCHAR(30))
+    fecha_modificacion = Column(DateTime)
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
 
 
