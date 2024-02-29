@@ -12,7 +12,7 @@ from src.models.unidad_importacion import StUnidadImportacion
 from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque, StNaviera, StEmbarqueContenedores, StTipoContenedor, StTrackingContenedores
 from src.models.tipo_aforo import StTipoAforo
 from src.models.comprobante_electronico import tc_doc_elec_recibidos
-from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, st_casos_tipo_problema, st_casos_url, ARProvincias, ArCiudades
+from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, st_casos_tipo_problema, st_casos_url, ArCiudades, ADcantones, ADprovincias
 from src.config.database import db,engine,session
 from sqlalchemy import func, text, bindparam, Integer, event, desc
 from sqlalchemy.orm import scoped_session
@@ -2984,7 +2984,9 @@ def update_estado_casos():
 @cross_origin()
 def get_info_provinces():
     try:
-        query_provinces = ARProvincias.query().all()
+        query_provinces = ADprovincias.query().filter(
+            ADprovincias.codigo_nacion == 1
+        ).all()
         data_provinces = []
         for province in query_provinces:
             province_dict = {
@@ -2995,10 +2997,10 @@ def get_info_provinces():
         return jsonify(data_provinces)
     except SQLAlchemyError as e:
         # En caso de un error de base de datos, se puede devolver un mensaje de error apropiado
-        return jsonify({"error": "Error de base de datos al obtener información de provincias"}), 500
+        return jsonify({"error": f"Error de base de datos al obtener información de provincias ${e} "}), 500
     except Exception as e:
         # Otros errores que no sean de base de datos pueden ser manejados aquí
-        return jsonify({"error": "Se ha producido un error al procesar la solicitud"}), 500
+        return jsonify({"error": f"Se ha producido un error al procesar la solicitud ${e}"}), 500
 
 
 @bp.route('/get_info_city_by_province/<codigo_provincia>', methods=['GET'])
@@ -3006,13 +3008,13 @@ def get_info_provinces():
 @cross_origin()
 def get_info_cities(codigo_provincia):
     try:
-        query_cities_by_provinces = ArCiudades.query().filter(
-            ArCiudades.codigo_provincia == codigo_provincia
+        query_cities_by_provinces = ADcantones.query().filter(
+            ADcantones.codigo_provincia == codigo_provincia
         ).all()
         data_cities = []
         for city in query_cities_by_provinces:
             city_dict = {
-                "codigo_ciudad": city.codigo_ciudad,
+                "codigo_ciudad": city.codigo_canton,
                 "codigo_provincia": city.codigo_provincia,
                 "descripcion": city.descripcion
             }
