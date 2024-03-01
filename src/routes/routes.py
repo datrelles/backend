@@ -1251,6 +1251,7 @@ def crear_packinglist_contenedor():
             else:
                 prod_no_existe.append(cod_producto)
         query_contenedor.cod_item = 'A'
+        db.session.commit()
         return jsonify({'mensaje': 'Packinglist cargado exitosamente.',
                         'unidad_medida_no_existe': unidad_medida_no_existe,
                         'cod_producto_no_existe': cod_prod_no_existe,
