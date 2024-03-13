@@ -2674,7 +2674,6 @@ def obtener_doc_elec_recibidos():
 @jwt_required()
 @cross_origin()
 def chekInfoForCodeEngine(code):
-    print(code)
     codeEngine = st_prod_packing_list.query().filter(
         st_prod_packing_list.empresa == 20,
         st_prod_packing_list.es_anulado == 0,
@@ -2682,7 +2681,6 @@ def chekInfoForCodeEngine(code):
     ).limit(10).all()
     # Construir los datos a devolver en formato JSON
     data = [{"COD_MOTOR": registro.cod_motor, "COD_CHASIS": registro.cod_chasis} for registro in codeEngine]
-    print(data)
     return jsonify(data)
 @bp.route('/getInfoForCodeEngine/<code>', methods=['GET'])
 @jwt_required()
@@ -2712,6 +2710,11 @@ def getInfoCasosPostventas():
 
     start_date = datetime.strptime(filtros_params['start_date'], '%d/%m/%Y') if filtros_params['start_date'] else None
     finish_date = datetime.strptime(filtros_params['finish_date'], '%d/%m/%Y') if filtros_params['finish_date'] else None
+    #Aumentar un dia
+    if finish_date:
+        finish_date += timedelta(days=1)
+    if start_date:
+        start_date -= timedelta(days=1)
     cod_provincia = filtros_params['cod_provincia'] if filtros_params['cod_provincia'] else None
     cod_canton = filtros_params['cod_canton'] if filtros_params['cod_canton'] else None
     warranty_status = filtros_params['warranty_status'] if filtros_params['warranty_status'] else None
