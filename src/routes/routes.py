@@ -13,13 +13,14 @@ from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque
 from src.models.tipo_aforo import StTipoAforo
 from src.models.comprobante_electronico import tc_doc_elec_recibidos
 from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, st_casos_tipo_problema, st_casos_url, ArCiudades, ADcantones, ADprovincias
-from src.config.database import db,engine,session
+from src.models.despiece_repuestos import st_producto_despiece, st_despiece, st_producto_rep_anio
+from src.config.database import db, engine, session
 from sqlalchemy import func, text, bindparam, Integer, event, desc
 from sqlalchemy.orm import scoped_session
 from sqlalchemy import and_, or_, func, tuple_
 import logging
 import datetime
-from datetime import datetime,date
+from datetime import datetime, date
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 from decimal import Decimal
@@ -3029,6 +3030,173 @@ def get_info_cities(codigo_provincia):
         return jsonify({"error": "Error de base de datos al obtener información de ciudades por provincia"}), 500
     except Exception as e:
         # Otros errores que no sean de base de datos pueden ser manejados aquí
-        return jsonify({"error": "Se ha producido un error al procesar la solicitud"}), 500
-#----------------------------------------------------------------------------F
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud"+e}), 500
+#UPDATE_YEAR_PARTS----------------------------------------------------------------------------
+@bp.route('/get_info_despiece/motos', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_info_despice():
+    empresa= request.args.get("empresa")
+    try:
+        marcas = st_despiece.query().filter(
+        st_despiece.nivel == 1,
+        st_despiece.cod_despiece != 'A',
+        st_despiece.cod_despiece != 'U',
+        st_despiece.cod_despiece != 'Q',
+        st_despiece.cod_despiece != 'L',
+        st_despiece.empresa      == empresa,
+        ).all()
+        dict_despiece = {}
 
+        for marca in marcas:
+            categorias = st_despiece.query().filter(
+                st_despiece.empresa == empresa,
+                st_despiece.nivel == 2,
+                st_despiece.cod_despiece != 'SGN',
+                st_despiece.cod_despiece != 'BGN',
+                st_despiece.cod_despiece != 'SLF',
+                st_despiece.cod_despiece_padre == marca.cod_despiece
+            ).all()
+            dict_categorias = {}
+
+            for category in categorias:
+                modelos = st_despiece.query().filter(
+                st_despiece.empresa == empresa,
+                st_despiece.nivel == 3,
+                st_despiece.cod_despiece_padre == category.cod_despiece
+                ).all()
+                dict_modelos = {}
+
+                for modelo in modelos:
+                    subsistemas = st_despiece.query().filter(
+                        st_despiece.empresa == empresa,
+                        st_despiece.nivel == 4,
+                        st_despiece.cod_despiece_padre == modelo.cod_despiece
+                    ).all()
+                    list_subsistemas = []
+                    dict_subsistema = {}
+
+                    for subsistema in subsistemas:
+                        dict_subsistema_new = {}
+                        dict_subsistema_new[subsistema.nombre_e] = subsistema.cod_despiece
+                        dict_subsistema_new["id"]                = subsistema.cod_despiece
+                        dict_subsistema_new["name"]              = subsistema.nombre_e
+
+                        dict_subsistema[subsistema.nombre_e] = subsistema.cod_despiece
+                        list_subsistemas.append(dict_subsistema_new)
+
+                    dict_modelos[modelo.nombre_e] = list_subsistemas
+                dict_categorias[category.nombre_e] = dict_modelos
+            dict_despiece[marca.nombre_e] = dict_categorias
+    except Exception as e:
+        print(e)
+    return jsonify(dict_despiece)
+
+@bp.route('/get_info_despiece/parts', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_info_despiece_parts():
+    empresa = request.args.get("empresa")
+    subsistema = request.args.get("subsistema")
+    try:
+        parts = st_producto_despiece.query().filter(
+            st_producto_despiece.empresa == empresa,
+            st_producto_despiece.cod_despiece==subsistema
+        ).all()
+
+        list_parts = []
+        dict_parts = {}
+
+        for part in parts:
+            list_parts.append(part.cod_producto)
+            names_parts = Producto.query().filter(
+                Producto.cod_producto == part.cod_producto,
+                Producto.empresa == empresa
+            ).all()
+            for name in names_parts:
+                dict_parts[part.cod_producto] = name.nombre
+        return jsonify(dict_parts), 200
+
+    except Exception as e:
+        print(e)
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud: " +str(e)}), 500
+
+@bp.route('/update_year_parts', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def udpateYearParts():
+    try:
+        from_year = request.args.get('from_year')
+        to_year = request.args.get('to_year')
+        flag_id_level = request.args.get('flag_id_level')
+        empresa = request.args.get("empresa")
+        empresa = int(empresa)
+        flag_id_level = int(flag_id_level)
+        data_subsystem = request.json
+        user_shineray = request.args.get('user_shineray')
+
+        # Imprimir las variables
+        #print(f"from_year: {from_year}")
+        #print(f"to_year: {to_year}")
+        #print(f"flag_id_level: {flag_id_level}")
+        #print(f"data_subsystem: {data_subsystem}")
+        if flag_id_level == 1:
+            code_subsystem = data_subsystem['cod_subsystem']
+            for code in code_subsystem:
+                parts = st_producto_despiece.query().filter(
+                    st_producto_despiece.empresa == empresa,
+                    st_producto_despiece.cod_despiece == code
+                ).all()
+                for part in parts:
+                    print(part.cod_producto)
+                    existing_register = st_producto_rep_anio.query().filter(
+                        st_producto_rep_anio.empresa == empresa,
+                        st_producto_rep_anio.cod_producto == part.cod_producto
+                    ).first()
+                    if existing_register:
+                        existing_register.anio_desde = from_year
+                        existing_register.anio_hasta = to_year
+                        existing_register.usuario_modifica = user_shineray
+                        existing_register.fecha_modificacion = datetime.now()
+                    else:
+                        new_register_anio= st_producto_rep_anio(
+                            empresa         =   empresa,
+                            anio_desde      =   from_year,
+                            anio_hasta      =   to_year,
+                             cod_producto   =   part.cod_producto,
+                            usuario_crea    =   user_shineray,
+                            fecha_crea      =   datetime.now()
+                        )
+                        db.session.add(new_register_anio)
+            db.session.commit()
+            return jsonify({"Proceso Finalizado": "ok"}), 200
+        if flag_id_level == 2:
+            code_products = data_subsystem['cod_producto']
+            print(code_products)
+            for part in code_products:
+                print(part)
+                existing_register = st_producto_rep_anio.query().filter(
+                    st_producto_rep_anio.empresa == empresa,
+                    st_producto_rep_anio.cod_producto == part
+                ).first()
+                if existing_register:
+                    existing_register.anio_desde = from_year
+                    existing_register.anio_hasta = to_year
+                    existing_register.usuario_modifica = user_shineray
+                    existing_register.fecha_modificacion = datetime.now()
+                else:
+                    new_register_anio = st_producto_rep_anio(
+                        empresa=empresa,
+                        anio_desde=from_year,
+                        anio_hasta=to_year,
+                        cod_producto=part,
+                        usuario_crea=user_shineray,
+                        fecha_crea=datetime.now()
+                    )
+                    db.session.add(new_register_anio)
+            db.session.commit()
+            return jsonify({"works": "loading"}), 200
+
+    except Exception as e:
+        print(e)
+        return jsonify({"Ha ocurrido un error interno en el servidor al procesar tu solicitud.":": "+str(e)}), 500
