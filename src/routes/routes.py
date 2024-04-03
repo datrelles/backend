@@ -3169,7 +3169,7 @@ def udpateYearParts():
                         )
                         db.session.add(new_register_anio)
             db.session.commit()
-            return jsonify({"Proceso Finalizado": "ok"}), 200
+            return jsonify({"succes": "Años actualizados correctamente"}), 200
         if flag_id_level == 2:
             code_products = data_subsystem['cod_producto']
             print(code_products)
@@ -3195,8 +3195,15 @@ def udpateYearParts():
                     )
                     db.session.add(new_register_anio)
             db.session.commit()
-            return jsonify({"works": "loading"}), 200
+            return jsonify({"succes": "Años actualizados correctamente"}), 200
 
     except Exception as e:
         print(e)
-        return jsonify({"Ha ocurrido un error interno en el servidor al procesar tu solicitud.":": "+str(e)}), 500
+        return jsonify({"error":"Error en el proceso: "+str(e)}), 500
+
+@bp.route('/get_info_parts_year_by_cod_producto', methods = ['GET'])
+@jwt_required()
+@cross_origin()
+def get_info_year():
+    print('apiList')
+    return jsonify({"api":"succes"})
