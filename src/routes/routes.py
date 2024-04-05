@@ -3035,7 +3035,7 @@ def get_info_cities(codigo_provincia):
 @bp.route('/get_info_despiece/motos', methods=['GET'])
 @jwt_required()
 @cross_origin()
-def get_info_despice():
+def get_info_despice():# Retrieve a tree view of motorcycle brands, models and subsystem
     empresa= request.args.get("empresa")
     try:
         marcas = st_despiece.query().filter(
@@ -3090,12 +3090,14 @@ def get_info_despice():
             dict_despiece[marca.nombre_e] = dict_categorias
     except Exception as e:
         print(e)
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud: " + str(e)}), 500
+
     return jsonify(dict_despiece)
 
 @bp.route('/get_info_despiece/parts', methods=['GET'])
 @jwt_required()
 @cross_origin()
-def get_info_despiece_parts():
+def get_info_despiece_parts(): # Retrieve a tree view of motorcycle parts
     empresa = request.args.get("empresa")
     subsistema = request.args.get("subsistema")
     try:
@@ -3118,13 +3120,12 @@ def get_info_despiece_parts():
         return jsonify(dict_parts), 200
 
     except Exception as e:
-        print(e)
         return jsonify({"error": "Se ha producido un error al procesar la solicitud: " +str(e)}), 500
 
 @bp.route('/update_year_parts', methods=['PUT'])
 @jwt_required()
 @cross_origin()
-def udpateYearParts():
+def udpateYearParts():#Function to update the year data fora model, a subsystem, and a single motorcycle part
     try:
         from_year = request.args.get('from_year')
         to_year = request.args.get('to_year')
@@ -3148,7 +3149,6 @@ def udpateYearParts():
                     st_producto_despiece.cod_despiece == code
                 ).all()
                 for part in parts:
-                    print(part.cod_producto)
                     existing_register = st_producto_rep_anio.query().filter(
                         st_producto_rep_anio.empresa == empresa,
                         st_producto_rep_anio.cod_producto == part.cod_producto
@@ -3172,9 +3172,7 @@ def udpateYearParts():
             return jsonify({"succes": "Años actualizados correctamente"}), 200
         if flag_id_level == 2:
             code_products = data_subsystem['cod_producto']
-            print(code_products)
             for part in code_products:
-                print(part)
                 existing_register = st_producto_rep_anio.query().filter(
                     st_producto_rep_anio.empresa == empresa,
                     st_producto_rep_anio.cod_producto == part
@@ -3198,12 +3196,34 @@ def udpateYearParts():
             return jsonify({"succes": "Años actualizados correctamente"}), 200
 
     except Exception as e:
-        print(e)
         return jsonify({"error":"Error en el proceso: "+str(e)}), 500
 
 @bp.route('/get_info_parts_year_by_cod_producto', methods = ['GET'])
 @jwt_required()
 @cross_origin()
-def get_info_year():
-    print('apiList')
-    return jsonify({"api":"succes"})
+def get_info_year(): #function to get year about a specific  motorcycle part
+    try:
+        empresa = request.args.get("empresa")
+        empresa = int(empresa)
+        cod_producto = request.args.get("cod_producto")
+        year_parts = st_producto_rep_anio.query().filter(
+            st_producto_rep_anio.empresa == empresa,
+            st_producto_rep_anio.cod_producto == cod_producto
+        ).first()
+        dict = {}
+        if year_parts is not None:
+            if hasattr(year_parts, 'anio_desde'):
+                dict["from"] = year_parts.anio_desde
+
+            if hasattr(year_parts, 'anio_hasta'):
+                dict["to"] = year_parts.anio_hasta
+        return jsonify(dict), 200
+
+    except Exception as e:
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud: " +str(e)}), 500
+
+
+
+
+
+
