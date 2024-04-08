@@ -11,7 +11,6 @@ class tc_doc_elec_recibidos(Base):
         Index("RUC_COMPROBANTE","ruc_emisor", "serie_comprobante"),
         {'schema': 'contabilidad'}
     )
-
     ruc_emisor = Column(VARCHAR(13), primary_key=True, nullable=False)
     serie_comprobante = Column(VARCHAR(50), primary_key=True, nullable=False)
     comprobante = Column(VARCHAR(50))
@@ -24,7 +23,8 @@ class tc_doc_elec_recibidos(Base):
     clave_acceso = Column(VARCHAR(100))
     numero_autorizacion = Column(VARCHAR(100))
     importe_total = Column(Float)
-
+    iva = Column(Float)
+    valor_sin_impuestos = Column(Float)
     @classmethod
     def query(cls):
         return db.session.query(cls)

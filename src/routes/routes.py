@@ -2570,7 +2570,7 @@ def actualizar_contenedor(nro_contenedor, empresa):
         logger.exception(f"Error al actualizar Embarque: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-
+#DOC-SRI-ELECTRONICS--------------------------------------------------------------
 @bp.route('/comprobante/electronico', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -2591,10 +2591,11 @@ def insertFortLote():
                 if existing_entry:
                     pass
                 else:
-
                     fecha_emision = datetime.strptime(item['FECHA_EMISION'], '%d/%m/%Y')
                     fecha_autorizacion = datetime.strptime(item['FECHA_AUTORIZACION'], '%d/%m/%Y %H:%M:%S')
                     importe_total = float(item.get('IMPORTE_TOTAL', '0')) if item.get('IMPORTE_TOTAL', '0') != '' else 0
+                    iva = float(item.get('IVA', '0')) if item.get('IVA', '0') != '' else 0
+                    valor_sin_impuestos = float(item.get('VALOR_SIN_IMPUESTOS', '0')) if item.get('VALOR_SIN_IMPUESTOS', '0') != '' else 0
                     new_entry = tc_doc_elec_recibidos(
                         ruc_emisor=item.get('RUC_EMISOR'),
                         serie_comprobante=item['SERIE_COMPROBANTE'],
@@ -2602,13 +2603,16 @@ def insertFortLote():
                         razon_social_emisor=item['RAZON_SOCIAL_EMISOR'].upper(),
                         fecha_emision=fecha_emision,
                         fecha_autorizacion=fecha_autorizacion,
-                        tipo_emision=item['TIPO_EMISION'],
+                        tipo_emision=item.get('TIPO_EMISION',''),
                         numero_documento_modificado=item.get('NUMERO_DOCUMENTO_MODIFICADO', ''),
                         identificacion_receptor=item['IDENTIFICACION_RECEPTOR'],
                         clave_acceso=item['CLAVE_ACCESO'],
-                        numero_autorizacion=item['NUMERO_AUTORIZACION'],
-                        importe_total=importe_total
+                        numero_autorizacion=item.get('NUMERO_AUTORIZACION', ''),
+                        importe_total=importe_total,
+                        iva=iva,
+                        valor_sin_impuestos=valor_sin_impuestos
                     )
+
                     db.session.add(new_entry)
                     db.session.commit()
         else:
@@ -2657,7 +2661,9 @@ def obtener_doc_elec_recibidos():
                     'identificacion_receptor': documento.identificacion_receptor,
                     'clave_acceso': documento.clave_acceso,
                     'numero_autorizacion': documento.numero_autorizacion,
-                    'importe_total': float(documento.importe_total) if documento.importe_total is not None else None
+                    'importe_total': float(documento.importe_total) if documento.importe_total is not None else None,
+                    'iva': float(documento.iva) if documento.iva is not None else None,
+                    'valor_sin_impuestos':float(documento.valor_sin_impuestos) if documento.valor_sin_impuestos is not None else None,
                 })
 
             return jsonify(serialized_documentos)
