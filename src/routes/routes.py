@@ -2966,17 +2966,35 @@ def update_estado_casos():
             st_casos_tipo_problema.cod_comprobante == params["cod_comprobante"],
             st_casos_tipo_problema.codigo_duracion == params["cod_duracion"],
         ).first()
-        update_status_st_casos_postventa= st_casos_postventa.query().filter(
-            st_casos_postventa.empresa==20,
+        update_status_st_casos_postventa = st_casos_postventa.query().filter(
+            st_casos_postventa.empresa == 20,
             st_casos_postventa.cod_comprobante == params["cod_comprobante"]
         ).first()
+
+        all_subcases_status = st_casos_tipo_problema.query().filter(
+            st_casos_tipo_problema.empresa == 20,
+            st_casos_tipo_problema.cod_comprobante == params["cod_comprobante"],
+            st_casos_tipo_problema.codigo_duracion != params["cod_duracion"]
+        ).all()
+
+        all_states_are_2 = True
+
+        for status in all_subcases_status:
+            if status.estado != 0 or status.estado is None or params["status"] != '0':
+                all_states_are_2 = False
+                break
 
         if update_status:
             update_status.estado = params["status"]
             number_help = update_status_st_casos_postventa.aplica_garantia
-            if number_help != 1 and params["status"] == '1':
+            if number_help != 1 and params["status"] == '1' and all_states_are_2 == False:
                 update_status_st_casos_postventa.aplica_garantia = params["status"]
                 update_status_st_casos_postventa.estado = 'P'
+
+            elif all_states_are_2 == True:
+                 update_status_st_casos_postventa.aplica_garantia = params["status"]
+                 update_status_st_casos_postventa.estado = 'C'
+
             db.session.commit()
             return jsonify({"message": "Estado actualizado correctamente"}), 200
         else:
@@ -2988,6 +3006,7 @@ def update_estado_casos():
 
     except Exception as e:
         error_msg = "Error inesperado: {}".format(str(e))
+        print(error_msg)
         return jsonify({"error": error_msg}), 500
 
 @bp.route('/get_info_provinces', methods=['GET'])
