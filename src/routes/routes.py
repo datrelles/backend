@@ -13,13 +13,14 @@ from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque
 from src.models.tipo_aforo import StTipoAforo
 from src.models.comprobante_electronico import tc_doc_elec_recibidos
 from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, st_casos_tipo_problema, st_casos_url, ArCiudades, ADcantones, ADprovincias
-from src.config.database import db,engine,session
+from src.models.despiece_repuestos import st_producto_despiece, st_despiece, st_producto_rep_anio
+from src.config.database import db, engine, session
 from sqlalchemy import func, text, bindparam, Integer, event, desc
 from sqlalchemy.orm import scoped_session
 from sqlalchemy import and_, or_, func, tuple_
 import logging
 import datetime
-from datetime import datetime,date
+from datetime import datetime, date
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 from decimal import Decimal
@@ -2569,7 +2570,7 @@ def actualizar_contenedor(nro_contenedor, empresa):
         logger.exception(f"Error al actualizar Embarque: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-
+#DOC-SRI-ELECTRONICS--------------------------------------------------------------
 @bp.route('/comprobante/electronico', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -2590,10 +2591,11 @@ def insertFortLote():
                 if existing_entry:
                     pass
                 else:
-
                     fecha_emision = datetime.strptime(item['FECHA_EMISION'], '%d/%m/%Y')
                     fecha_autorizacion = datetime.strptime(item['FECHA_AUTORIZACION'], '%d/%m/%Y %H:%M:%S')
                     importe_total = float(item.get('IMPORTE_TOTAL', '0')) if item.get('IMPORTE_TOTAL', '0') != '' else 0
+                    iva = float(item.get('IVA', '0')) if item.get('IVA', '0') != '' else 0
+                    valor_sin_impuestos = float(item.get('VALOR_SIN_IMPUESTOS', '0')) if item.get('VALOR_SIN_IMPUESTOS', '0') != '' else 0
                     new_entry = tc_doc_elec_recibidos(
                         ruc_emisor=item.get('RUC_EMISOR'),
                         serie_comprobante=item['SERIE_COMPROBANTE'],
@@ -2601,13 +2603,16 @@ def insertFortLote():
                         razon_social_emisor=item['RAZON_SOCIAL_EMISOR'].upper(),
                         fecha_emision=fecha_emision,
                         fecha_autorizacion=fecha_autorizacion,
-                        tipo_emision=item['TIPO_EMISION'],
+                        tipo_emision=item.get('TIPO_EMISION',''),
                         numero_documento_modificado=item.get('NUMERO_DOCUMENTO_MODIFICADO', ''),
                         identificacion_receptor=item['IDENTIFICACION_RECEPTOR'],
                         clave_acceso=item['CLAVE_ACCESO'],
-                        numero_autorizacion=item['NUMERO_AUTORIZACION'],
-                        importe_total=importe_total
+                        numero_autorizacion=item.get('NUMERO_AUTORIZACION', ''),
+                        importe_total=importe_total,
+                        iva=iva,
+                        valor_sin_impuestos=valor_sin_impuestos
                     )
+
                     db.session.add(new_entry)
                     db.session.commit()
         else:
@@ -2656,7 +2661,9 @@ def obtener_doc_elec_recibidos():
                     'identificacion_receptor': documento.identificacion_receptor,
                     'clave_acceso': documento.clave_acceso,
                     'numero_autorizacion': documento.numero_autorizacion,
-                    'importe_total': float(documento.importe_total) if documento.importe_total is not None else None
+                    'importe_total': float(documento.importe_total) if documento.importe_total is not None else None,
+                    'iva': float(documento.iva) if documento.iva is not None else None,
+                    'valor_sin_impuestos':float(documento.valor_sin_impuestos) if documento.valor_sin_impuestos is not None else None,
                 })
 
             return jsonify(serialized_documentos)
@@ -2674,7 +2681,6 @@ def obtener_doc_elec_recibidos():
 @jwt_required()
 @cross_origin()
 def chekInfoForCodeEngine(code):
-    print(code)
     codeEngine = st_prod_packing_list.query().filter(
         st_prod_packing_list.empresa == 20,
         st_prod_packing_list.es_anulado == 0,
@@ -2682,7 +2688,6 @@ def chekInfoForCodeEngine(code):
     ).limit(10).all()
     # Construir los datos a devolver en formato JSON
     data = [{"COD_MOTOR": registro.cod_motor, "COD_CHASIS": registro.cod_chasis} for registro in codeEngine]
-    print(data)
     return jsonify(data)
 @bp.route('/getInfoForCodeEngine/<code>', methods=['GET'])
 @jwt_required()
@@ -2712,6 +2717,11 @@ def getInfoCasosPostventas():
 
     start_date = datetime.strptime(filtros_params['start_date'], '%d/%m/%Y') if filtros_params['start_date'] else None
     finish_date = datetime.strptime(filtros_params['finish_date'], '%d/%m/%Y') if filtros_params['finish_date'] else None
+    #Aumentar un dia
+    if finish_date:
+        finish_date += timedelta(days=1)
+    if start_date:
+        start_date -= timedelta(days=1)
     cod_provincia = filtros_params['cod_provincia'] if filtros_params['cod_provincia'] else None
     cod_canton = filtros_params['cod_canton'] if filtros_params['cod_canton'] else None
     warranty_status = filtros_params['warranty_status'] if filtros_params['warranty_status'] else None
@@ -2956,17 +2966,35 @@ def update_estado_casos():
             st_casos_tipo_problema.cod_comprobante == params["cod_comprobante"],
             st_casos_tipo_problema.codigo_duracion == params["cod_duracion"],
         ).first()
-        update_status_st_casos_postventa= st_casos_postventa.query().filter(
-            st_casos_postventa.empresa==20,
+        update_status_st_casos_postventa = st_casos_postventa.query().filter(
+            st_casos_postventa.empresa == 20,
             st_casos_postventa.cod_comprobante == params["cod_comprobante"]
         ).first()
+
+        all_subcases_status = st_casos_tipo_problema.query().filter(
+            st_casos_tipo_problema.empresa == 20,
+            st_casos_tipo_problema.cod_comprobante == params["cod_comprobante"],
+            st_casos_tipo_problema.codigo_duracion != params["cod_duracion"]
+        ).all()
+
+        all_states_are_2 = True
+
+        for status in all_subcases_status:
+            if status.estado != 0 or status.estado is None or params["status"] != '0':
+                all_states_are_2 = False
+                break
 
         if update_status:
             update_status.estado = params["status"]
             number_help = update_status_st_casos_postventa.aplica_garantia
-            if number_help != 1 and params["status"] == '1':
+            if number_help != 1 and params["status"] == '1' and all_states_are_2 == False:
                 update_status_st_casos_postventa.aplica_garantia = params["status"]
                 update_status_st_casos_postventa.estado = 'P'
+
+            elif all_states_are_2 == True:
+                 update_status_st_casos_postventa.aplica_garantia = params["status"]
+                 update_status_st_casos_postventa.estado = 'C'
+
             db.session.commit()
             return jsonify({"message": "Estado actualizado correctamente"}), 200
         else:
@@ -2978,6 +3006,7 @@ def update_estado_casos():
 
     except Exception as e:
         error_msg = "Error inesperado: {}".format(str(e))
+        print(error_msg)
         return jsonify({"error": error_msg}), 500
 
 @bp.route('/get_info_provinces', methods=['GET'])
@@ -3026,6 +3055,200 @@ def get_info_cities(codigo_provincia):
         return jsonify({"error": "Error de base de datos al obtener información de ciudades por provincia"}), 500
     except Exception as e:
         # Otros errores que no sean de base de datos pueden ser manejados aquí
-        return jsonify({"error": "Se ha producido un error al procesar la solicitud"}), 500
-#----------------------------------------------------------------------------F
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud"+e}), 500
+#UPDATE_YEAR_PARTS----------------------------------------------------------------------------
+@bp.route('/get_info_despiece/motos', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_info_despice():# Retrieve a tree view of motorcycle brands, models and subsystem
+    empresa= request.args.get("empresa")
+    try:
+        marcas = st_despiece.query().filter(
+        st_despiece.nivel == 1,
+        st_despiece.cod_despiece != 'A',
+        st_despiece.cod_despiece != 'U',
+        st_despiece.cod_despiece != 'Q',
+        st_despiece.cod_despiece != 'L',
+        st_despiece.empresa      == empresa,
+        ).all()
+        dict_despiece = {}
+
+        for marca in marcas:
+            categorias = st_despiece.query().filter(
+                st_despiece.empresa == empresa,
+                st_despiece.nivel == 2,
+                st_despiece.cod_despiece != 'SGN',
+                st_despiece.cod_despiece != 'BGN',
+                st_despiece.cod_despiece != 'SLF',
+                st_despiece.cod_despiece_padre == marca.cod_despiece
+            ).all()
+            dict_categorias = {}
+
+            for category in categorias:
+                modelos = st_despiece.query().filter(
+                st_despiece.empresa == empresa,
+                st_despiece.nivel == 3,
+                st_despiece.cod_despiece_padre == category.cod_despiece
+                ).all()
+                dict_modelos = {}
+
+                for modelo in modelos:
+                    subsistemas = st_despiece.query().filter(
+                        st_despiece.empresa == empresa,
+                        st_despiece.nivel == 4,
+                        st_despiece.cod_despiece_padre == modelo.cod_despiece
+                    ).all()
+                    list_subsistemas = []
+                    dict_subsistema = {}
+
+                    for subsistema in subsistemas:
+                        dict_subsistema_new = {}
+                        dict_subsistema_new[subsistema.nombre_e] = subsistema.cod_despiece
+                        dict_subsistema_new["id"]                = subsistema.cod_despiece
+                        dict_subsistema_new["name"]              = subsistema.nombre_e
+
+                        dict_subsistema[subsistema.nombre_e] = subsistema.cod_despiece
+                        list_subsistemas.append(dict_subsistema_new)
+
+                    dict_modelos[modelo.nombre_e] = list_subsistemas
+                dict_categorias[category.nombre_e] = dict_modelos
+            dict_despiece[marca.nombre_e] = dict_categorias
+    except Exception as e:
+        print(e)
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud: " + str(e)}), 500
+
+    return jsonify(dict_despiece)
+
+@bp.route('/get_info_despiece/parts', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_info_despiece_parts(): # Retrieve a tree view of motorcycle parts
+    empresa = request.args.get("empresa")
+    subsistema = request.args.get("subsistema")
+    try:
+        parts = st_producto_despiece.query().filter(
+            st_producto_despiece.empresa == empresa,
+            st_producto_despiece.cod_despiece==subsistema
+        ).all()
+
+        list_parts = []
+        dict_parts = {}
+
+        for part in parts:
+            list_parts.append(part.cod_producto)
+            names_parts = Producto.query().filter(
+                Producto.cod_producto == part.cod_producto,
+                Producto.empresa == empresa
+            ).all()
+            for name in names_parts:
+                dict_parts[part.cod_producto] = name.nombre
+        return jsonify(dict_parts), 200
+
+    except Exception as e:
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud: " +str(e)}), 500
+
+@bp.route('/update_year_parts', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def udpateYearParts():#Function to update the year data fora model, a subsystem, and a single motorcycle part
+    try:
+        from_year = request.args.get('from_year')
+        to_year = request.args.get('to_year')
+        flag_id_level = request.args.get('flag_id_level')
+        empresa = request.args.get("empresa")
+        empresa = int(empresa)
+        flag_id_level = int(flag_id_level)
+        data_subsystem = request.json
+        user_shineray = request.args.get('user_shineray')
+
+        # Imprimir las variables
+        #print(f"from_year: {from_year}")
+        #print(f"to_year: {to_year}")
+        #print(f"flag_id_level: {flag_id_level}")
+        #print(f"data_subsystem: {data_subsystem}")
+        if flag_id_level == 1:
+            code_subsystem = data_subsystem['cod_subsystem']
+            for code in code_subsystem:
+                parts = st_producto_despiece.query().filter(
+                    st_producto_despiece.empresa == empresa,
+                    st_producto_despiece.cod_despiece == code
+                ).all()
+                for part in parts:
+                    existing_register = st_producto_rep_anio.query().filter(
+                        st_producto_rep_anio.empresa == empresa,
+                        st_producto_rep_anio.cod_producto == part.cod_producto
+                    ).first()
+                    if existing_register:
+                        existing_register.anio_desde = from_year
+                        existing_register.anio_hasta = to_year
+                        existing_register.usuario_modifica = user_shineray
+                        existing_register.fecha_modificacion = datetime.now()
+                    else:
+                        new_register_anio= st_producto_rep_anio(
+                            empresa         =   empresa,
+                            anio_desde      =   from_year,
+                            anio_hasta      =   to_year,
+                             cod_producto   =   part.cod_producto,
+                            usuario_crea    =   user_shineray,
+                            fecha_crea      =   datetime.now()
+                        )
+                        db.session.add(new_register_anio)
+            db.session.commit()
+            return jsonify({"succes": "Años actualizados correctamente"}), 200
+        if flag_id_level == 2:
+            code_products = data_subsystem['cod_producto']
+            for part in code_products:
+                existing_register = st_producto_rep_anio.query().filter(
+                    st_producto_rep_anio.empresa == empresa,
+                    st_producto_rep_anio.cod_producto == part
+                ).first()
+                if existing_register:
+                    existing_register.anio_desde = from_year
+                    existing_register.anio_hasta = to_year
+                    existing_register.usuario_modifica = user_shineray
+                    existing_register.fecha_modificacion = datetime.now()
+                else:
+                    new_register_anio = st_producto_rep_anio(
+                        empresa=empresa,
+                        anio_desde=from_year,
+                        anio_hasta=to_year,
+                        cod_producto=part,
+                        usuario_crea=user_shineray,
+                        fecha_crea=datetime.now()
+                    )
+                    db.session.add(new_register_anio)
+            db.session.commit()
+            return jsonify({"succes": "Años actualizados correctamente"}), 200
+
+    except Exception as e:
+        return jsonify({"error":"Error en el proceso: "+str(e)}), 500
+
+@bp.route('/get_info_parts_year_by_cod_producto', methods = ['GET'])
+@jwt_required()
+@cross_origin()
+def get_info_year(): #function to get year about a specific  motorcycle part
+    try:
+        empresa = request.args.get("empresa")
+        empresa = int(empresa)
+        cod_producto = request.args.get("cod_producto")
+        year_parts = st_producto_rep_anio.query().filter(
+            st_producto_rep_anio.empresa == empresa,
+            st_producto_rep_anio.cod_producto == cod_producto
+        ).first()
+        dict = {}
+        if year_parts is not None:
+            if hasattr(year_parts, 'anio_desde'):
+                dict["from"] = year_parts.anio_desde
+
+            if hasattr(year_parts, 'anio_hasta'):
+                dict["to"] = year_parts.anio_hasta
+        return jsonify(dict), 200
+
+    except Exception as e:
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud: " +str(e)}), 500
+
+
+
+
+
 

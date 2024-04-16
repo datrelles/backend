@@ -18,7 +18,12 @@ class User(UserMixin):
     def check_password(self, hashed_password, password):
         return check_password_hash(hashed_password, password)
 
+<<<<<<< HEAD
 print(generate_password_hash('Gerencia2.0'))
+=======
+#print(generate_password_hash('m2ss**2020'))
+
+>>>>>>> d882b8e3e11ef70a3cd6704f3fea6ac8a23efab2
 
 # ########################################################################################################
 # inicio = datetime.date(2023, 1, 1)
