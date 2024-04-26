@@ -2999,7 +2999,6 @@ def update_estado_casos():
             elif all_states_are_2 == True and params["status"] != '2':
                  update_status_st_casos_postventa.aplica_garantia = params["status"]
                  update_status_st_casos_postventa.estado = 'C'
-
             db.session.commit()
             return jsonify({"message": "Estado actualizado correctamente"}), 200
         else:
