@@ -2984,16 +2984,18 @@ def get_info_casos_post_view_ventas(code_cp):
 def update_estado_casos():
     try:
         params = request.args.to_dict()
+            #Get the one record of the subcases by their cod_problema, in this case, cod_probelma refers to cod_duracion.
         update_status = st_casos_tipo_problema.query().filter(
             st_casos_tipo_problema.empresa == 20,
             st_casos_tipo_problema.cod_comprobante == params["cod_comprobante"],
             st_casos_tipo_problema.codigo_duracion == params["cod_duracion"],
         ).first()
+            #Get the records of the cases by their cod_comprobante
         update_status_st_casos_postventa = st_casos_postventa.query().filter(
             st_casos_postventa.empresa == 20,
             st_casos_postventa.cod_comprobante == params["cod_comprobante"]
         ).first()
-
+            #Get all record of the subcases by their cod_comprobante except the case that contains the cod_duration, in this case, cod_probelma refers to cod_duracion.
         all_subcases_status = st_casos_tipo_problema.query().filter(
             st_casos_tipo_problema.empresa == 20,
             st_casos_tipo_problema.cod_comprobante == params["cod_comprobante"],
@@ -3001,6 +3003,9 @@ def update_estado_casos():
         ).all()
 
         all_states_are_2 = True
+
+        if len(all_subcases_status) == 0 and params["status"] == '1':
+            all_states_are_2 = False
 
         for status in all_subcases_status:
             if status.estado != 0 or status.estado is None or params["status"] != '0':
@@ -3014,10 +3019,9 @@ def update_estado_casos():
                 update_status_st_casos_postventa.aplica_garantia = params["status"]
                 update_status_st_casos_postventa.estado = 'P'
 
-            elif all_states_are_2 == True:
+            elif all_states_are_2 == True and params["status"] != '2':
                  update_status_st_casos_postventa.aplica_garantia = params["status"]
                  update_status_st_casos_postventa.estado = 'C'
-
             db.session.commit()
             return jsonify({"message": "Estado actualizado correctamente"}), 200
         else:
@@ -3079,6 +3083,7 @@ def get_info_cities(codigo_provincia):
     except Exception as e:
         # Otros errores que no sean de base de datos pueden ser manejados aquí
         return jsonify({"error": "Se ha producido un error al procesar la solicitud"+e}), 500
+
 #UPDATE_YEAR_PARTS----------------------------------------------------------------------------
 @bp.route('/get_info_despiece/motos', methods=['GET'])
 @jwt_required()
