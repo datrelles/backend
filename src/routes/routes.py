@@ -9,6 +9,7 @@ from src.models.formula import StFormula, StFormulaD
 from src.models.despiece import StDespiece, StDespieceD
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
+from src.models.financiero import StFinCabCredito,StFinDetCredito,StFinClientes,StFinPagos
 from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque, StNaviera, StEmbarqueContenedores, StTipoContenedor, StTrackingContenedores
 from src.models.tipo_aforo import StTipoAforo
 from src.models.comprobante_electronico import tc_doc_elec_recibidos
@@ -1058,6 +1059,28 @@ def obtener_secuencia_formule(cod_formula):
             return nueva_secuencia
     else:
         raise ValueError('La Formula no existe.')
+
+def obtener_secuencia_pagos(empresa, cod_comprobante, tipo_comprobante, nro_operacion, nro_pago):
+    existe_cuota = db.session.query(StFinDetCredito).filter_by(empresa=empresa, cod_comprobante=cod_comprobante,tipo_comprobante=tipo_comprobante, nro_operacion=nro_operacion,nro_pago=nro_pago).first()
+
+    if existe_cuota is not None:
+        print('Cuota', existe_cuota.nro_operacion , ' :', existe_cuota.nro_pago)
+        existe_pago = db.session.query(StFinPagos).filter_by(empresa=empresa, cod_comprobante=cod_comprobante,tipo_comprobante=tipo_comprobante, nro_operacion=nro_operacion,nro_cuota=nro_pago).first()
+
+        if existe_pago is not None:
+            print('Pago', existe_pago.secuencia)
+            max_secuencia = db.session.query(func.max(StFinPagos.secuencia)).filter_by(
+                empresa=empresa, cod_comprobante=cod_comprobante,tipo_comprobante=tipo_comprobante, nro_operacion=nro_operacion,nro_cuota=nro_pago).distinct().scalar()
+            print('MAXIMO', max_secuencia)
+            nueva_secuencia = int(max_secuencia) + 1
+            print('PROXIMO', nueva_secuencia)
+            return nueva_secuencia
+        else:
+            nueva_secuencia = 1
+            print('Secuencia de inicio', nueva_secuencia)
+            return nueva_secuencia
+    else:
+        raise ValueError('No existe cuota.')
 
 
 #Funcion para obtener el cod_producto_modelo segun el cod_producto
