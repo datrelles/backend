@@ -7,6 +7,32 @@ from src.models.users import Empresa
 
 Base = declarative_base(metadata = db.metadata)
 
+class StFinNegociacion(Base):
+    __tablename__ = 'st_fin_negociacion'
+    __table_args__ = (
+        Index('IDX_FIN_NEGO_EMPRESA', 'empresa'),
+        Index('IDX_FIN_NEGO_CLIENTE', 'cod_cliente'),
+        Index('IDX_FIN_NEGO_PROVEEDOR', 'cod_proveedor'),
+        Index('IDX_FIN_NEGO_TIPO_COMP', 'empresa', 'tipo_comprobante'),
+        Index('IDX_FIN_NEGO_USUARIO', 'usuario_crea'),
+        Index('PK_FIN_NEGOCIACION', 'empresa', 'cod_comprobante', 'tipo_comprobante'),
+        {'schema': 'stock'}
+    )
+
+    empresa = Column(NUMBER(2), primary_key=True, nullable=False)
+    cod_comprobante = Column(VARCHAR(9), primary_key=True, nullable=False)
+    tipo_comprobante = Column(VARCHAR(2), primary_key=True, nullable=False)
+    fecha_negociacion = Column(DateTime)
+    cod_cliente = Column(VARCHAR(13))
+    cod_proveedor = Column(VARCHAR(13))
+    tipo_destino = Column(NUMBER(2))
+    usuario_crea = Column(VARCHAR(20))
+    fecha_crea = Column(DateTime)
+    usuario_modifica = Column(VARCHAR(20))
+    fecha_modifica = Column(DateTime)
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
 class StFinCabCredito(Base):
     __tablename__ = 'st_fin_cab_credito'
     __table_args__ = (
@@ -16,6 +42,7 @@ class StFinCabCredito(Base):
         Index('IDX_FIN_CAB_CRED_TIPO_COMP', 'empresa', 'tipo_comprobante'),
         Index('IDX_FIN_CAB_CRED_USUARIO', 'usuario_crea'),
         Index('PK_FIN_CAB_CREDITO', 'empresa', 'cod_comprobante', 'tipo_comprobante', 'nro_operacion'),
+        Index('UK_FIN_CAB_CRED_NRO_OPERA', 'nro_operacion', 'cod_cliente', 'cod_proveedor', 'empresa'),
         {'schema': 'stock'}
     )
 
@@ -23,7 +50,7 @@ class StFinCabCredito(Base):
     cod_comprobante = Column(VARCHAR(9), primary_key=True, nullable=False)
     tipo_comprobante = Column(VARCHAR(2), primary_key=True, nullable=False)
     nro_operacion = Column(VARCHAR(30), primary_key=True, nullable=False)
-    tipo_id_cliente = Column(VARCHAR(4), nullable=False)
+    tipo_id_cliente = Column(VARCHAR(20), nullable=False)
     id_cliente = Column(VARCHAR(30), nullable=False)
     capital_original = Column(NUMBER(14,5))
     saldo_capital = Column(NUMBER(14,5))
@@ -35,13 +62,20 @@ class StFinCabCredito(Base):
     nro_cuota_total = Column(NUMBER(10))
     nro_cuotas_pagadas = Column(NUMBER(10))
     nro_cuotas_mora = Column(NUMBER(10))
-    base_calculo = Column(NUMBER(14, 5))
+    base_calculo = Column(VARCHAR(20))
     cod_modelo = Column(VARCHAR(8))
     cod_item = Column(VARCHAR(3))
+    tipo_destino = Column(NUMBER(2))
     usuario_crea = Column(VARCHAR(20))
     fecha_crea = Column(DateTime)
     usuario_modifica = Column(VARCHAR(20))
     fecha_modifica = Column(DateTime)
+    cod_cliente = Column(VARCHAR(13))
+    cod_proveedor = Column(VARCHAR(13))
+    secuencia_negociacion = Column(NUMBER(6))
+    liquidacion = Column(VARCHAR(9))
+    es_parcial = Column(NUMBER(1))
+    cuota_inicial = Column(NUMBER(4))
     @classmethod
     def query(cls):
         return db.session.query(cls)
@@ -55,6 +89,7 @@ class StFinDetCredito(Base):
         Index('IDX_FIN_DET_CRED_FIN_CAB_CRED', 'empresa', 'cod_comprobante', 'tipo_comprobante', 'nro_operacion'),
         Index('IDX_FIN_DET_CRED_USUARIO', 'usuario_crea'),
         Index('PK_FIN_DET_CREDITO', 'empresa', 'cod_comprobante', 'tipo_comprobante', 'nro_operacion', 'nro_pago'),
+        Index('UK_FIN_DET_CREDITO', 'nro_operacion', 'cod_cliente', 'cod_proveedor', 'empresa', 'nro_pago'),
 
         {'schema': 'stock'}
     )
@@ -77,6 +112,8 @@ class StFinDetCredito(Base):
     fecha_crea = Column(DateTime)
     usuario_modifica = Column(VARCHAR(20))
     fecha_modifica = Column(DateTime)
+    cod_cliente = Column(VARCHAR(13))
+    cod_proveedor = Column(VARCHAR(13))
     @classmethod
     def query(cls):
         return db.session.query(cls)
@@ -117,15 +154,15 @@ class StFinPagos(Base):
     __tablename__ = 'st_fin_pagos'
     __table_args__ = (
         Index('IDX_FIN_PAGOS_EMPRESA', 'empresa'),
-        Index('IDX_FIN_PAGOS_FIN_CAB_DET', 'empresa', 'cod_comprobante', 'tipo_comprobante', 'nro_operacion', 'nro_cuota'),
+        Index('IDX_FIN_PAGOS_FIN_CAB_DET', 'empresa', 'cod_cliente', 'cod_proveedor', 'nro_operacion', 'nro_cuota'),
         Index('IDX_FIN_PAGOS_FIN_CLIENTES', 'empresa', 'id_cliente'),
-        Index('PK_FIN_PAGOS', 'empresa', 'cod_comprobante', 'tipo_comprobante', 'nro_operacion', 'nro_cuota', 'secuencia'),
+        Index('PK_FIN_PAGOS', 'empresa', 'cod_cliente', 'cod_proveedor', 'nro_operacion', 'nro_cuota', 'secuencia'),
         Index('IDX_FIN_PAGOS_USUARIO', 'usuario_crea'),
         {'schema': 'stock'}
     )
     empresa = Column(NUMBER(2), primary_key=True, nullable=False)
-    cod_comprobante = Column(VARCHAR(9), primary_key=True, nullable=False)
-    tipo_comprobante = Column(VARCHAR(2), primary_key=True, nullable=False)
+    cod_cliente = Column(VARCHAR(13), primary_key=True, nullable=False)
+    cod_proveedor = Column(VARCHAR(13), primary_key=True, nullable=False)
     nro_operacion = Column(VARCHAR(30), primary_key=True, nullable=False)
     nro_cuota = Column(NUMBER(5), primary_key=True, nullable=False)
     secuencia = Column(NUMBER(6), primary_key=True, nullable=False)

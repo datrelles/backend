@@ -1060,17 +1060,17 @@ def obtener_secuencia_formule(cod_formula):
     else:
         raise ValueError('La Formula no existe.')
 
-def obtener_secuencia_pagos(empresa, cod_comprobante, tipo_comprobante, nro_operacion, nro_pago):
-    existe_cuota = db.session.query(StFinDetCredito).filter_by(empresa=empresa, cod_comprobante=cod_comprobante,tipo_comprobante=tipo_comprobante, nro_operacion=nro_operacion,nro_pago=nro_pago).first()
+def obtener_secuencia_pagos(empresa, cod_cliente, cod_proveedor, nro_operacion, nro_pago):
+    existe_cuota = db.session.query(StFinDetCredito).filter_by(empresa=empresa, cod_cliente=cod_cliente,cod_proveedor=cod_proveedor, nro_operacion=nro_operacion,nro_pago=nro_pago).first()
 
     if existe_cuota is not None:
         print('Cuota', existe_cuota.nro_operacion , ' :', existe_cuota.nro_pago)
-        existe_pago = db.session.query(StFinPagos).filter_by(empresa=empresa, cod_comprobante=cod_comprobante,tipo_comprobante=tipo_comprobante, nro_operacion=nro_operacion,nro_cuota=nro_pago).first()
+        existe_pago = db.session.query(StFinPagos).filter_by(empresa=empresa, cod_cliente=cod_cliente,cod_proveedor=cod_proveedor, nro_operacion=nro_operacion,nro_cuota=nro_pago).first()
 
         if existe_pago is not None:
             print('Pago', existe_pago.secuencia)
             max_secuencia = db.session.query(func.max(StFinPagos.secuencia)).filter_by(
-                empresa=empresa, cod_comprobante=cod_comprobante,tipo_comprobante=tipo_comprobante, nro_operacion=nro_operacion,nro_cuota=nro_pago).distinct().scalar()
+                empresa=empresa, cod_cliente=cod_cliente,cod_proveedor=cod_proveedor, nro_operacion=nro_operacion,nro_cuota=nro_pago).distinct().scalar()
             print('MAXIMO', max_secuencia)
             nueva_secuencia = int(max_secuencia) + 1
             print('PROXIMO', nueva_secuencia)
