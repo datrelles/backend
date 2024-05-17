@@ -1,5 +1,7 @@
 from flask import Blueprint, jsonify, request
 from src.models.productos import Producto
+from src.models.proveedores import Proveedor
+from src.models.clientes import Cliente
 from src.models.financiero import StFinCabCredito, StFinDetCredito, StFinClientes, StFinPagos, StFinNegociacion
 from src.routes.routes import obtener_secuencia_pagos
 import logging
@@ -743,4 +745,90 @@ def edit_cab_financiero():
 
     except Exception as e:
         logger.exception(f"Error al guardar operación: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@bpfin.route('/providers_by_cod', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def obtener_proveedores_por_codigo():
+    try:
+        data = request.get_json()
+        empresa = data.get('empresa', None)
+        cod_proveedor = data.get('cod_proveedor', None)
+        print(cod_proveedor)
+        if not cod_proveedor:
+            return jsonify({'error': 'Falta ingresar el codigo de proveedor.'}), 404
+
+        query = Proveedor.query()
+
+        if empresa:
+            query = query.filter(Proveedor.empresa == empresa)
+
+        query = query.filter(Proveedor.nombre.like(f'%{cod_proveedor}%'))
+
+        proveedores = query.all()
+        serialized_proveedores = []
+
+        for proveedor in proveedores:
+            empresa = proveedor.empresa if proveedor.empresa else ""
+            cod_proveedor = proveedor.cod_proveedor if proveedor.cod_proveedor else ""
+            nombre = proveedor.nombre if proveedor.nombre else ""
+            direccion = proveedor.direccion if proveedor.direccion else ""
+            useridc = proveedor.useridc if proveedor.useridc else ""
+            telefono = proveedor.telefono if proveedor.telefono else ""
+            ruc = proveedor.ruc if proveedor.ruc else ""
+            serialized_proveedores.append({
+                'empresa': empresa,
+                'cod_proveedor': cod_proveedor,
+                'nombre': nombre,
+                'direccion': direccion,
+                'useridc': useridc,
+                'telefono': telefono,
+                'ruc': ruc
+            })
+        return jsonify(serialized_proveedores)
+
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@bpfin.route('/costumers_by_cod', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def obtener_clientes_por_codigo():
+    try:
+        data = request.get_json()
+        empresa = data.get('empresa', None)
+        cod_cliente = data.get('cod_cliente', None)
+        print(cod_cliente)
+        if not cod_cliente:
+            return jsonify({'error': 'Falta ingresar el codigo de cliente.'}), 404
+
+        query = Cliente.query()
+
+        if empresa:
+            query = query.filter(Cliente.empresa == empresa)
+
+        query = query.filter(Cliente.nombre.like(f'%{cod_cliente}%'))
+
+        clientes = query.all()
+        serialized_clientes = []
+
+        for cliente in clientes:
+            empresa = cliente.empresa if cliente.empresa else ""
+            cod_cliente = cliente.cod_cliente if cliente.cod_cliente else ""
+            nombre = cliente.nombre if cliente.nombre else ""
+            apellido1 = cliente.apellido1 if cliente.apellido1 else ""
+            ruc = cliente.ruc if cliente.ruc else ""
+            serialized_clientes.append({
+                'empresa': empresa,
+                'cod_cliente': cod_cliente,
+                'nombre': nombre,
+                'apellido1': apellido1,
+                'ruc': ruc
+            })
+        return jsonify(serialized_clientes)
+
+    except Exception as e:
+        logger.exception(f"Error al consultar: {str(e)}")
         return jsonify({'error': str(e)}), 500

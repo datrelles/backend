@@ -1273,7 +1273,7 @@ def obtener_productos_por_categoria():
 
 
 @bpcustom.route('/productos_by_cod', methods=['POST'])
-# @jwt_required()
+@jwt_required()
 @cross_origin()
 def obtener_productos_por_codigo():
     try:
