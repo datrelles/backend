@@ -809,7 +809,7 @@ def obtener_clientes_por_codigo():
         if empresa:
             query = query.filter(Cliente.empresa == empresa)
 
-        query = query.filter(Cliente.nombre.like(f'%{cod_cliente}%'))
+        query = query.filter(Cliente.apellido1.like(f'%{cod_cliente}%'))
 
         clientes = query.all()
         serialized_clientes = []
