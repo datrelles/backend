@@ -430,10 +430,9 @@ def crear_cabecera():
         cod_comprobante = data.get('cod_comprobante')
         cod_cliente = data.get('cod_cliente')
         cod_proveedor = data.get('cod_proveedor')
-        print(cod_comprobante , ' / ', cod_proveedor)
         for cabecera_data in cabeceras:
             empresa = str(cabecera_data['empresa'])
-            id_cliente = str(cabecera_data['id_cliente'])
+            id_cliente = re.sub(r"^'", "", cabecera_data['id_cliente'])
             nro_operacion = str(cabecera_data['nro_operacion'])
             verificacion = StFinCabCredito.query().filter(StFinCabCredito.empresa == int(empresa),StFinCabCredito.id_cliente == id_cliente, StFinCabCredito.nro_operacion == nro_operacion).all()
             invalid_cabs = []
@@ -505,12 +504,12 @@ def crear_cliente_fin():
         for customer_data in costumers:
             empresa = str(customer_data['empresa'])
             fecha_crea = date.today()
-            id_cliente = str(customer_data['id_cliente'])
+            id_cliente = re.sub(r"^'", "", customer_data['id_cliente'])
             verificacion = StFinClientes.query().filter(StFinClientes.empresa == empresa, StFinClientes.id_cliente == id_cliente).all()
             if verificacion == []:
                 cliente = StFinClientes(
                     empresa=empresa,
-                    id_cliente=re.sub(r"^'", "", str(id_cliente)),
+                    id_cliente=id_cliente,
                     pais_origen=str(customer_data['pais_origen']),
                     primer_apellido=str(customer_data['primer_apellido']),
                     segundo_apellido=str(customer_data['segundo_apellido']),
@@ -833,3 +832,138 @@ def obtener_clientes_por_codigo():
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@bpfin.route('/total_neg', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def crear_negociacion_total():
+    try:
+        data = request.get_json()
+
+        ######################################CREACION NEGOCIACION##########################
+
+        empresa = str(data.get('empresa'))
+        cod_agencia = str(data.get('cod_agencia'))
+        tipo_comprobante = str(data.get('tipo_comprobante'))
+        usuario_crea = str(data.get('usuario_crea'))
+        fecha_negociacion = parse_date(data.get('fecha_negociacion'))
+        cod_cliente = str(data.get('cod_cliente'))
+        cod_proveedor = str(data.get('cod_proveedor'))
+        tipo_destino = data.get('tipo_destino') if data.get('tipo_destino') else 0
+        fecha_crea = date.today()
+
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        query = """
+                            DECLARE
+                                v_cod_empresa           FLOAT := :1;
+                                v_cod_tipo_comprobante  VARCHAR2(50) := :2;
+                                v_cod_agencia           FLOAT := :3;
+                                v_result                VARCHAR2(50);
+                            BEGIN
+                                v_result := KC_ORDEN.asigna_cod_comprobante(p_cod_empresa => v_cod_empresa,
+                                                                            p_cod_tipo_comprobante => v_cod_tipo_comprobante,
+                                                                            p_cod_agencia => v_cod_agencia);
+                            :4 := v_result;
+                            END;
+                            """
+        cur = db1.cursor()
+        result_var = cur.var(cx_Oracle.STRING)
+        cur.execute(query, (empresa, tipo_comprobante, cod_agencia, result_var))
+        cod_comprobante = result_var.getvalue()
+        cur.close()
+
+        negociacion = StFinNegociacion(
+            empresa=int(empresa),
+            cod_comprobante=cod_comprobante,
+            tipo_comprobante=tipo_comprobante,
+            cod_cliente=cod_cliente,
+            fecha_negociacion=fecha_negociacion,
+            cod_proveedor=cod_proveedor,
+            tipo_destino=tipo_destino,
+            fecha_crea=fecha_crea,
+            usuario_crea=usuario_crea.upper()
+        )
+        db.session.add(negociacion)
+        db1.close()
+
+        ######################################CREACION CABECERAS############################
+
+        cabeceras = data.get('cabeceras')
+        invalid_cabs = []
+        invalid_costumers = []
+        for cabecera_data in cabeceras:
+            id_cliente = re.sub(r"^'", "", cabecera_data['id_cliente'])
+            nro_operacion = str(cabecera_data['nro_operacion'])
+            verificacion = StFinCabCredito.query().filter(StFinCabCredito.empresa == int(empresa),
+                                                          StFinCabCredito.id_cliente == id_cliente,
+                                                          StFinCabCredito.nro_operacion == nro_operacion).first()
+
+            verificacion_cliente = StFinClientes.query().filter(StFinClientes.empresa == int(empresa),
+                                                          StFinClientes.id_cliente == id_cliente).first()
+
+            tipo_comprobante = 'FM' if int(tipo_destino) == 1 else 'FC'
+
+            if verificacion is None and verificacion_cliente is not None:
+
+                fecha_crea = date.today()
+                fecha_emision = excel_date_to_datetime(cabecera_data.get('fecha_emision')).date()
+                fecha_vencimiento = excel_date_to_datetime(cabecera_data.get('fecha_vencimiento')).date()
+
+                if fecha_emision is None:
+                    return jsonify({'error': 'Ingrese fecha de emision'})
+                if fecha_vencimiento is None:
+                    return jsonify({'error': 'Ingrese fecha de vencimiento'})
+
+                cabecera = StFinCabCredito(
+                    empresa=int(empresa),
+                    cod_comprobante=cod_comprobante,
+                    cod_cliente=cod_cliente,
+                    cod_proveedor=cod_proveedor,
+                    tipo_comprobante= tipo_comprobante,
+                    tipo_id_cliente=cabecera_data['tipo_id_cliente'],
+                    id_cliente=re.sub(r"^'", "", str(cabecera_data['id_cliente'])),
+                    nro_operacion=cabecera_data['nro_operacion'],
+                    capital_original=float(cabecera_data['capital_original']),
+                    saldo_capital=float(cabecera_data['saldo_capital']),
+                    fecha_emision=fecha_emision,
+                    fecha_vencimiento=fecha_vencimiento,
+                    plazo_credito=int(cabecera_data['plazo_credito']),
+                    tasa_interes=float(cabecera_data['tasa_interes']),
+                    tasa_mora=float(cabecera_data['tasa_mora']),
+                    nro_cuota_total=int(cabecera_data['nro_cuota_total']),
+                    nro_cuotas_pagadas=int(cabecera_data['nro_cuotas_pagadas']),
+                    nro_cuotas_mora=int(cabecera_data['nro_cuotas_mora']),
+                    base_calculo=cabecera_data['base_calculo'],
+                    tipo_destino=cabecera_data['tipo_destino'] if cabecera_data['tipo_destino'] else 0,
+                    cod_modelo='FIN',
+                    cod_item=cabecera_data['cod_item'],
+                    fecha_crea=fecha_crea,
+                    usuario_crea=cabecera_data['usuario_crea'].upper(),
+                    secuencia_negociacion=cabecera_data['secuencia_negociacion'] if cabecera_data['secuencia_negociacion'] else 0,
+                    liquidacion=cabecera_data['liquidacion'] if cabecera_data['liquidacion'] else "",
+                    es_parcial=cabecera_data['es_parcial'] if cabecera_data['es_parcial'] else 0,
+                    cuota_inicial=cabecera_data['cuota_inicial'] if cabecera_data['cuota_inicial'] else 1
+                )
+                db.session.add(cabecera)
+            else:
+                if verificacion is not None:
+                    invalid_cabs.append(verificacion.nro_operacion + ', ')
+                if verificacion_cliente is None:
+                    invalid_costumers.append(nro_operacion + ' - ' + id_cliente + ', ')
+                    print(invalid_costumers)
+
+        if invalid_costumers != []:
+            return jsonify({'error': 'Existen clientes no registrados', 'costumers': invalid_costumers}), 300
+
+        if invalid_cabs != []:
+            return jsonify({'error': 'Existen operaciones ya registradas', 'cabs': invalid_cabs}), 300
+
+        db1.commit()
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Creación de cabeceras exitosa'})
+
+    except Exception as e:
+        logger.exception(f"Error al crear : {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
