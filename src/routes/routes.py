@@ -7,6 +7,7 @@ from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StTracki
 from src.models.productos import Producto
 from src.models.formula import StFormula, StFormulaD
 from src.models.despiece import StDespiece, StDespieceD
+from src.models.st_proforma import st_proforma, st_proforma_movimiento
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
 from src.models.financiero import StFinCabCredito,StFinDetCredito,StFinClientes,StFinPagos
@@ -3275,7 +3276,26 @@ def get_info_year(): #function to get year about a specific  motorcycle part
     except Exception as e:
         return jsonify({"error": "Se ha producido un error al procesar la solicitud: " +str(e)}), 500
 
+#ECOMMERCE INVOICE
+@bp.route('/post_invoice_ecommerce', methods = ['POST'])
+@jwt_required()
+@cross_origin()
+def post_invoice_ecommerce():
+    all_proformas = st_proforma.query().filter(
+        st_proforma.empresa == 20,
+        st_proforma.cod_agencia == 10,
+        st_proforma.fecha >= datetime.now() - timedelta(days=100),
+        st_proforma.tipo_comprobante == 'PR'
+    ).all()
 
+    all_proformas_detalles = st_proforma_movimiento.query().filter(
+        st_proforma_movimiento.empresa == 20,
+        st_proforma_movimiento.cod_comprobante == 'A3-001928'
+    ).all()
+
+    for proforma in all_proformas_detalles:
+         print(proforma.cod_producto)
+    return jsonify({"status": "pass"})
 
 
 
