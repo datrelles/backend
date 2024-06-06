@@ -178,7 +178,7 @@ class st_cab_datafast(Base):
     __tablename__ = 'st_cab_datafast'
     __table_args__ = {'schema': 'stock'}
 
-    empresa = Column(NUMBER(2), primary_key=True, nullable=False)
+    empresa = Column(NUMBER(2), nullable=False)
     id_transaction = Column(VARCHAR(255), primary_key=True, nullable=False)
     payment_type = Column(VARCHAR(10))
     payment_brand = Column(VARCHAR(40))
@@ -201,6 +201,7 @@ class st_cab_datafast(Base):
     cost_shiping = Column(NUMBER(10, 2))
     cod_orden_ecommerce = Column(VARCHAR(24))
     cod_comprobante = Column(VARCHAR(24))
+    fecha = Column(DateTime, nullable=False)
 
     @classmethod
     def query(cls):
@@ -238,6 +239,7 @@ class st_cab_deuna(Base):
     cost_shiping = Column(NUMBER(10, 2))
     cod_orden_ecommerce = Column(VARCHAR(24))
     cod_comprobante = Column(VARCHAR(24))
+    fecha = Column(DateTime)
 
     @classmethod
     def query(cls):
