@@ -7,6 +7,7 @@ from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StTracki
 from src.models.productos import Producto
 from src.models.formula import StFormula, StFormulaD
 from src.models.despiece import StDespiece, StDespieceD
+from src.models.st_proforma import st_proforma, st_proforma_movimiento, st_cab_deuna, st_det_deuna, st_cab_datafast, st_det_datafast
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
 from src.models.financiero import StFinCabCredito,StFinDetCredito,StFinClientes,StFinPagos
@@ -2655,9 +2656,8 @@ def obtener_doc_elec_recibidos():
         #query = tc_doc_elec_recibidos.query().slice(0, 100)  # Utiliza el método query de la clase tc_doc_elec_recibidos
         start_date_str = request.args.get('start_date')
         end_date_str = request.args.get('end_date')
-        
-        print(start_date_str)
-        print(end_date_str)
+
+
         if start_date_str and end_date_str:
             start_date = datetime.strptime(start_date_str, "%d/%m/%Y")
             end_date = datetime.strptime(end_date_str, "%d/%m/%Y")
@@ -3275,8 +3275,134 @@ def get_info_year(): #function to get year about a specific  motorcycle part
     except Exception as e:
         return jsonify({"error": "Se ha producido un error al procesar la solicitud: " +str(e)}), 500
 
+#ECOMMERCE INVOICE---------------------------------------------------------------------------------------
+@bp.route('/post_invoice_ecommerce', methods = ['POST'])
+@jwt_required()
+@cross_origin()
+def post_invoice_ecommerce():
+    try:
+        p_cod_empresa = 20
+        p_cod_agencia = 10
+        p_cod_tipo_comprobante = 'PR'
+
+        sql = text("""
+                    :st_proforma_cod_comprobante := contabilidad.kc_orden.asigna_cod_comprobante(
+                        :st_proforma_empresa, :parameter_tipo_comprobante_proforma, :st_proforma_cod_agencia
+                    );
+                """)
+
+        print('pas')
+        result = session.execute(sql, {
+            'st_proforma_fecha': None,
+            'st_proforma_cod_comprobante': None,
+            'st_proforma_empresa': p_cod_empresa,
+            'parameter_tipo_comprobante_proforma': p_cod_tipo_comprobante,
+            'st_proforma_cod_agencia': p_cod_agencia,
+            'error_msg': None
+        })
+        print(result.fetchone())
+        session.commit()
+
+        # Recibir el resultado de los parámetros de salida
+        st_proforma_cod_comprobante = result.out_parameters['st_proforma_cod_comprobante']
+
+        return jsonify({
+            'cod_comprobante': st_proforma_cod_comprobante
+        })
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": "se ha producido un error", "details": str(e)}), 500
+
+@bp.route('/get_invoice_ecommerce', methods = ['GET'])
+@jwt_required()
+@cross_origin()
+def get_sell_ecommerce():
+    try:
+        filtros_params = request.args.to_dict()
+        start_date = datetime.strptime(filtros_params['start_date'], '%d/%m/%Y') if filtros_params['start_date'] else None
+        finish_date = datetime.strptime(filtros_params['finish_date'], '%d/%m/%Y') if filtros_params['finish_date'] else None
+        # Aumentar un dia
+        if finish_date:
+            finish_date += timedelta(days=1)
+        if start_date:
+            start_date -= timedelta(days=1)
+
+        results = st_cab_datafast.query().filter(
+            st_cab_datafast.empresa == 20,
+        )
+        # Filter date range
+        if start_date is not None and finish_date is not None:
+                results = results.filter(
+                    st_cab_datafast.fecha.between(start_date, finish_date)
+                )
+        # st_cab_datafast
+        print(start_date)
+        print(finish_date)
+        results = results.all()
+        # Si no se encontraron resultados
+        results_list = []
+        if not results:
+            return jsonify(results_list), 200
+        # Procesa los resultados y devuelve una respuesta
 
 
 
+        for result in results:
+            result_data = {
+                "empresa": result.empresa,
+                "id_transaction": result.id_transaction,
+                "payment_type": result.payment_type,
+                "payment_brand": result.payment_brand,
+                "amount": result.amount,
+                "currency": result.currency,
+                "batch_no": result.batch_no,
+                "id_guia_servientrega": result.id_guia_servientrega,
+                "card_type": result.card_type,
+                "bin_card": result.bin_card,
+                "last_4_digits": result.last_4_digits,
+                "holder": result.holder,
+                "expiry_month": result.expiry_month,
+                "expiry_year": result.expiry_year,
+                "acquirer_code": result.acquirer_code,
+                "client_type_id": result.client_type_id,
+                "client_name": result.client_name,
+                "client_last_name": result.client_last_name,
+                "client_id": result.client_id,
+                "client_address": result.client_address,
+                "cost_shiping": result.cost_shiping,
+                "cod_orden_ecommerce": result.cod_orden_ecommerce,
+                "cod_comprobante": result.cod_comprobante,
+                "fecha": result.fecha.strftime('%d/%m/%Y')
+            }
+            results_list.append(result_data)
 
+        return jsonify(results_list), 200
 
+    except Exception as e:
+        print(e)
+        return jsonify({"error": "Se ha producido un error", "details": str(e)}), 500
+
+@bp.route('/buy_parts_ecommerce/<id_code>', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def buy_parts_ecommerce(id_code):
+    try:
+        cases_json = []
+        cases = st_det_datafast.query().filter(
+            st_det_datafast.id_transaction == id_code,
+            st_det_datafast.empresa == 20
+        )
+
+        for case in cases:
+            case_dict = {
+                "codigo": case.code,
+                "cantidad": case.quantity
+            }
+            cases_json.append(case_dict)
+        return jsonify(cases_json)
+
+    except Exception as e:
+        print(e)
+        error_msg = "An error occurred while processing the request."
+        return jsonify(cases_json), 200
