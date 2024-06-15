@@ -29,6 +29,7 @@ from decimal import Decimal
 from src import oracle
 from os import getenv
 from sqlalchemy.exc import SQLAlchemyError
+import cx_Oracle
 import json
 from sqlalchemy import and_
 bp = Blueprint('routes', __name__)
@@ -3276,43 +3277,82 @@ def get_info_year(): #function to get year about a specific  motorcycle part
         return jsonify({"error": "Se ha producido un error al procesar la solicitud: " +str(e)}), 500
 
 #ECOMMERCE INVOICE---------------------------------------------------------------------------------------
-@bp.route('/post_invoice_ecommerce', methods = ['POST'])
+@bp.route('/post_invoice_ecommerce', methods=['POST'])
 @jwt_required()
 @cross_origin()
 def post_invoice_ecommerce():
     try:
         p_cod_empresa = 20
-        p_cod_agencia = 10
+        p_cod_agencia = 18
         p_cod_tipo_comprobante = 'PR'
+        p_cod_producto = 'R200-061102'
 
-        sql = text("""
-                    :st_proforma_cod_comprobante := contabilidad.kc_orden.asigna_cod_comprobante(
-                        :st_proforma_empresa, :parameter_tipo_comprobante_proforma, :st_proforma_cod_agencia
-                    );
-                """)
-
-        print('pas')
-        result = session.execute(sql, {
-            'st_proforma_fecha': None,
-            'st_proforma_cod_comprobante': None,
-            'st_proforma_empresa': p_cod_empresa,
-            'parameter_tipo_comprobante_proforma': p_cod_tipo_comprobante,
-            'st_proforma_cod_agencia': p_cod_agencia,
-            'error_msg': None
-        })
-        print(result.fetchone())
-        session.commit()
-
-        # Recibir el resultado de los parámetros de salida
-        st_proforma_cod_comprobante = result.out_parameters['st_proforma_cod_comprobante']
+        cod_comprobante = get_cod_comprobante(p_cod_empresa, p_cod_agencia, p_cod_tipo_comprobante)
+        result_lote = get_lote_list(p_cod_empresa, p_cod_agencia, p_cod_producto)
 
         return jsonify({
-            'cod_comprobante': st_proforma_cod_comprobante
+            'cod_comprobante': cod_comprobante["value"],
+            'result_lote': result_lote
         })
 
     except Exception as e:
-        session.rollback()
         return jsonify({"error": "se ha producido un error", "details": str(e)}), 500
+def get_cod_comprobante(p_cod_empresa, p_cod_agencia, p_cod_tipo_comprobante):
+    try:
+        db = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cursor = db.cursor()
+        result = cursor.var(cx_Oracle.STRING)
+        cursor.execute("""
+                    BEGIN
+                      :result := contabilidad.kc_orden.asigna_cod_comprobante(p_cod_empresa => :p_cod_empresa,
+                                                                              p_cod_tipo_comprobante => :p_cod_tipo_comprobante,
+                                                                              p_cod_agencia => :p_cod_agencia);
+                    END;
+                """, result=result, p_cod_empresa=p_cod_empresa, p_cod_tipo_comprobante=p_cod_tipo_comprobante,
+                       p_cod_agencia=p_cod_agencia)
+        cod_comprobante = result.getvalue()
+        db.commit()
+        cursor.close()
+        db.close()
+        return {"success":True, "value":cod_comprobante}
+    except Exception as e:
+        return f"Unexpected error: {str(e)}"
+
+def get_lote_list(p_cod_empresa, p_cod_agencia, p_cod_producto):
+    try:
+        db = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cursor = db.cursor()
+        query = """
+            SELECT a.cod_comprobante lote, a.fecha, a.descripcion, a.tipo_comprobante tipo, x.cantidad
+            FROM st_lote a,
+                 st_inventario_lote x
+            WHERE a.empresa = :p_cod_empresa
+              AND x.empresa = a.empresa
+              AND x.tipo_comprobante_lote = a.tipo_comprobante
+              AND x.cod_comprobante_lote = a.cod_comprobante
+              AND x.cod_bodega = :p_cod_agencia
+              AND x.cod_producto = :p_cod_producto
+              AND x.cod_aamm = 0
+              AND x.cantidad > 0
+              AND x.cod_tipo_inventario = 1
+            ORDER BY a.fecha
+        """
+        cursor.execute(query, p_cod_empresa=p_cod_empresa, p_cod_agencia=p_cod_agencia, p_cod_producto=p_cod_producto)
+        rows = cursor.fetchall()
+        lote_list = []
+        for row in rows:
+            lote_list.append({
+                'lote': row[0],
+                'fecha': row[1],
+                'descripcion': row[2],
+                'tipo': row[3],
+                'cantidad': row[4]
+            })
+        cursor.close()
+        db.close()
+        return lote_list
+    except Exception as e:
+        return None
 
 @bp.route('/get_invoice_ecommerce', methods = ['GET'])
 @jwt_required()
