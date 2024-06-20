@@ -277,8 +277,6 @@ def menu(user,enterprise, system):
         raise Exception(ex)
     return jsonify(response_body)
 
-
-
 @app.route("/logout",methods=["POST"])
 @cross_origin()
 def logout():
