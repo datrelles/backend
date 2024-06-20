@@ -13,6 +13,7 @@ from src.config.database import db
 from src.models.tipo_aforo import StTipoAforo
 from src.models.aduana import StAduRegimen
 from src.routes.routes import asigna_cod_comprobante, obtener_secuencia_formule
+from src.models.lote import StLote, Sta_Comprobante, Sta_Movimiento
 from sqlalchemy import and_, or_, func, tuple_
 import datetime
 from decimal import Decimal
@@ -1513,6 +1514,22 @@ def formule_total():
     empresa = data['formula']['empresa']
     cod_formula = asigna_cod_comprobante(empresa, 'FD',1)
 
+    query = StFormula.query()
+    if empresa:
+        query = query.filter(StFormula.empresa == empresa)
+    if data['formula']['cod_producto']:
+        query = query.filter(StFormula.cod_producto == data['formula']['cod_producto'])
+    if data['formula']['debito_credito']:
+        query = query.filter(StFormula.debito_credito == data['formula']['debito_credito'])
+
+    existencia = query.first()
+
+    if existencia:
+        return jsonify({'error': 'Ya existe formula para: ' + data['formula']['cod_producto']})
+
+    if data['detalles'] is None or data['detalles'] == []:
+        return jsonify({'error': 'No hay items ingresados para la formula'})
+
     formule = StFormula(
         empresa=empresa,
         cod_formula=cod_formula,
@@ -1539,7 +1556,7 @@ def formule_total():
             cod_unidad_f='U',
             cantidad_f=detalle['cantidad_f'],
             debito_credito=detalle['debito_credito'],
-            costo_standard=0
+            costo_standard=detalle['costo_standard'] if detalle['costo_standard'] else 0
         )
         db.session.add(detalle_formula)
         db.session.commit()
@@ -1774,6 +1791,200 @@ def generate_combo():
         cod_comprobante = result_var.getvalue()
         cur.close()
 
+        ############################################CREACION DE LOTE PARA FORMULA######################################################################
+
+        query = """
+                                    DECLARE
+                                      v_cod_empresa           FLOAT := :1;
+                                      v_cod_agencia           FLOAT := :2;
+                                      v_tipo_comprobante_lote  VARCHAR2(50) := :3;
+                                      v_tipo_lote             VARCHAR2(3) := :4;  
+                                      v_result                VARCHAR2(50);
+                                    BEGIN
+                                      v_result := ks_lote.asigna_codigo(p_empresa => v_cod_empresa,
+                                                                                  p_cod_agencia => v_cod_agencia,
+                                                                                  p_tipo_comprobante_lote => v_tipo_comprobante_lote,
+                                                                                  p_fecha => sysdate,
+                                                                                  P_TIPO_LOTE => v_tipo_lote);
+                                    :5 := v_result;
+                                    END;
+                                    """
+        cur = db1.cursor()
+        result_var = cur.var(cx_Oracle.STRING)
+        cur.execute(query, (empresa, cod_agencia, 'LT', 'IN', result_var))
+        cod_comprobante_lote_formula = result_var.getvalue()
+        cur.close()
+        db1.commit()
+
+        query = StLote.query()
+        if empresa:
+            query = query.filter(StLote.empresa == empresa)
+        if cod_agencia:
+            query = query.filter(StLote.cod_agencia == cod_agencia)
+        if cod_comprobante_lote_formula:
+            query = query.filter(StLote.cod_comprobante == cod_comprobante_lote_formula)
+
+        result = query.all()
+
+        if not result:
+            lote = StLote(
+                empresa=empresa,
+                tipo_comprobante='LT',
+                cod_comprobante=cod_comprobante_lote_formula,
+                fecha=date.today(),
+                descripcion='Lote para creacion de combos',
+                tipo_lote='IN',
+                cod_agencia=cod_agencia,
+                usuario_aud=usuario,
+                fecha_aud=date.today()
+            )
+            db.session.add(lote)
+            db.session.commit()
+
+        query = """
+                                           DECLARE
+                                             v_cod_empresa           FLOAT := :1;
+                                             v_cod_tipo_comprobante  VARCHAR2(50) := :2;
+                                             v_cod_agencia           FLOAT := :3;
+                                             v_result                VARCHAR2(50);
+                                           BEGIN
+                                             v_result := KC_ORDEN.asigna_cod_comprobante(p_cod_empresa => v_cod_empresa,
+                                                                                         p_cod_tipo_comprobante => v_cod_tipo_comprobante,
+                                                                                         p_cod_agencia => v_cod_agencia);
+                                           :4 := v_result;
+                                           END;
+                                           """
+        cur = db1.cursor()
+        result_var = cur.var(cx_Oracle.STRING)
+        cur.execute(query, (empresa, 'TE', cod_agencia, result_var))
+        cod_sta_comprobante = result_var.getvalue()
+        cur.close()
+        db1.commit()
+
+        ###################################GENERACION DE REGISTROS TEMPORALES PARA AGREGAR LOTE PARA PRODUCTO#####################################################
+
+        cursor = db1.cursor()
+        cursor.execute("""
+                                                    SELECT
+                                                    S.Tipo_Comprobante_Lote,
+                                                    S.Cod_Comprobante_Lote,
+                                                    S.Cantidad,
+                                                    L.Fecha_Ingreso
+                                                    FROM
+                                                        st_inventario_lote S
+                                                    JOIN
+                                                        ST_Producto_Lote L
+                                                    ON
+                                                        L.Cod_Producto = S.Cod_Producto
+                                                        AND L.Cod_Comprobante_Lote = S.Cod_Comprobante_Lote
+                                                        AND L.Tipo_Comprobante_Lote = S.Tipo_Comprobante_Lote
+                                                        AND L.Cod_Tipo_Inventario = 1
+                                                        AND L.COD_TIPO_INVENTARIO = S.COD_TIPO_INVENTARIO
+                                                    WHERE
+                                                        S.Cod_AAMM = 0
+                                                        AND S.Cod_Bodega = :param1 
+                                                        AND S.Empresa = :param2 
+                                                        AND S.Cod_Producto = :param3 
+                                                        AND S.Cod_Comprobante_Lote = :param4
+                                                    ORDER BY 
+                                                        L.Fecha_Ingreso DESC 
+                                                                    """,
+                       param1=cod_agencia, param2=empresa, param3=cod_producto, param4=cod_comprobante_lote_formula)
+
+        existencia_lote = cursor.fetchall()
+        cursor.close()
+        if not existencia_lote:
+            sta_comprobante = Sta_Comprobante(
+                cod_comprobante=cod_sta_comprobante,
+                tipo_comprobante='TE',
+                empresa=empresa,
+                cod_agencia=cod_agencia,
+                fecha=date.today(),
+                comprobante_manual='INGRESO DE COMBO',
+                cod_tipo_persona_a=cod_tipo_persona,
+                cod_persona_a=cod_persona,
+                cod_tipo_persona_b=cod_tipo_persona,
+                cod_persona_b=cod_persona,
+                cod_bodega_ingreso=cod_agencia,
+                cod_subbodega_ingreso=None,
+                cod_bodega_egreso=cod_agencia,
+                cod_subbodega_egreso=None,
+                cod_liquidacion=cod_liquidacion,
+                useridc=useridc,
+                es_grabado=0,
+                es_anulado=0,
+                tipo_transferencia=None,
+                tipo_comprobante_pedido=None,
+                cod_comprobante_pedido=None,
+                cod_estado_producto_egreso=None,
+                cod_estado_producto_ingreso=None,
+                cod_estado_proceso=None,
+                transportador=None,
+                placa=None,
+                tipo_comprobante_lote='LT',
+                cod_comprobante_lote=cod_comprobante_lote_formula,
+                cod_comprobante_ingreso=None,
+                tipo_comprobante_ingreso=None,
+                tipo_identificacion_transporta=None,
+                cod_motivo=None,
+                ruta=None
+            )
+            db.session.add(sta_comprobante)
+
+            sta_movimiento = Sta_Movimiento(
+                cod_comprobante=cod_sta_comprobante,
+                tipo_comprobante='TE',
+                empresa=empresa,
+                cod_secuencia_mov=1,
+                cod_producto=cod_producto,
+                cod_unidad='U',
+                cantidad=0,
+                es_serie=0,
+                cod_estado_producto=None,
+                ubicacion_bodega=None,
+                cod_tipo_lote='LT',
+                cod_comprobante_lote=cod_comprobante_lote_formula,
+                cod_estado_producto_ing=None,
+                cantidad_pedida=None
+            )
+            db.session.add(sta_movimiento)
+            db.session.commit()
+
+            query = """
+                                                               DECLARE
+                                                                 v_cod_empresa           FLOAT := :1;
+                                                                 v_cod_tipo_comprobante  VARCHAR2(2) := :2;
+                                                                 v_cod_comprobante       VARCHAR2(10) := :3;
+                                                                 v_cod_empresa_g         FLOAT ;
+                                                                 v_cod_tipo_comprobante_g VARCHAR2(2) ;
+                                                                 v_cod_comprobante_g      VARCHAR2(10) ;
+                                                                 v_cod_comprobante_orden  VARCHAR2(10) := :7;
+                                                                 v_cod_tipo_comprobante_orden  VARCHAR2(2) := :8;
+                                                               BEGIN
+                                                                 ksa_comprobante.graba_ni(p_cod_empresa => v_cod_empresa,
+                                                                                                             p_cod_tipo_comprobante => v_cod_tipo_comprobante,
+                                                                                                              p_cod_comprobante => v_cod_comprobante,
+                                                                                                              p_cod_empresa_g => v_cod_empresa_g,
+                                                                                                              p_cod_tipo_comprobante_g => v_cod_tipo_comprobante_g,
+                                                                                                              p_cod_comprobante_g => v_cod_comprobante_g,
+                                                                                                              p_cod_comprobante_orden => v_cod_comprobante_orden,
+                                                                                                              p_cod_tipo_comprobante_orden => v_cod_tipo_comprobante_orden);
+                                                               :4 := v_cod_empresa_g;
+                                                               :5 := v_cod_tipo_comprobante_g;
+                                                               :6 := v_cod_comprobante_g;
+                                                               END;
+                                                               """
+            cur = db1.cursor()
+            result_var0 = cur.var(cx_Oracle.NUMBER)
+            result_var1 = cur.var(cx_Oracle.STRING)
+            result_var2 = cur.var(cx_Oracle.STRING)
+            cur.execute(query, (empresa, 'TE', cod_sta_comprobante, result_var0, result_var1, result_var2, None, None))
+            cod_comprobante_ni = result_var2.getvalue()
+            cur.close()
+
+            db1.commit()
+            print(cod_comprobante_ni)
+
         ########################################################ADD COMPROBANTE GENERACION DE FORMULA#####################################################
 
         comprobante = Comprobante(
@@ -1877,6 +2088,7 @@ def generate_combo():
 
         ######################################################ADD EGRESOS MOVIMIENTOS POR ITEM##########################
         lotes = []
+        costo_formula = 0
         for item in formulaD:
             cantidad_detalle = item.cantidad_f * cantidad
             print('Detalle: ', item.cod_producto_f, ' ', cantidad_detalle)
@@ -1913,6 +2125,34 @@ def generate_combo():
             for row in rows:
                 tipo_comprobante_lote, cod_comprobante_lote, cantidad_lote, fecha_ingreso = row
                 print(cod_comprobante_lote, ' ', fecha_ingreso, ' ', cantidad_lote)
+
+                ###################################Obtencion del costo de cada lote para cada producto########################################
+                query = """
+                DECLARE
+                  result NUMBER;
+                BEGIN
+                  result := ks_producto_lote.obt_costo_valorado_lote(
+                    p_cod_empresa => :p_cod_empresa,
+                    p_cod_producto => :p_cod_producto,
+                    p_cod_comprobante_lote => :p_cod_comprobante_lote,
+                    p_tipo_comprobante_lote => :p_tipo_comprobante_lote,
+                    p_fecha_final => :p_fecha_final,
+                    p_obligatorio => :p_obligatorio
+                  );
+                  :result := result;
+                END;
+                """
+                cur = db1.cursor()
+                result_var = cursor.var(cx_Oracle.NUMBER)
+
+                cur.execute(query, p_cod_empresa=empresa, p_cod_producto=item.cod_producto_f,
+                               p_cod_comprobante_lote=cod_comprobante_lote,
+                               p_tipo_comprobante_lote=tipo_comprobante_lote, p_fecha_final=date.today(),
+                               p_obligatorio=1, result=result_var)
+
+                costo_lote = result_var.getvalue()
+                costo_formula += costo_lote
+
                 if cantidad_lote <= cantidad_detalle and cantidad_lote:
                     movimiento = Movimiento(
                         empresa=20,
@@ -1925,7 +2165,7 @@ def generate_combo():
                         cantidad_i=None,
                         precio=0,
                         descuento=0,
-                        costo=None,
+                        costo=costo_lote,
                         bodega=cod_agencia,
                         iva=0,
                         fecha=date.today(),
@@ -1983,7 +2223,7 @@ def generate_combo():
                             cantidad_i=None,
                             precio=0,
                             descuento=0,
-                            costo=None,
+                            costo=costo_lote,
                             bodega=cod_agencia,
                             iva=0,
                             fecha=date.today(),
@@ -2035,19 +2275,19 @@ def generate_combo():
                 lotes.append(row1)
             else:
                 return jsonify({'error': 'No existen lotes para el producto ' + row1}), 500
-        oldest_row = None
-        oldest_fecha_ingreso = None
-
-        for row in lotes:
-            tipo_comprobante_lote, cod_comprobante_lote, cantidad_lote, fecha_ingreso = row
-            if oldest_fecha_ingreso is None or fecha_ingreso < oldest_fecha_ingreso:
-                oldest_row = row
-                oldest_fecha_ingreso = fecha_ingreso
-
-        if oldest_row:
-            tipo_comprobante_lote, cod_comprobante_lote, cantidad_lote, fecha_ingreso = oldest_row
-        else:
-            return jsonify({'error': 'No existen lotes'}), 500
+        # oldest_row = None
+        # oldest_fecha_ingreso = None
+        #
+        # for row in lotes:
+        #     tipo_comprobante_lote, cod_comprobante_lote, cantidad_lote, fecha_ingreso = row
+        #     if oldest_fecha_ingreso is None or fecha_ingreso < oldest_fecha_ingreso:
+        #         oldest_row = row
+        #         oldest_fecha_ingreso = fecha_ingreso
+        #
+        # if oldest_row:
+        #     tipo_comprobante_lote, cod_comprobante_lote, cantidad_lote, fecha_ingreso = oldest_row
+        # else:
+        #     return jsonify({'error': 'No existen lotes'}), 500
 
         movimiento = Movimiento(
             empresa=20,
@@ -2060,7 +2300,7 @@ def generate_combo():
             cantidad_i=None,
             precio=0,
             descuento=0,
-            costo=None,
+            costo=costo_formula,
             bodega=cod_agencia,
             iva=0,
             fecha=date.today(),
@@ -2088,8 +2328,8 @@ def generate_combo():
             cod_promocion=None,
             ubicacion_bodega=None,
             cantidad_promocion=None,
-            tipo_comprobante_lote=tipo_comprobante_lote,
-            cod_comprobante_lote=cod_comprobante_lote,
+            tipo_comprobante_lote='LT',
+            cod_comprobante_lote=cod_comprobante_lote_formula,
             descuento_regalo=None,
             precio_unitario_xml=None,
             descuento_xml=None,
@@ -2138,458 +2378,511 @@ def desintegrate_combo():
 
         cod_producto = formula.cod_producto
         debito_credito = formula.debito_credito
-
         db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
-
-        cursor = db1.cursor()
-        cursor.execute("""
-                    SELECT KS_INVENTARIO.consulta_existencia(
-                        :param1,
-                        :param2,
-                        :param3,
-                        :param4,
-                        sysdate,
-                        :param5
-                        
-                    ) AS resultado
-                    FROM dual
-                """,
-                       param1=empresa, param2=cod_agencia, param3=cod_producto, param4='U', param5=1)
-        db1.close
-        result = cursor.fetchone()
-        cursor.close()
-
-        if result[0] == 0:
-            return jsonify({'error': 'No hay inventario para desarmar '+ formula.nombre}), 404
-
-        if result[0] < cantidad:
-            return jsonify({'error': 'Se pueden desarmar máximo '+ str(result[0]) +' '+ formula.nombre}), 404
-
-        cursor = db1.cursor()
-        cursor.execute("""
-                            select c.Cod_Tipo_Persona, C.COD_PERSONA, u.useridc
-                            from ad_usuarios a,
-                                st_vendedor b,
-                                persona c,
-                                usuario u
-                                where a.identificacion=b.cedula
-                                and b.empresa=c.empresa
-                                and b.cod_tipo_persona=c.cod_tipo_persona
-                                and b.cod_vendedor=c.cod_persona
-                                and u.usuario_oracle = a.codigo_usuario
-                                and u.usuario_oracle = :param1
-                                and c.empresa = 20
-
-                        """,
-                       param1=usuario)
-        db1.close
-        result = cursor.fetchone()
-        cursor.close()
-        if result:
-            cod_tipo_persona = result[0]
-            cod_persona = result[1]
-            useridc = result[2]
-        else:
-            return jsonify({'error': 'El usuario actual no tiene acceso a st_vendedor'})
-
-        cursor = db1.cursor()
-        cursor.execute("""
-                    SELECT KS_LIQUIDACION.consulta_cod_liquidacion(
-                        :param1,
-                        :param2,
-                        sysdate                                   
-                    ) AS resultado
-                    FROM dual
-                """,
-                       param1=empresa, param2=cod_agencia)
-        db1.close
-        result = cursor.fetchone()
-        cursor.close()
-        if result:
-            cod_liquidacion = result[0]
-        else:
-            return jsonify({'error': 'No existe Liquidacion'})
-
-        query = """
-                        DECLARE
-                          v_cod_empresa           FLOAT := :1;
-                          v_cod_tipo_comprobante  VARCHAR2(50) := :2;
-                          v_cod_agencia           FLOAT := :3;
-                          v_result                VARCHAR2(50);
-                        BEGIN
-                          v_result := KC_ORDEN.asigna_cod_comprobante(p_cod_empresa => v_cod_empresa,
-                                                                      p_cod_tipo_comprobante => v_cod_tipo_comprobante,
-                                                                      p_cod_agencia => v_cod_agencia);
-                        :4 := v_result;
-                        END;
-                        """
-        cur = db1.cursor()
-        result_var = cur.var(cx_Oracle.STRING)
-        cur.execute(query, (empresa, 'IC', cod_agencia, result_var))
-        cod_comprobante = result_var.getvalue()
-        cur.close()
-
-        cursor = db1.cursor()
-        cursor.execute("""
-                                    SELECT Tipo_Comprobante_Lote, Cod_Comprobante_Lote, Fecha_Ingreso
-                                    FROM (
-                                      SELECT
-                                        S.Tipo_Comprobante_Lote,
-                                        S.Cod_Comprobante_Lote,
-                                        L.Fecha_Ingreso,
-                                        ROWNUM AS rnum
-                                      FROM
-                                        st_inventario_lote S
-                                      JOIN
-                                        ST_Producto_Lote L
-                                      ON
-                                        L.Cod_Producto = S.Cod_Producto
-                                        AND L.Cod_Comprobante_Lote = S.Cod_Comprobante_Lote
-                                        AND L.Tipo_Comprobante_Lote = S.Tipo_Comprobante_Lote
-                                        AND L.Cod_Tipo_Inventario = 1
-                                        AND L.COD_TIPO_INVENTARIO = S.COD_TIPO_INVENTARIO
-                                      WHERE
-                                        S.Cod_AAMM = 0
-                                        AND S.Cod_Bodega = 6
-                                        AND S.Empresa = 20
-                                        AND S.Cod_Producto = :param1
-                                        AND S.Cantidad > 0
-                                      ORDER BY
-                                        L.Fecha_Ingreso ASC
-                                    )
-                                    WHERE
-                                      ROWNUM <= 1
-                                """,
-                       param1=cod_producto)
-        db1.close
-
-        result = cursor.fetchone()
-
-        if result:
-            tipo_comprobante_lote = result[0]
-            cod_comprobante_lote = result[1]
-        else:
-            return jsonify({'error': 'No existe Lote asignado al producto'})
-
-        cursor.close()
-        db1.commit()
-
-        comprobante = Comprobante(
-        empresa = empresa,
-        tipo_comprobante = 'IC',
-        cod_comprobante = cod_comprobante,
-        cod_tipo_persona = cod_tipo_persona,
-        cod_persona = cod_persona,
-        fecha = date.today(),
-        pedido = cod_formula,
-        iva = 0,
-        valor = 0,
-        financiamiento = 0,
-        otros = 0,
-        descuento = 0,
-        tipo_iva = None,
-        c_tipo_combrobante = None,
-        c_comprobante = None,
-        cod_liquidacion = cod_liquidacion,
-        useridc = useridc,
-        factura_manual = cod_comprobante,
-        anulado = 'N',
-        guia = cod_formula,
-        estado_grabado = None,
-        estado_contabilizado = None,
-        nombre_persona = None,
-        certificado = None,
-        secuen_certificado = None,
-        orden_compra = None,
-        transportador = None,
-        placa = None,
-        observaciones = None,
-        entrada = 0,
-        ice = 0,
-        cod_agente = cod_persona,
-        cod_divisa = 'DOLARES',
-        valor_divisa = None,
-        cancelada = None,
-        saldo = None,
-        cod_agencia = cod_agencia,
-        forma_pago = None,
-        cotizacion = None,
-        tipo_comprobante_r = None,
-        cod_comprobante_r = None,
-        transferencia = None,
-        aa_cliente = None,
-        codigo_cliente = None,
-        estado_comision = None,
-        cod_periodo_comision = None,
-        linea_contabilidad = None,
-        tipo_comprobante_pr = None,
-        cod_comprobante_pr = None,
-        cod_tipo_persona_gar = None,
-        cod_persona_gar = None,
-        numero_pagos = 0,
-        cuotas_gratis = 0,
-        dias_atrazo = 0,
-        devolucion_otros = 0,
-        valor_alterno = None,
-        descuento_promocion = 0,
-        cod_bodega_ingreso = cod_agencia,
-        cod_subbodega_ingreso = None,
-        cod_bodega_egreso = cod_agencia,
-        cod_subbodega_egreso = None,
-        cod_tarjeta = None,
-        num_tarjeta = None,
-        num_recap = None,
-        num_voucher = None,
-        num_autorizacion = None,
-        cod_politica = None,
-        tipo_comprobante_pedido = None,
-        cod_comprobante_pedido = None,
-        fecha_ingreso = None,
-        rebate = None,
-        base_imponible = None,
-        base_excenta = None,
-        cod_caja = None,
-        fecha_vencimiento1 = None,
-        por_interes = None,
-        aud_fecha = None,
-        aud_usuario = None,
-        aud_terminal = None,
-        cod_tipo_persona_aprob = None,
-        cod_persona_aprob = None,
-        cod_tipo_persona_verif = None,
-        cod_persona_verif = None,
-        interes =None
-        )
-
-        db.session.add(comprobante)
-        db.session.commit()
-
-
-        movimiento = Movimiento(
-        empresa= 20,
-        tipo_comprobante = 'IC',
-        cod_comprobante = cod_comprobante,
-        secuencia = 1,
-        cod_producto = cod_producto,
-        cantidad = cantidad,
-        debito_credito = 2,
-        cantidad_i = None,
-        precio = 0,
-        descuento = 0,
-        costo = None,
-        bodega = cod_agencia,
-        iva = 0,
-        fecha = date.today(),
-        factura_manual = cod_formula,
-        serie = None,
-        grado = None,
-        cod_subbodega = None,
-        temperatura = None,
-        cod_unidad = 'U',
-        divisa = 0,
-        anulado = 'N',
-        cantidad_b = None,
-        cantidad_i_b = None,
-        ice = 0,
-        lista = None,
-        total_linea = 0,
-        porce_descuento = 0,
-        valor_alterno = None,
-        es_serie = 1,
-        td = None,
-        rebate = None,
-        es_iva = None,
-        cod_estado_producto = 'A',
-        cod_tipo_inventario = 1,
-        cod_promocion = None,
-        ubicacion_bodega = None,
-        cantidad_promocion = None,
-        tipo_comprobante_lote = tipo_comprobante_lote,
-        cod_comprobante_lote = cod_comprobante_lote,
-        descuento_regalo = None,
-        precio_unitario_xml = None,
-        descuento_xml = None,
-        precio_total_sin_impuesto_xml = None,
-        iva_xml = None,
-        ice_xml = None,
-        base_imponible_iva = None,
-        base_imponible_ice = None,
-        cod_producto_xml = None,
-        cod_porcentaje_iva = None
-        )
-        db.session.add(movimiento)
-        db.session.commit()
-
-        ################################################################################################################
-
-        query = StFormulaD.query()
-        if empresa:
-            query = query.filter(StFormulaD.empresa == empresa)
-        if cod_formula:
-            query = query.filter(StFormulaD.cod_formula == cod_formula)
-        formulaD = query.all()
-        total_iteraciones = 2
-
-        for item in formulaD:
-            db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        if debito_credito == 1:
             cursor = db1.cursor()
             cursor.execute("""
-                            SELECT
-                            S.Tipo_Comprobante_Lote,
-                            S.Cod_Comprobante_Lote,
-                            S.Cantidad,
-                            L.Fecha_Ingreso
-                            FROM
-                                st_inventario_lote S
-                            JOIN
-                                ST_Producto_Lote L
-                            ON
-                                L.Cod_Producto = S.Cod_Producto
-                                AND L.Cod_Comprobante_Lote = S.Cod_Comprobante_Lote
-                                AND L.Tipo_Comprobante_Lote = S.Tipo_Comprobante_Lote
-                                AND L.Cod_Tipo_Inventario = 1
-                                AND L.COD_TIPO_INVENTARIO = S.COD_TIPO_INVENTARIO
-                            WHERE
-                                S.Cod_AAMM = 0
-                                AND S.Cod_Bodega = 6
-                                AND S.Empresa = 20
-                                AND S.Cod_Producto = :param1
-                                AND S.Cantidad > 0
-                            ORDER BY
-                                L.Fecha_Ingreso ASC
+                                SELECT KS_INVENTARIO.consulta_existencia(
+                                    :param1,
+                                    :param2,
+                                    :param3,
+                                    :param4,
+                                    sysdate,
+                                    :param5
+
+                                ) AS resultado
+                                FROM dual
+                            """,
+                           param1=empresa, param2=cod_agencia, param3=cod_producto, param4='U', param5=1)
+            db1.close
+            result = cursor.fetchone()
+            cursor.close()
+
+            if result[0] == 0:
+                return jsonify({'error': 'No hay inventario para desarmar ' + formula.nombre}), 404
+
+            if result[0] < cantidad:
+                return jsonify({'error': 'Se pueden desarmar máximo ' + str(result[0]) + ' ' + formula.nombre}), 404
+
+            cursor = db1.cursor()
+            cursor.execute("""
+                                        select c.Cod_Tipo_Persona, C.COD_PERSONA, u.useridc
+                                        from ad_usuarios a,
+                                            st_vendedor b,
+                                            persona c,
+                                            usuario u
+                                            where a.identificacion=b.cedula
+                                            and b.empresa=c.empresa
+                                            and b.cod_tipo_persona=c.cod_tipo_persona
+                                            and b.cod_vendedor=c.cod_persona
+                                            and u.usuario_oracle = a.codigo_usuario
+                                            and u.usuario_oracle = :param1
+                                            and c.empresa = 20
+
+                                    """,
+                           param1=usuario)
+            db1.close
+            result = cursor.fetchone()
+            cursor.close()
+
+            if result:
+                cod_tipo_persona = result[0]
+                cod_persona = result[1]
+                useridc = result[2]
+            else:
+                return jsonify({'error': 'El usuario actual no tiene acceso a st_vendedor'})
+
+            cursor = db1.cursor()
+
+            cursor.execute("""
+                                SELECT KS_LIQUIDACION.consulta_cod_liquidacion(
+                                    :param1,
+                                    :param2,
+                                    sysdate                                   
+                                ) AS resultado
+                                FROM dual
+                            """,
+                           param1=empresa, param2=cod_agencia)
+            db1.close
+            result = cursor.fetchone()
+            cursor.close()
+            if result:
+                cod_liquidacion = result[0]
+            else:
+                return jsonify({'error': 'No existe Liquidacion'})
+
+            query = """
+                                    DECLARE
+                                      v_cod_empresa           FLOAT := :1;
+                                      v_cod_tipo_comprobante  VARCHAR2(50) := :2;
+                                      v_cod_agencia           FLOAT := :3;
+                                      v_result                VARCHAR2(50);
+                                    BEGIN
+                                      v_result := KC_ORDEN.asigna_cod_comprobante(p_cod_empresa => v_cod_empresa,
+                                                                                  p_cod_tipo_comprobante => v_cod_tipo_comprobante,
+                                                                                  p_cod_agencia => v_cod_agencia);
+                                    :4 := v_result;
+                                    END;
+                                    """
+            cur = db1.cursor()
+            result_var = cur.var(cx_Oracle.STRING)
+            cur.execute(query, (empresa, 'IC', cod_agencia, result_var))
+            cod_comprobante = result_var.getvalue()
+            cur.close()
+
+            cursor = db1.cursor()
+            cursor.execute("""
+                                                SELECT Tipo_Comprobante_Lote, Cod_Comprobante_Lote, Fecha_Ingreso
+                                                FROM (
+                                                  SELECT
+                                                    S.Tipo_Comprobante_Lote,
+                                                    S.Cod_Comprobante_Lote,
+                                                    L.Fecha_Ingreso,
+                                                    ROWNUM AS rnum
+                                                  FROM
+                                                    st_inventario_lote S
+                                                  JOIN
+                                                    ST_Producto_Lote L
+                                                  ON
+                                                    L.Cod_Producto = S.Cod_Producto
+                                                    AND L.Cod_Comprobante_Lote = S.Cod_Comprobante_Lote
+                                                    AND L.Tipo_Comprobante_Lote = S.Tipo_Comprobante_Lote
+                                                    AND L.Cod_Tipo_Inventario = 1
+                                                    AND L.COD_TIPO_INVENTARIO = S.COD_TIPO_INVENTARIO
+                                                  WHERE
+                                                    S.Cod_AAMM = 0
+                                                    AND S.Cod_Bodega = 6
+                                                    AND S.Empresa = 20
+                                                    AND S.Cod_Producto = :param1
+                                                    AND S.Cantidad > 0
+                                                  ORDER BY
+                                                    L.Fecha_Ingreso ASC
+                                                )
+                                                WHERE
+                                                  ROWNUM <= 1
                                             """,
-                           param1=item.cod_producto_f)
-
-            rows = cursor.fetchall()
-            if not rows:
-                db1.rollback()
-                db.session.rollback()
-                db1.close()
-                return jsonify({'error': 'No se encontraron lotes de inventario para ' + item.cod_producto_f})
-
+                           param1=cod_producto)
             db1.close
 
-            cantidad_detalle = item.cantidad_f * cantidad
-            for row in cursor:
-                tipo_comprobante_lote, cod_comprobante_lote, cantidad_lote, fecha_ingreso = row
-                if cantidad_lote <= cantidad_detalle:
-                    movimiento = Movimiento(
-                        empresa=20,
-                        tipo_comprobante='IC',
-                        cod_comprobante=cod_comprobante,
-                        secuencia= total_iteraciones,
-                        cod_producto=item.cod_producto_f,
-                        cantidad=cantidad_lote,
-                        debito_credito=1,
-                        cantidad_i=None,
-                        precio=0,
-                        descuento=0,
-                        costo=None,
-                        bodega=cod_agencia,
-                        iva=0,
-                        fecha=date.today(),
-                        factura_manual=cod_formula,
-                        serie=None,
-                        grado=None,
-                        cod_subbodega=None,
-                        temperatura=None,
-                        cod_unidad='U',
-                        divisa=0,
-                        anulado='N',
-                        cantidad_b=None,
-                        cantidad_i_b=None,
-                        ice=0,
-                        lista=None,
-                        total_linea=0,
-                        porce_descuento=0,
-                        valor_alterno=None,
-                        es_serie=1,
-                        td=None,
-                        rebate=None,
-                        es_iva=None,
-                        cod_estado_producto='A',
-                        cod_tipo_inventario=1,
-                        cod_promocion=None,
-                        ubicacion_bodega=None,
-                        cantidad_promocion=None,
-                        tipo_comprobante_lote=tipo_comprobante_lote,
-                        cod_comprobante_lote=cod_comprobante_lote,
-                        descuento_regalo=None,
-                        precio_unitario_xml=None,
-                        descuento_xml=None,
-                        precio_total_sin_impuesto_xml=None,
-                        iva_xml=None,
-                        ice_xml=None,
-                        base_imponible_iva=None,
-                        base_imponible_ice=None,
-                        cod_producto_xml=None,
-                        cod_porcentaje_iva=None
-                    )
-                    db.session.add(movimiento)
-                    db.session.commit()
-                    total_iteraciones += 1
-                    cantidad_detalle = cantidad_detalle - Decimal(str(cantidad_lote))
-                else:
-                    movimiento = Movimiento(
-                        empresa=20,
-                        tipo_comprobante='IC',
-                        cod_comprobante=cod_comprobante,
-                        secuencia=total_iteraciones,
-                        cod_producto=item.cod_producto_f,
-                        cantidad=cantidad_detalle,
-                        debito_credito=1,
-                        cantidad_i=None,
-                        precio=0,
-                        descuento=0,
-                        costo=None,
-                        bodega=cod_agencia,
-                        iva=0,
-                        fecha=date.today(),
-                        factura_manual=cod_formula,
-                        serie=None,
-                        grado=None,
-                        cod_subbodega=None,
-                        temperatura=None,
-                        cod_unidad='U',
-                        divisa=0,
-                        anulado='N',
-                        cantidad_b=None,
-                        cantidad_i_b=None,
-                        ice=0,
-                        lista=None,
-                        total_linea=0,
-                        porce_descuento=0,
-                        valor_alterno=None,
-                        es_serie=1,
-                        td=None,
-                        rebate=None,
-                        es_iva=None,
-                        cod_estado_producto='A',
-                        cod_tipo_inventario=1,
-                        cod_promocion=None,
-                        ubicacion_bodega=None,
-                        cantidad_promocion=None,
-                        tipo_comprobante_lote=tipo_comprobante_lote,
-                        cod_comprobante_lote=cod_comprobante_lote,
-                        descuento_regalo=None,
-                        precio_unitario_xml=None,
-                        descuento_xml=None,
-                        precio_total_sin_impuesto_xml=None,
-                        iva_xml=None,
-                        ice_xml=None,
-                        base_imponible_iva=None,
-                        base_imponible_ice=None,
-                        cod_producto_xml=None,
-                        cod_porcentaje_iva=None
-                    )
-                    db.session.add(movimiento)
-                    db.session.commit()
-                    total_iteraciones += 1
-                    break
+            result = cursor.fetchone()
+
+            if result:
+                tipo_comprobante_lote = result[0]
+                cod_comprobante_lote = result[1]
+            else:
+                return jsonify({'error': 'No existe Lote asignado al producto'})
 
             cursor.close()
-            db1.close()
+            db1.commit()
 
+            comprobante = Comprobante(
+                empresa=empresa,
+                tipo_comprobante='IC',
+                cod_comprobante=cod_comprobante,
+                cod_tipo_persona=cod_tipo_persona,
+                cod_persona=cod_persona,
+                fecha=date.today(),
+                pedido=cod_formula,
+                iva=0,
+                valor=0,
+                financiamiento=0,
+                otros=0,
+                descuento=0,
+                tipo_iva=None,
+                c_tipo_combrobante=None,
+                c_comprobante=None,
+                cod_liquidacion=cod_liquidacion,
+                useridc=useridc,
+                factura_manual=cod_comprobante,
+                anulado='N',
+                guia=cod_formula,
+                estado_grabado=None,
+                estado_contabilizado=None,
+                nombre_persona=None,
+                certificado=None,
+                secuen_certificado=None,
+                orden_compra=None,
+                transportador=None,
+                placa=None,
+                observaciones=None,
+                entrada=0,
+                ice=0,
+                cod_agente=cod_persona,
+                cod_divisa='DOLARES',
+                valor_divisa=None,
+                cancelada=None,
+                saldo=None,
+                cod_agencia=cod_agencia,
+                forma_pago=None,
+                cotizacion=None,
+                tipo_comprobante_r=None,
+                cod_comprobante_r=None,
+                transferencia=None,
+                aa_cliente=None,
+                codigo_cliente=None,
+                estado_comision=None,
+                cod_periodo_comision=None,
+                linea_contabilidad=None,
+                tipo_comprobante_pr=None,
+                cod_comprobante_pr=None,
+                cod_tipo_persona_gar=None,
+                cod_persona_gar=None,
+                numero_pagos=0,
+                cuotas_gratis=0,
+                dias_atrazo=0,
+                devolucion_otros=0,
+                valor_alterno=None,
+                descuento_promocion=0,
+                cod_bodega_ingreso=cod_agencia,
+                cod_subbodega_ingreso=None,
+                cod_bodega_egreso=cod_agencia,
+                cod_subbodega_egreso=None,
+                cod_tarjeta=None,
+                num_tarjeta=None,
+                num_recap=None,
+                num_voucher=None,
+                num_autorizacion=None,
+                cod_politica=None,
+                tipo_comprobante_pedido=None,
+                cod_comprobante_pedido=None,
+                fecha_ingreso=None,
+                rebate=None,
+                base_imponible=None,
+                base_excenta=None,
+                cod_caja=None,
+                fecha_vencimiento1=None,
+                por_interes=None,
+                aud_fecha=None,
+                aud_usuario=None,
+                aud_terminal=None,
+                cod_tipo_persona_aprob=None,
+                cod_persona_aprob=None,
+                cod_tipo_persona_verif=None,
+                cod_persona_verif=None,
+                interes=None
+            )
+
+            db.session.add(comprobante)
+            db.session.commit()
+
+            query = """
+                            DECLARE
+                              result NUMBER;
+                            BEGIN
+                              result := ks_producto_lote.obt_costo_valorado_lote(
+                                p_cod_empresa => :p_cod_empresa,
+                                p_cod_producto => :p_cod_producto,
+                                p_cod_comprobante_lote => :p_cod_comprobante_lote,
+                                p_tipo_comprobante_lote => :p_tipo_comprobante_lote,
+                                p_fecha_final => :p_fecha_final,
+                                p_obligatorio => :p_obligatorio
+                              );
+                              :result := result;
+                            END;
+                            """
+            cur = db1.cursor()
+            result_var = cursor.var(cx_Oracle.NUMBER)
+
+            cur.execute(query, p_cod_empresa=empresa, p_cod_producto=cod_producto,
+                        p_cod_comprobante_lote=cod_comprobante_lote,
+                        p_tipo_comprobante_lote=tipo_comprobante_lote, p_fecha_final=date.today(),
+                        p_obligatorio=1, result=result_var)
+
+            costo_lote = result_var.getvalue()
+            cur.close()
+
+            movimiento = Movimiento(
+                empresa=20,
+                tipo_comprobante='IC',
+                cod_comprobante=cod_comprobante,
+                secuencia=1,
+                cod_producto=cod_producto,
+                cantidad=cantidad,
+                debito_credito=2,
+                cantidad_i=None,
+                precio=0,
+                descuento=0,
+                costo=costo_lote,
+                bodega=cod_agencia,
+                iva=0,
+                fecha=date.today(),
+                factura_manual=cod_formula,
+                serie=None,
+                grado=None,
+                cod_subbodega=None,
+                temperatura=None,
+                cod_unidad='U',
+                divisa=0,
+                anulado='N',
+                cantidad_b=None,
+                cantidad_i_b=None,
+                ice=0,
+                lista=None,
+                total_linea=0,
+                porce_descuento=0,
+                valor_alterno=None,
+                es_serie=1,
+                td=None,
+                rebate=None,
+                es_iva=None,
+                cod_estado_producto='A',
+                cod_tipo_inventario=1,
+                cod_promocion=None,
+                ubicacion_bodega=None,
+                cantidad_promocion=None,
+                tipo_comprobante_lote=tipo_comprobante_lote,
+                cod_comprobante_lote=cod_comprobante_lote,
+                descuento_regalo=None,
+                precio_unitario_xml=None,
+                descuento_xml=None,
+                precio_total_sin_impuesto_xml=None,
+                iva_xml=None,
+                ice_xml=None,
+                base_imponible_iva=None,
+                base_imponible_ice=None,
+                cod_producto_xml=None,
+                cod_porcentaje_iva=None
+            )
+            db.session.add(movimiento)
+            db.session.commit()
+
+            ################################################################################################################
+
+            query = StFormulaD.query()
+            if empresa:
+                query = query.filter(StFormulaD.empresa == empresa)
+            if cod_formula:
+                query = query.filter(StFormulaD.cod_formula == cod_formula)
+            formulaD = query.all()
+            total_iteraciones = 2
+
+            for item in formulaD:
+                db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+                cursor = db1.cursor()
+                cursor.execute("""
+                                        SELECT
+                                        S.Tipo_Comprobante_Lote,
+                                        S.Cod_Comprobante_Lote,
+                                        S.Cantidad,
+                                        L.Fecha_Ingreso
+                                        FROM
+                                            st_inventario_lote S
+                                        JOIN
+                                            ST_Producto_Lote L
+                                        ON
+                                            L.Cod_Producto = S.Cod_Producto
+                                            AND L.Cod_Comprobante_Lote = S.Cod_Comprobante_Lote
+                                            AND L.Tipo_Comprobante_Lote = S.Tipo_Comprobante_Lote
+                                            AND L.Cod_Tipo_Inventario = 1
+                                            AND L.COD_TIPO_INVENTARIO = S.COD_TIPO_INVENTARIO
+                                        WHERE
+                                            S.Cod_AAMM = 0
+                                            AND S.Cod_Bodega = 6
+                                            AND S.Empresa = 20
+                                            AND S.Cod_Producto = :param1
+                                            AND S.Cantidad > 0
+                                        ORDER BY
+                                            L.Fecha_Ingreso ASC
+                                                        """,
+                               param1=item.cod_producto_f)
+
+                rows = cursor.fetchall()
+                if not rows:
+                    db1.rollback()
+                    db.session.rollback()
+                    db1.close()
+                    return jsonify({'error': 'No se encontraron lotes de inventario para ' + item.cod_producto_f})
+
+                db1.close
+
+                cantidad_detalle = item.cantidad_f * cantidad
+                for row in cursor:
+                    tipo_comprobante_lote, cod_comprobante_lote, cantidad_lote, fecha_ingreso = row
+                    query = """
+                                                                DECLARE
+                                                                  result NUMBER;
+                                                                BEGIN
+                                                                  result := ks_producto_lote.obt_costo_valorado_lote(
+                                                                    p_cod_empresa => :p_cod_empresa,
+                                                                    p_cod_producto => :p_cod_producto,
+                                                                    p_cod_comprobante_lote => :p_cod_comprobante_lote,
+                                                                    p_tipo_comprobante_lote => :p_tipo_comprobante_lote,
+                                                                    p_fecha_final => :p_fecha_final,
+                                                                    p_obligatorio => :p_obligatorio
+                                                                  );
+                                                                  :result := result;
+                                                                END;
+                                                                """
+                    cur = db1.cursor()
+                    result_var = cursor.var(cx_Oracle.NUMBER)
+
+                    cur.execute(query, p_cod_empresa=empresa, p_cod_producto=item.cod_producto_f,
+                                p_cod_comprobante_lote=cod_comprobante_lote,
+                                p_tipo_comprobante_lote=tipo_comprobante_lote, p_fecha_final=date.today(),
+                                p_obligatorio=1, result=result_var)
+
+                    costo_lote = result_var.getvalue()
+                    cur.close()
+                    if cantidad_lote <= cantidad_detalle:
+                        movimiento = Movimiento(
+                            empresa=20,
+                            tipo_comprobante='IC',
+                            cod_comprobante=cod_comprobante,
+                            secuencia=total_iteraciones,
+                            cod_producto=item.cod_producto_f,
+                            cantidad=cantidad_lote,
+                            debito_credito=1,
+                            cantidad_i=None,
+                            precio=0,
+                            descuento=0,
+                            costo=costo_lote,
+                            bodega=cod_agencia,
+                            iva=0,
+                            fecha=date.today(),
+                            factura_manual=cod_formula,
+                            serie=None,
+                            grado=None,
+                            cod_subbodega=None,
+                            temperatura=None,
+                            cod_unidad='U',
+                            divisa=0,
+                            anulado='N',
+                            cantidad_b=None,
+                            cantidad_i_b=None,
+                            ice=0,
+                            lista=None,
+                            total_linea=0,
+                            porce_descuento=0,
+                            valor_alterno=None,
+                            es_serie=1,
+                            td=None,
+                            rebate=None,
+                            es_iva=None,
+                            cod_estado_producto='A',
+                            cod_tipo_inventario=1,
+                            cod_promocion=None,
+                            ubicacion_bodega=None,
+                            cantidad_promocion=None,
+                            tipo_comprobante_lote=tipo_comprobante_lote,
+                            cod_comprobante_lote=cod_comprobante_lote,
+                            descuento_regalo=None,
+                            precio_unitario_xml=None,
+                            descuento_xml=None,
+                            precio_total_sin_impuesto_xml=None,
+                            iva_xml=None,
+                            ice_xml=None,
+                            base_imponible_iva=None,
+                            base_imponible_ice=None,
+                            cod_producto_xml=None,
+                            cod_porcentaje_iva=None
+                        )
+                        db.session.add(movimiento)
+                        db.session.commit()
+                        total_iteraciones += 1
+                        cantidad_detalle = cantidad_detalle - Decimal(str(cantidad_lote))
+                    else:
+                        movimiento = Movimiento(
+                            empresa=20,
+                            tipo_comprobante='IC',
+                            cod_comprobante=cod_comprobante,
+                            secuencia=total_iteraciones,
+                            cod_producto=item.cod_producto_f,
+                            cantidad=cantidad_detalle,
+                            debito_credito=1,
+                            cantidad_i=None,
+                            precio=0,
+                            descuento=0,
+                            costo=costo_lote,
+                            bodega=cod_agencia,
+                            iva=0,
+                            fecha=date.today(),
+                            factura_manual=cod_formula,
+                            serie=None,
+                            grado=None,
+                            cod_subbodega=None,
+                            temperatura=None,
+                            cod_unidad='U',
+                            divisa=0,
+                            anulado='N',
+                            cantidad_b=None,
+                            cantidad_i_b=None,
+                            ice=0,
+                            lista=None,
+                            total_linea=0,
+                            porce_descuento=0,
+                            valor_alterno=None,
+                            es_serie=1,
+                            td=None,
+                            rebate=None,
+                            es_iva=None,
+                            cod_estado_producto='A',
+                            cod_tipo_inventario=1,
+                            cod_promocion=None,
+                            ubicacion_bodega=None,
+                            cantidad_promocion=None,
+                            tipo_comprobante_lote=tipo_comprobante_lote,
+                            cod_comprobante_lote=cod_comprobante_lote,
+                            descuento_regalo=None,
+                            precio_unitario_xml=None,
+                            descuento_xml=None,
+                            precio_total_sin_impuesto_xml=None,
+                            iva_xml=None,
+                            ice_xml=None,
+                            base_imponible_iva=None,
+                            base_imponible_ice=None,
+                            cod_producto_xml=None,
+                            cod_porcentaje_iva=None
+                        )
+                        db.session.add(movimiento)
+                        db.session.commit()
+                        total_iteraciones += 1
+                        break
+
+                cursor.close()
+                db1.close()
+        else:
+            if debito_credito == 2:
+                print('Desintegrar despiece')
         return jsonify({'success': cod_comprobante})
 
     except Exception as e:
@@ -2647,7 +2940,7 @@ def obtener_lotes():
             lotes.append(lote_dict)
 
         if not lotes:
-            return jsonify({'error': 'No existen lotes para el producto'}), 500
+            return jsonify({'error': 'Se creará un nuevo lote para el producto'}), 500
 
         return jsonify({'lotes': lotes})
 
@@ -2777,6 +3070,33 @@ def generate_despiece():
         cod_comprobante = result_var.getvalue()
         cur.close()
 
+        ########################################################OBTENCION DE COSTO VALORADO DE FORMULA####################################################
+
+        query = """
+                        DECLARE
+                          result NUMBER;
+                        BEGIN
+                          result := ks_producto_lote.obt_costo_valorado_lote(
+                            p_cod_empresa => :p_cod_empresa,
+                            p_cod_producto => :p_cod_producto,
+                            p_cod_comprobante_lote => :p_cod_comprobante_lote,
+                            p_tipo_comprobante_lote => :p_tipo_comprobante_lote,
+                            p_fecha_final => :p_fecha_final,
+                            p_obligatorio => :p_obligatorio
+                          );
+                          :result := result;
+                        END;
+                        """
+        cur = db1.cursor()
+        result_var = cursor.var(cx_Oracle.NUMBER)
+
+        cur.execute(query, p_cod_empresa=empresa, p_cod_producto=cod_producto,
+                    p_cod_comprobante_lote=cod_comprobante_lote,
+                    p_tipo_comprobante_lote=tipo_comprobante_lote, p_fecha_final=date.today(),
+                    p_obligatorio=1, result=result_var)
+
+        costo_lote = result_var.getvalue()
+
         ########################################################ADD COMPROBANTE GENERACION DE FORMULA#####################################################
 
         comprobante = Comprobante(
@@ -2879,7 +3199,7 @@ def generate_despiece():
             cantidad_i=None,
             precio=0,
             descuento=0,
-            costo=None,
+            costo=costo_lote,
             bodega=cod_agencia,
             iva=0,
             fecha=date.today(),
@@ -2964,8 +3284,208 @@ def generate_despiece():
                            param1=item.cod_producto_f)
             rows = cursor.fetchone()
             print('Resultado: ', rows)
+            ############################################VALIDACION DE EXISTENCIA DE LOTES#########################################################################
+            if rows is None:
+                query = """
+                                                    DECLARE
+                                                      v_cod_empresa           FLOAT := :1;
+                                                      v_cod_agencia           FLOAT := :2;
+                                                      v_tipo_comprobante_lote  VARCHAR2(50) := :3;
+                                                      v_tipo_lote             VARCHAR2(3) := :4;  
+                                                      v_result                VARCHAR2(50);
+                                                    BEGIN
+                                                      v_result := ks_lote.asigna_codigo(p_empresa => v_cod_empresa,
+                                                                                                  p_cod_agencia => v_cod_agencia,
+                                                                                                  p_tipo_comprobante_lote => v_tipo_comprobante_lote,
+                                                                                                  p_fecha => sysdate,
+                                                                                                  P_TIPO_LOTE => v_tipo_lote);
+                                                    :5 := v_result;
+                                                    END;
+                                                    """
+                cur = db1.cursor()
+                result_var = cur.var(cx_Oracle.STRING)
+                cur.execute(query, (empresa, cod_agencia, 'LT', 'IN', result_var))
+                cod_comprobante_lote = result_var.getvalue()
+                tipo_comprobante_lote = 'LT'
+                cantidad_lote = 0
+                fecha_ingreso = date.today()
 
-            tipo_comprobante_lote, cod_comprobante_lote, cantidad_lote, fecha_ingreso = rows
+                cur.close()
+                db1.commit()
+
+                query = StLote.query()
+                if empresa:
+                    query = query.filter(StLote.empresa == empresa)
+                if cod_agencia:
+                    query = query.filter(StLote.cod_agencia == cod_agencia)
+                if cod_comprobante_lote:
+                    query = query.filter(StLote.cod_comprobante == cod_comprobante_lote)
+
+                result = query.all()
+
+                if not result:
+                    lote = StLote(
+                        empresa=empresa,
+                        tipo_comprobante='LT',
+                        cod_comprobante=cod_comprobante_lote,
+                        fecha=date.today(),
+                        descripcion='Lote para desintegracion de combos',
+                        tipo_lote='IN',
+                        cod_agencia=cod_agencia,
+                        usuario_aud=usuario,
+                        fecha_aud=date.today()
+                    )
+                    db.session.add(lote)
+                    db.session.commit()
+
+                query = """
+                                                          DECLARE
+                                                            v_cod_empresa           FLOAT := :1;
+                                                            v_cod_tipo_comprobante  VARCHAR2(50) := :2;
+                                                            v_cod_agencia           FLOAT := :3;
+                                                            v_result                VARCHAR2(50);
+                                                          BEGIN
+                                                            v_result := KC_ORDEN.asigna_cod_comprobante(p_cod_empresa => v_cod_empresa,
+                                                                                                        p_cod_tipo_comprobante => v_cod_tipo_comprobante,
+                                                                                                        p_cod_agencia => v_cod_agencia);
+                                                          :4 := v_result;
+                                                          END;
+                                                          """
+                cur = db1.cursor()
+                result_var = cur.var(cx_Oracle.STRING)
+                cur.execute(query, (empresa, 'TE', cod_agencia, result_var))
+                cod_sta_comprobante_item = result_var.getvalue()
+                cur.close()
+                db1.commit()
+
+                ###################################GENERACION DE REGISTROS TEMPORALES PARA AGREGAR LOTE PARA PRODUCTO#####################################################
+
+                cursor = db1.cursor()
+                cursor.execute("""
+                                                                   SELECT
+                                                                   S.Tipo_Comprobante_Lote,
+                                                                   S.Cod_Comprobante_Lote,
+                                                                   S.Cantidad,
+                                                                   L.Fecha_Ingreso
+                                                                   FROM
+                                                                       st_inventario_lote S
+                                                                   JOIN
+                                                                       ST_Producto_Lote L
+                                                                   ON
+                                                                       L.Cod_Producto = S.Cod_Producto
+                                                                       AND L.Cod_Comprobante_Lote = S.Cod_Comprobante_Lote
+                                                                       AND L.Tipo_Comprobante_Lote = S.Tipo_Comprobante_Lote
+                                                                       AND L.Cod_Tipo_Inventario = 1
+                                                                       AND L.COD_TIPO_INVENTARIO = S.COD_TIPO_INVENTARIO
+                                                                   WHERE
+                                                                       S.Cod_AAMM = 0
+                                                                       AND S.Cod_Bodega = :param1 
+                                                                       AND S.Empresa = :param2 
+                                                                       AND S.Cod_Producto = :param3 
+                                                                       AND S.Cod_Comprobante_Lote = :param4
+                                                                   ORDER BY 
+                                                                       L.Fecha_Ingreso DESC 
+                                                                                   """,
+                               param1=cod_agencia, param2=empresa, param3=item.cod_producto_f,
+                               param4=cod_comprobante_lote)
+
+                existencia_lote = cursor.fetchall()
+                cursor.close()
+
+                if not existencia_lote:
+                    sta_comprobante = Sta_Comprobante(
+                        cod_comprobante=cod_sta_comprobante_item,
+                        tipo_comprobante='TE',
+                        empresa=empresa,
+                        cod_agencia=cod_agencia,
+                        fecha=date.today(),
+                        comprobante_manual='DESINTEGRACION DE COMBO',
+                        cod_tipo_persona_a=cod_tipo_persona,
+                        cod_persona_a=cod_persona,
+                        cod_tipo_persona_b=cod_tipo_persona,
+                        cod_persona_b=cod_persona,
+                        cod_bodega_ingreso=cod_agencia,
+                        cod_subbodega_ingreso=None,
+                        cod_bodega_egreso=cod_agencia,
+                        cod_subbodega_egreso=None,
+                        cod_liquidacion=cod_liquidacion,
+                        useridc=useridc,
+                        es_grabado=0,
+                        es_anulado=0,
+                        tipo_transferencia=None,
+                        tipo_comprobante_pedido=None,
+                        cod_comprobante_pedido=None,
+                        cod_estado_producto_egreso=None,
+                        cod_estado_producto_ingreso=None,
+                        cod_estado_proceso=None,
+                        transportador=None,
+                        placa=None,
+                        tipo_comprobante_lote='LT',
+                        cod_comprobante_lote=cod_comprobante_lote,
+                        cod_comprobante_ingreso=None,
+                        tipo_comprobante_ingreso=None,
+                        tipo_identificacion_transporta=None,
+                        cod_motivo=None,
+                        ruta=None
+                    )
+                    db.session.add(sta_comprobante)
+
+                    sta_movimiento = Sta_Movimiento(
+                        cod_comprobante=cod_sta_comprobante_item,
+                        tipo_comprobante='TE',
+                        empresa=empresa,
+                        cod_secuencia_mov=1,
+                        cod_producto=item.cod_producto_f,
+                        cod_unidad='U',
+                        cantidad=0,
+                        es_serie=0,
+                        cod_estado_producto=None,
+                        ubicacion_bodega=None,
+                        cod_tipo_lote='LT',
+                        cod_comprobante_lote=cod_comprobante_lote,
+                        cod_estado_producto_ing=None,
+                        cantidad_pedida=None
+                    )
+                    db.session.add(sta_movimiento)
+                    db.session.commit()
+
+                    query = """
+                                                                              DECLARE
+                                                                                v_cod_empresa           FLOAT := :1;
+                                                                                v_cod_tipo_comprobante  VARCHAR2(2) := :2;
+                                                                                v_cod_comprobante       VARCHAR2(10) := :3;
+                                                                                v_cod_empresa_g         FLOAT ;
+                                                                                v_cod_tipo_comprobante_g VARCHAR2(2) ;
+                                                                                v_cod_comprobante_g      VARCHAR2(10) ;
+                                                                                v_cod_comprobante_orden  VARCHAR2(10) := :7;
+                                                                                v_cod_tipo_comprobante_orden  VARCHAR2(2) := :8;
+                                                                              BEGIN
+                                                                                ksa_comprobante.graba_ni(p_cod_empresa => v_cod_empresa,
+                                                                                                                            p_cod_tipo_comprobante => v_cod_tipo_comprobante,
+                                                                                                                             p_cod_comprobante => v_cod_comprobante,
+                                                                                                                             p_cod_empresa_g => v_cod_empresa_g,
+                                                                                                                             p_cod_tipo_comprobante_g => v_cod_tipo_comprobante_g,
+                                                                                                                             p_cod_comprobante_g => v_cod_comprobante_g,
+                                                                                                                             p_cod_comprobante_orden => v_cod_comprobante_orden,
+                                                                                                                             p_cod_tipo_comprobante_orden => v_cod_tipo_comprobante_orden);
+                                                                              :4 := v_cod_empresa_g;
+                                                                              :5 := v_cod_tipo_comprobante_g;
+                                                                              :6 := v_cod_comprobante_g;
+                                                                              END;
+                                                                              """
+                    cur = db1.cursor()
+                    result_var0 = cur.var(cx_Oracle.NUMBER)
+                    result_var1 = cur.var(cx_Oracle.STRING)
+                    result_var2 = cur.var(cx_Oracle.STRING)
+                    cur.execute(query,
+                                (empresa, 'TE', cod_sta_comprobante_item, result_var0, result_var1, result_var2, None, None))
+                    cod_comprobante_ni = result_var2.getvalue()
+                    cur.close()
+                    db1.commit()
+            else:
+                tipo_comprobante_lote, cod_comprobante_lote, cantidad_lote, fecha_ingreso = rows
+            ######################################################################################################################################################
+
             print(cod_comprobante_lote, ' ', fecha_ingreso, ' ', cantidad_lote)
             movimiento = Movimiento(
                 empresa=20,
@@ -2978,7 +3498,7 @@ def generate_despiece():
                 cantidad_i=None,
                 precio=0,
                 descuento=0,
-                costo=None,
+                costo=(float(costo_lote) * float(item.costo_standard))/100,
                 bodega=cod_agencia,
                 iva=0,
                 fecha=date.today(),
@@ -2986,7 +3506,7 @@ def generate_despiece():
                 serie=None,
                 grado=None,
                 cod_subbodega=None,
-                temperatura=None,
+                temperatura=item.costo_standard,
                 cod_unidad='U',
                 divisa=0,
                 anulado='N',
@@ -3024,7 +3544,6 @@ def generate_despiece():
 
         #########################################################ADD MOVIMIENTO INGRESO COMBO################################################################################
 
-        cursor.close()
 
         db1.commit()        ########################################################COMMIT DE SECUENCIAL DE COD COMPROBANTE############################################################
         db1.close()
@@ -3033,4 +3552,178 @@ def generate_despiece():
 
     except Exception as e:
         logger.exception(f"Error al obtener : {str(e)}")
+        db1.rollback()
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@bpcustom.route('/create_lote', methods=['POST'])
+#@jwt_required()
+@cross_origin()
+def create_lote():
+    db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+    data = request.get_json()
+    empresa = data['empresa']
+    cod_agencia = data['agencia']
+
+    query = """
+                            DECLARE
+                              v_cod_empresa           FLOAT := :1;
+                              v_cod_agencia           FLOAT := :2;
+                              v_tipo_comprobante_lote  VARCHAR2(50) := :3;
+                              v_tipo_lote             VARCHAR2(3) := :4;  
+                              v_result                VARCHAR2(50);
+                            BEGIN
+                              v_result := ks_lote.asigna_codigo(p_empresa => v_cod_empresa,
+                                                                          p_cod_agencia => v_cod_agencia,
+                                                                          p_tipo_comprobante_lote => v_tipo_comprobante_lote,
+                                                                          p_fecha => sysdate,
+                                                                          P_TIPO_LOTE => v_tipo_lote);
+                            :5 := v_result;
+                            END;
+                            """
+    cur = db1.cursor()
+    result_var = cur.var(cx_Oracle.STRING)
+    cur.execute(query, (empresa, cod_agencia, 'LT', 'IN', result_var))
+    cod_comprobante_lote = result_var.getvalue()
+    cur.close()
+    db1.commit()
+
+    query = StLote.query()
+    if empresa:
+        query = query.filter(StLote.empresa == empresa)
+    if cod_agencia:
+        query = query.filter(StLote.cod_agencia == cod_agencia)
+    if cod_comprobante_lote:
+        query = query.filter(StLote.cod_comprobante == cod_comprobante_lote)
+
+    result = query.all()
+
+    if not result:
+        lote = StLote(
+            empresa=empresa,
+            tipo_comprobante='LT',
+            cod_comprobante=cod_comprobante_lote,
+            fecha=date.today(),
+            descripcion='Pruebas desde Backend 2',
+            tipo_lote='IN',
+            cod_agencia=cod_agencia,
+            usuario_aud='DTRELLES',
+            fecha_aud=date.today()
+        )
+        db.session.add(lote)
+        db.session.commit()
+
+    query = """
+                                   DECLARE
+                                     v_cod_empresa           FLOAT := :1;
+                                     v_cod_tipo_comprobante  VARCHAR2(50) := :2;
+                                     v_cod_agencia           FLOAT := :3;
+                                     v_result                VARCHAR2(50);
+                                   BEGIN
+                                     v_result := KC_ORDEN.asigna_cod_comprobante(p_cod_empresa => v_cod_empresa,
+                                                                                 p_cod_tipo_comprobante => v_cod_tipo_comprobante,
+                                                                                 p_cod_agencia => v_cod_agencia);
+                                   :4 := v_result;
+                                   END;
+                                   """
+    cur = db1.cursor()
+    result_var = cur.var(cx_Oracle.STRING)
+    cur.execute(query, (empresa, 'TE', cod_agencia, result_var))
+    cod_sta_comprobante = result_var.getvalue()
+    cur.close()
+    db1.commit()
+
+    sta_comprobante = Sta_Comprobante(
+        cod_comprobante=cod_sta_comprobante,
+        tipo_comprobante='TE',
+        empresa=empresa,
+        cod_agencia=cod_agencia,
+        fecha=date.today(),
+        comprobante_manual='INGRESO DE COMBO',
+        cod_tipo_persona_a='VEN',
+        cod_persona_a='022001',
+        cod_tipo_persona_b='VEN',
+        cod_persona_b='022001',
+        cod_bodega_ingreso=cod_agencia,
+        cod_subbodega_ingreso=None,
+        cod_bodega_egreso=cod_agencia,
+        cod_subbodega_egreso=None,
+        cod_liquidacion='F1-240613',
+        useridc='DTP',
+        es_grabado=0,
+        es_anulado=0,
+        tipo_transferencia=None,
+        tipo_comprobante_pedido=None,
+        cod_comprobante_pedido=None,
+        cod_estado_producto_egreso=None,
+        cod_estado_producto_ingreso=None,
+        cod_estado_proceso=None,
+        transportador=None,
+        placa=None,
+        tipo_comprobante_lote='LT',
+        cod_comprobante_lote=cod_comprobante_lote,
+        cod_comprobante_ingreso=None,
+        tipo_comprobante_ingreso=None,
+        tipo_identificacion_transporta=None,
+        cod_motivo=None,
+        ruta=None
+    )
+    db.session.add(sta_comprobante)
+
+    sta_movimiento = Sta_Movimiento(
+        cod_comprobante=cod_sta_comprobante,
+        tipo_comprobante='TE',
+        empresa=empresa,
+        cod_secuencia_mov=1,
+        cod_producto='R150-000806',
+        cod_unidad='U',
+        cantidad=0,
+        es_serie=0,
+        cod_estado_producto=None,
+        ubicacion_bodega=None,
+        cod_tipo_lote='LT',
+        cod_comprobante_lote=cod_comprobante_lote,
+        cod_estado_producto_ing=None,
+        cantidad_pedida=None
+    )
+    db.session.add(sta_movimiento)
+    db.session.commit()
+
+    query = """
+                                           DECLARE
+                                             v_cod_empresa           FLOAT := :1;
+                                             v_cod_tipo_comprobante  VARCHAR2(2) := :2;
+                                             v_cod_comprobante       VARCHAR2(10) := :3;
+                                             v_cod_empresa_g         FLOAT ;
+                                             v_cod_tipo_comprobante_g VARCHAR2(2) ;
+                                             v_cod_comprobante_g      VARCHAR2(10) ;
+                                             v_cod_comprobante_orden  VARCHAR2(10) := :7;
+                                             v_cod_tipo_comprobante_orden  VARCHAR2(2) := :8;
+                                           BEGIN
+                                             ksa_comprobante.graba_ni(p_cod_empresa => v_cod_empresa,
+                                                                                         p_cod_tipo_comprobante => v_cod_tipo_comprobante,
+                                                                                          p_cod_comprobante => v_cod_comprobante,
+                                                                                          p_cod_empresa_g => v_cod_empresa_g,
+                                                                                          p_cod_tipo_comprobante_g => v_cod_tipo_comprobante_g,
+                                                                                          p_cod_comprobante_g => v_cod_comprobante_g,
+                                                                                          p_cod_comprobante_orden => v_cod_comprobante_orden,
+                                                                                          p_cod_tipo_comprobante_orden => v_cod_tipo_comprobante_orden);
+                                           :4 := v_cod_empresa_g;
+                                           :5 := v_cod_tipo_comprobante_g;
+                                           :6 := v_cod_comprobante_g;
+                                           END;
+                                           """
+    cur = db1.cursor()
+    result_var0 = cur.var(cx_Oracle.NUMBER)
+    result_var1 = cur.var(cx_Oracle.STRING)
+    result_var2 = cur.var(cx_Oracle.STRING)
+    cur.execute(query, (empresa, 'TE', cod_sta_comprobante, result_var0, result_var1, result_var2, None, None))
+    cod_comprobante_ni = result_var2.getvalue()
+    cur.close()
+
+    db1.commit()
+    db1.close()
+    print(cod_comprobante_ni)
+
+    return jsonify({'cod_formula': cod_comprobante_ni})
