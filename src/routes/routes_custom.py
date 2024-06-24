@@ -2089,6 +2089,8 @@ def generate_combo():
         ######################################################ADD EGRESOS MOVIMIENTOS POR ITEM##########################
         lotes = []
         costo_formula = 0
+        precio_minimo_formula = 0
+        precio_maximo_formula = 0
         for item in formulaD:
             cantidad_detalle = item.cantidad_f * cantidad
             print('Detalle: ', item.cod_producto_f, ' ', cantidad_detalle)
@@ -2184,7 +2186,7 @@ def generate_combo():
                         total_linea=0,
                         porce_descuento=0,
                         valor_alterno=None,
-                        es_serie=1,
+                        es_serie=0,
                         td=None,
                         rebate=None,
                         es_iva=None,
@@ -2242,7 +2244,7 @@ def generate_combo():
                             total_linea=0,
                             porce_descuento=0,
                             valor_alterno=None,
-                            es_serie=1,
+                            es_serie=0,
                             td=None,
                             rebate=None,
                             es_iva=None,
@@ -2268,26 +2270,49 @@ def generate_combo():
                         print('Ultimo ', cod_comprobante_lote, ' ', fecha_ingreso, ' ', cantidad_lote)
                         total_iteraciones += 1
                         break
+            cursor = db1.cursor()
 
-        #########################################################ADD MOVIMIENTO INGRESO COMBO################################################################################
+            #Obtener el precio minimo y maximo para cada item
+            cursor.execute("""
+                            SELECT
+                                MAX(precio),
+                                MIN(precio)
+                            FROM
+                                st_lista_precio
+                            WHERE
+                                empresa = 20
+                                AND cod_producto = :param1
+                                AND TRUNC(SYSDATE) BETWEEN fecha_inicio AND NVL(fecha_final, TRUNC(SYSDATE))
+                           """,
+                           param1=item.cod_producto_f)
+            result = cursor.fetchone()
+            max_precio = result[0]
+            min_precio = result[1]
+            precio_maximo_formula = precio_maximo_formula + max_precio
+            precio_minimo_formula = precio_minimo_formula + min_precio
+            cursor.close()
+
+            cursor = db1.cursor()
+            cursor.execute("""
+                            SELECT
+                                *
+                            FROM
+                                st_lista_precio  s
+                            WHERE
+                                s.cod_producto = :param1
+                                AND s.cod_agencia = 6
+                                AND TRUNC(SYSDATE) BETWEEN fecha_inicio AND NVL(fecha_final, TRUNC(SYSDATE))
+                           """,
+                           param1=item.cod_producto_f)
+
+            lista_precios = cursor.fetchall()
+
+            #########################################################ADD MOVIMIENTO INGRESO COMBO################################################################################
             row1 = rows[0]
             if row1:
                 lotes.append(row1)
             else:
                 return jsonify({'error': 'No existen lotes para el producto ' + row1}), 500
-        # oldest_row = None
-        # oldest_fecha_ingreso = None
-        #
-        # for row in lotes:
-        #     tipo_comprobante_lote, cod_comprobante_lote, cantidad_lote, fecha_ingreso = row
-        #     if oldest_fecha_ingreso is None or fecha_ingreso < oldest_fecha_ingreso:
-        #         oldest_row = row
-        #         oldest_fecha_ingreso = fecha_ingreso
-        #
-        # if oldest_row:
-        #     tipo_comprobante_lote, cod_comprobante_lote, cantidad_lote, fecha_ingreso = oldest_row
-        # else:
-        #     return jsonify({'error': 'No existen lotes'}), 500
 
         movimiento = Movimiento(
             empresa=20,
@@ -2298,7 +2323,7 @@ def generate_combo():
             cantidad=cantidad,
             debito_credito=debito_credito,
             cantidad_i=None,
-            precio=0,
+            precio=costo_formula,
             descuento=0,
             costo=costo_formula,
             bodega=cod_agencia,
@@ -2319,7 +2344,7 @@ def generate_combo():
             total_linea=0,
             porce_descuento=0,
             valor_alterno=None,
-            es_serie=1,
+            es_serie=0,
             td=None,
             rebate=None,
             es_iva=None,
@@ -2346,8 +2371,155 @@ def generate_combo():
         cursor.close()
 
         db1.commit()        ########################################################COMMIT DE SECUENCIAL DE COD COMPROBANTE############################################################
-        db1.close()
+
         db.session.commit() #####################################################COMMIT DE COMPROBANTE Y MOVIMIENTOS###################################################################
+
+
+        ####################################################################OBTENCION DE SECUENCIA#####################################################################################
+        cursor = db1.cursor()
+        cursor.execute("""
+                        SELECT MAX(secuencia)
+                        FROM st_gen_lista_precio a
+                        WHERE empresa = 20
+                        AND a.useridc = 'OHA'
+                       """)
+        result = cursor.fetchone()
+        max_secuencia = int(result[0]) + 1 if result else 0
+        cursor.close()
+
+        ###################################################################OBTENCION DE AGENCIAS A ACTUALIZAR LISTA DE PRECIOS DE FORMULA##############################################
+
+        cursor = db1.cursor()
+
+        query_bodegas = """
+        SELECT bodega
+        FROM sta_seleccion_bodega
+        WHERE empresa = 20
+        AND usuario = 'JARTEAGA'
+        """
+        cursor.execute(query_bodegas)
+        bodegas = cursor.fetchall()
+
+        ########################################################################ACTUALIZACION DE LISTA DE PRECIOS######################################################################
+
+        for row in lista_precios:
+            for bodega in bodegas:
+                empresa = row[0]
+                cod_producto = cod_producto
+                cod_modelo_cli = row[2]
+                cod_item_cli = row[3]
+                cod_modelo_zona = row[4]
+                cod_item_zona = row[5]
+                cod_agencia = bodega[0]
+                cod_unidad = row[7]
+                cod_forma_pago = row[8]
+                cod_divisa = row[9]
+                estado_generacion = row[10]
+                fecha_inicio = date.today()
+                fecha_final = None
+                valor = precio_maximo_formula
+                iva = row[14]
+                ice = row[15]
+                precio = precio_maximo_formula
+                cargos = row[17]
+                useridc = 'OHA'
+                secuencia_generacion = max_secuencia
+                estado_vida = row[20]
+                valor_alterno = row[21]
+                rebate = row[22]
+                aud_fecha = row[23]
+                aud_usuario = 'JARTEAGA'
+                aud_terminal = row[25]
+
+                cursor = db1.cursor()
+                cursor.execute("""
+                               INSERT INTO st_lista_precio (
+                                    empresa, 
+                                    cod_producto, 
+                                    cod_modelo_cli, 
+                                    cod_item_cli, 
+                                    cod_modelo_zona, 
+                                    cod_item_zona, 
+                                    cod_agencia, 
+                                    cod_unidad,
+                                    cod_forma_pago, 
+                                    cod_divisa, 
+                                    estado_generacion, 
+                                    fecha_inicio, 
+                                    fecha_final, 
+                                    valor, 
+                                    iva, 
+                                    ice,
+                                    precio, 
+                                    cargos,
+                                    useridc, 
+                                    secuencia_generacion,
+                                    estado_vida,
+                                    valor_alterno, 
+                                    rebate,
+                                    aud_fecha,
+                                    aud_usuario,
+                                    aud_terminal
+                               ) VALUES (
+                                    :empresa,
+                                    :cod_producto,
+                                    :cod_modelo_cli,
+                                    :cod_item_cli,
+                                    :cod_modelo_zona,
+                                    :cod_item_zona,
+                                    :cod_agencia,
+                                    :cod_unidad,
+                                    :cod_forma_pago,
+                                    :cod_divisa,
+                                    :estado_generacion,
+                                    :fecha_inicio,
+                                    :fecha_final,
+                                    :valor,
+                                    :iva,
+                                    :ice,
+                                    :precio,
+                                    :cargos,
+                                    :useridc,
+                                    :secuencia_generacion,
+                                    :estado_vida,
+                                    :valor_alterno,
+                                    :rebate,
+                                    :aud_fecha,
+                                    :aud_usuario,
+                                    :aud_terminal
+    
+                               )
+                               """,
+                                    empresa=empresa,
+                                    cod_producto=cod_producto,
+                                    cod_modelo_cli=cod_modelo_cli,
+                                    cod_item_cli=cod_item_cli,
+                                    cod_modelo_zona=cod_modelo_zona,
+                                    cod_item_zona=cod_item_zona,
+                                    cod_agencia=cod_agencia,
+                                    cod_unidad=cod_unidad,
+                                    cod_forma_pago=cod_forma_pago,
+                                    cod_divisa=cod_divisa,
+                                    estado_generacion=estado_generacion,
+                                    fecha_inicio=fecha_inicio,
+                                    fecha_final=fecha_final,
+                                    valor=valor,
+                                    iva=iva,
+                                    ice=ice,
+                                    precio=precio,
+                                    cargos=cargos,
+                                    useridc=useridc,
+                                    secuencia_generacion=secuencia_generacion,
+                                    estado_vida=estado_vida,
+                                    valor_alterno=valor_alterno,
+                                    rebate=rebate,
+                                    aud_fecha=aud_fecha,
+                                    aud_usuario=aud_usuario,
+                                    aud_terminal=aud_terminal
+                )
+        db1.commit()
+        cursor.close()
+        db1.close()
         return jsonify({'success': cod_comprobante})
 
     except Exception as e:
