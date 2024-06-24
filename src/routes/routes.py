@@ -3282,24 +3282,101 @@ def get_info_year(): #function to get year about a specific  motorcycle part
 @cross_origin()
 def post_invoice_ecommerce():
     try:
+        #--------------------Parametros Iniciales----------------------
         p_cod_empresa = 20
         p_cod_agencia = 18
-        p_cod_tipo_comprobante = 'PR'
-        p_cod_producto = 'R200-061102'
+        p_cod_tipo_comprobante_pr = 'PR'
+        p_fecha = datetime.today()
 
-        cod_comprobante = get_cod_comprobante(p_cod_empresa, p_cod_agencia, p_cod_tipo_comprobante)
-        result_lote = get_lote_list(p_cod_empresa, p_cod_agencia, p_cod_producto)
+        #-------------------Conexion base de Datos-------------------
+        db = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
 
-        return jsonify({
-            'cod_comprobante': cod_comprobante["value"],
-            'result_lote': result_lote
-        })
+        #-----------------COMPROBACION DE LIQUIDACION--------------------
+        cod_liquidacion = get_cod_liquidacion(p_cod_empresa, p_cod_agencia, p_fecha, db)
+        if cod_liquidacion["success"] == False:
+             raise ValueError('Error en la liquidacion')
+
+        #-------------COMPROBACION DE COMPRAS ECOMMERCE-----------------------
+        query = """
+                    SELECT * FROM ST_CAB_DATAFAST WHERE COD_COMPROBANTE IS NULL
+                """
+        cursor = db.cursor()
+        cursor.execute(query)
+        records = cursor.fetchall()
+        columns = [col[0] for col in cursor.description]
+        cases = []
+
+        #---------------------INGRESO DE CASOS QUE NO ESTEN FACTURADOS--------------------------------
+        for row in records:
+            cases.append(dict(zip(columns, row)))
+        cursor.close()
+        db.close()
+        resultados = []
+
+        #---------------------FACTURAR Y DESPACHAR------------------------------------------------------
+        for i, case in enumerate(cases, start=1):
+            resultado = post_invoice_ecommerce_one(case, cod_liquidacion)
+            resultados.append({f"case{i}": resultado})
+
+        return jsonify(resultados), 200
 
     except Exception as e:
-        return jsonify({"error": "se ha producido un error", "details": str(e)}), 500
-def get_cod_comprobante(p_cod_empresa, p_cod_agencia, p_cod_tipo_comprobante):
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud: " +str(e)}), 500
+def post_invoice_ecommerce_one(datafast_case, cod_liquidacion):
     try:
+#-----------------------------Parametros Iniciales------------------------------------------
+        p_cod_empresa = 20
+        p_cod_agencia = 18
+        p_cod_politica = 4
+        p_fecha = datetime.today()
+        p_cod_tipo_comprobante_pr = 'PR'
+        cod_persona_age = '001076'
+        #p_cod_producto = 'R200-181610GRI'
+        monto_total = round(float(datafast_case["AMOUNT"]), 2)
+
+#----------------------------Conexion Base de datos-------------------------------------------
         db = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        id_transaction = datafast_case["ID_TRANSACTION"]
+        cod_productos_data_fast = get_details_by_id_transaction(id_transaction,db)
+
+
+#----------------------------Comprobacion de stock y lotes----------------------------------------------
+        dict_lotes = {}
+        for cod_producto_data_fast in cod_productos_data_fast:
+            result_lote = get_lote_list(p_cod_empresa, p_cod_agencia, cod_producto_data_fast["code"], db)
+            if isinstance(result_lote, list) and len(result_lote) > 0 and cod_producto_data_fast["quantity"]<=result_lote[0]['cantidad'] :
+                dict_lotes[cod_producto_data_fast["code"]] = result_lote[0]['lote']
+            else:
+                raise ValueError(f' No hay suficiente existencia Lote: {str(cod_producto_data_fast["code"])}')
+
+        cod_comprobante = get_cod_comprobante(p_cod_empresa, p_cod_agencia, p_cod_tipo_comprobante_pr, db)
+
+#--------------------------------COMPROBACION DE LOS PRECIOS-------------------------------------------------------
+        politica = get_politica_credito_ecommerce(db, p_cod_politica)
+        prices_dict = {}
+        for p_cod_producto in dict_lotes.keys():
+            price = get_price_of_parts_ecommerce(p_cod_producto, db, p_cod_politica, p_cod_agencia)
+            prices_dict[p_cod_producto] = round(price*politica, 2)
+        iva = get_iva_porcent(db)
+        base_imponible=(monto_total - monto_total*(iva/100))
+#----------------------------------------INGRESO DE 1 CASO ST_PROFORMA---------------------------------------
+        insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, db, p_cod_politica, base_imponible, iva, monto_total, p_cod_agencia, cod_liquidacion, p_fecha, iva, politica, p_cod_tipo_comprobante_pr, cod_persona_age)
+        #print(insert_st_proforma_succes )
+        #raise ValueError("Se ha forzado una excepción debido a una condición específica")
+        db.commit()
+        db.close()
+        print(cod_comprobante)
+        return id_transaction
+
+    except Exception as e:
+        if db:
+            db.rollback()
+            error_message = f"error: se ha producido un error, details: {str(e)}"
+        return error_message
+
+def get_cod_comprobante(p_cod_empresa, p_cod_agencia, p_cod_tipo_comprobante_pr,db):
+    try:
+
         cursor = db.cursor()
         result = cursor.var(cx_Oracle.STRING)
         cursor.execute("""
@@ -3308,19 +3385,15 @@ def get_cod_comprobante(p_cod_empresa, p_cod_agencia, p_cod_tipo_comprobante):
                                                                               p_cod_tipo_comprobante => :p_cod_tipo_comprobante,
                                                                               p_cod_agencia => :p_cod_agencia);
                     END;
-                """, result=result, p_cod_empresa=p_cod_empresa, p_cod_tipo_comprobante=p_cod_tipo_comprobante,
+                """, result=result, p_cod_empresa=p_cod_empresa, p_cod_tipo_comprobante=p_cod_tipo_comprobante_pr,
                        p_cod_agencia=p_cod_agencia)
         cod_comprobante = result.getvalue()
-        db.commit()
         cursor.close()
-        db.close()
         return {"success":True, "value":cod_comprobante}
     except Exception as e:
         return f"Unexpected error: {str(e)}"
-
-def get_lote_list(p_cod_empresa, p_cod_agencia, p_cod_producto):
+def get_lote_list(p_cod_empresa, p_cod_agencia, p_cod_producto, db):
     try:
-        db = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cursor = db.cursor()
         query = """
             SELECT a.cod_comprobante lote, a.fecha, a.descripcion, a.tipo_comprobante tipo, x.cantidad
@@ -3349,10 +3422,299 @@ def get_lote_list(p_cod_empresa, p_cod_agencia, p_cod_producto):
                 'cantidad': row[4]
             })
         cursor.close()
-        db.close()
         return lote_list
     except Exception as e:
         return None
+def get_cod_liquidacion(p_cod_empresa, p_cod_agencia, p_fecha, db):
+    try:
+        # Conexión a la base de datos
+        cursor = db.cursor()
+
+        # Variable para almacenar el resultado
+        result = cursor.var(cx_Oracle.STRING)
+
+        # Ejecución del procedimiento PL/SQL
+        cursor.execute("""
+                        begin
+                        :result := ks_liquidacion.consulta_cod_liquidacion(p_cod_empresa => :p_cod_empresa,
+                                                     p_cod_agencia => :p_cod_agencia,
+                                                     p_fecha => :p_fecha);
+                        end;
+
+                """, result=result, p_cod_empresa=p_cod_empresa, p_cod_agencia=p_cod_agencia, p_fecha=p_fecha)
+
+        # Obtener el valor del resultado
+        cod_liquidacion = result.getvalue()
+        # Cerrar el cursor y la conexión
+        cursor.close()
+        return {"success": True, "value": cod_liquidacion}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+def get_details_by_id_transaction(id_transaction, db):
+    try:
+        cursor = db.cursor()
+        sql = """
+        SELECT code, quantity
+        FROM ST_DET_DATAFAST
+        WHERE id_transaction = :id_transaction
+        """
+        cursor.execute(sql, {'id_transaction': id_transaction})
+        rows = cursor.fetchall()
+        cursor.close()
+        # Convertir los resultados a una lista de diccionarios
+        results = [{'code': row[0], 'quantity': row[1]} for row in rows]
+
+        return results
+    except Exception as e:
+        return  str(e)
+def get_price_of_parts_ecommerce(p_cod_producto,db, p_cod_agencia):
+    try:
+        cursor = db.cursor()
+        sql = """
+        SELECT 
+            L.PRECIO
+        FROM 
+            PRODUCTO P
+        JOIN 
+            ST_LISTA_PRECIO L 
+        ON 
+                L.COD_PRODUCTO = :p_cod_producto
+                AND P.COD_PRODUCTO=  :p_cod_producto
+                AND L.COD_AGENCIA = :p_cod_agencia
+                AND L.COD_UNIDAD = P.COD_UNIDAD
+                AND L.COD_FORMA_PAGO = 'EFE'
+                AND L.COD_DIVISA = 'DOLARES'
+                AND L.COD_MODELO_CLI = 'CLI1'
+                AND L.COD_ITEM_CLI = 'CF'
+                AND L.ESTADO_GENERACION = 'R'
+                AND (L.FECHA_FINAL IS NULL OR L.FECHA_FINAL >= TRUNC(SYSDATE))
+                JOIN 
+                PRODUCTO D
+                ON 
+                P.EMPRESA = D.EMPRESA
+                AND D.COD_PRODUCTO = P.COD_PRODUCTO
+            """
+        cursor.execute(sql, {'p_cod_producto': p_cod_producto, 'p_cod_agencia': p_cod_agencia})
+        rows = cursor.fetchone()
+        cursor.close()
+        precio = rows[0]
+        return precio
+    except Exception as e:
+        return str(e)
+def get_iva_porcent(db):
+    try:
+        cursor = db.cursor()
+        sql = """ 
+                select iva from empresa a
+                where a.empresa=20
+            """
+        cursor.execute(sql)
+        rows = cursor.fetchone()
+        cursor.close()
+        iva = rows[0]
+        return iva
+    except Exception as e:
+        return str(e)
+def insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, db, p_cod_politica, base_imponible, iva, monto_total, p_cod_agencia, cod_liquidacion,p_fecha, politica, p_cod_tipo_comprobante_pr, cod_persona_age):
+    try:
+        # Definiendo las variables necesarias
+        cod_politica = p_cod_politica
+        cod_forma_pago = 'TCR'
+        cod_persona_age = cod_persona_age
+        comprobante_manual = '0'
+        cod_persona = datafast_case['CLIENT_ID'][:-1] + '-' + datafast_case['CLIENT_ID'][-1]
+        cod_comprobante = cod_comprobante['value']
+        cod_estado_producto = 'A'
+        es_facturado = 0
+        tipo_comprobante = p_cod_tipo_comprobante_pr
+        cod_divisa = 'DOLARES'
+        cod_tipo_identificacion = 1
+        cod_tipo_persona = 'CLI'
+        cod_tipo_persona_age = 'VEN'
+        cod_tipo_persona_gar = 'CLI'
+        num_cuotas = 0
+        num_cuotas_gratis = 0
+        dias_validez = 8
+        entrada = 0
+        otros = 0
+        descuento = 0
+        iva_pedido = round(monto_total*(iva/100), 2)
+        financiamiento = 0
+        valor = monto_total
+        es_anulado = 0
+        es_invalido = 0
+        es_aprobado = 1
+        useridc = 'DTP'
+        descuento_usuario = 0
+        useridc_autoriza_descuento = 'DTP'
+        cod_bodega_egreso = p_cod_agencia
+        cantidad_mov_completo = 0
+        por_intereses = 0.0
+        rebate = 0.0
+        base_excenta = 0.0
+        cod_tipo_comprobante_ref = 'A0'
+        fecha_sol_ver_telefonica = p_fecha
+        es_banco = 0
+        ice = 0
+        tipo_comprobante_factura = 'A0'
+        cursor = db.cursor()
+
+        sql = """
+        INSERT INTO ST_PROFORMA (
+            EMPRESA, COD_COMPROBANTE, TIPO_COMPROBANTE, COD_FORMA_PAGO, COD_AGENCIA, COMPROBANTE_MANUAL, 
+            COD_DIVISA, COD_TIPO_IDENTIFICACION, COD_TIPO_PERSONA, COD_PERSONA, 
+            COD_TIPO_PERSONA_AGE, COD_PERSONA_AGE, COD_TIPO_PERSONA_GAR, 
+            NUM_CUOTAS, NUM_CUOTAS_GRATIS, DIAS_VALIDEZ, ENTRADA, OTROS, DESCUENTO, 
+            IVA, FINANCIAMIENTO, VALOR, ES_ANULADO, ES_INVALIDO, ES_FACTURADO, ES_APROBADO, 
+            USERIDC, DESCUENTO_USUARIO, USERIDC_AUTORIZA_DESCUENTO, COD_BODEGA_EGRESO, 
+            CANTIDAD_MOV_COMPLETO, POR_INTERES, BASE_IMPONIBLE, BASE_EXCENTA, 
+            COD_TIPO_COMPROBANTE_REF, FECHA_SOL_VER_TELEFONICA, ES_BANCO, ICE, COD_LIQUIDACION, COD_POLITICA, REBATE, TIPO_COMPROBANTE_FACTURA
+        ) VALUES (
+            :EMPRESA, :COD_COMPROBANTE, :TIPO_COMPROBANTE, :COD_FORMA_PAGO,:COD_AGENCIA, :COMPROBANTE_MANUAL, 
+            :COD_DIVISA, :COD_TIPO_IDENTIFICACION, :COD_TIPO_PERSONA, :COD_PERSONA, 
+            :COD_TIPO_PERSONA_AGE, :COD_PERSONA_AGE, :COD_TIPO_PERSONA_GAR, 
+            :NUM_CUOTAS, :NUM_CUOTAS_GRATIS, :DIAS_VALIDEZ, :ENTRADA, :OTROS, :DESCUENTO, 
+            :IVA, :FINANCIAMIENTO, :VALOR, :ES_ANULADO, :ES_INVALIDO, :ES_FACTURADO, :ES_APROBADO, 
+            :USERIDC, :DESCUENTO_USUARIO, :USERIDC_AUTORIZA_DESCUENTO, :COD_BODEGA_EGRESO, 
+            :CANTIDAD_MOV_COMPLETO, :POR_INTERES, :BASE_IMPONIBLE, :BASE_EXCENTA, 
+            :COD_TIPO_COMPROBANTE_REF, :FECHA_SOL_VER_TELEFONICA, :ES_BANCO, :ICE, :COD_LIQUIDACION, :COD_POLITICA, :REBATE, :TIPO_COMPROBANTE_FACTURA
+        )
+        """
+
+        cursor.execute(sql, {
+            'EMPRESA': p_cod_empresa, 'COD_COMPROBANTE': cod_comprobante, 'TIPO_COMPROBANTE': tipo_comprobante,
+             'COD_AGENCIA':p_cod_agencia, 'COD_FORMA_PAGO': cod_forma_pago, 'COMPROBANTE_MANUAL': comprobante_manual,
+            'COD_DIVISA': cod_divisa, 'COD_TIPO_IDENTIFICACION': cod_tipo_identificacion,
+            'COD_TIPO_PERSONA': cod_tipo_persona, 'COD_PERSONA': cod_persona,
+            'COD_TIPO_PERSONA_AGE': cod_tipo_persona_age, 'COD_PERSONA_AGE': cod_persona_age,
+            'COD_TIPO_PERSONA_GAR': cod_tipo_persona_gar, 'NUM_CUOTAS': num_cuotas,
+            'NUM_CUOTAS_GRATIS': num_cuotas_gratis, 'DIAS_VALIDEZ': dias_validez,
+            'ENTRADA': entrada, 'OTROS': otros, 'DESCUENTO': descuento, 'IVA': iva_pedido,
+            'FINANCIAMIENTO': financiamiento, 'VALOR': valor, 'ES_ANULADO': es_anulado,
+            'ES_INVALIDO': es_invalido, 'ES_FACTURADO': es_facturado, 'ES_APROBADO': es_aprobado,
+            'USERIDC': useridc, 'DESCUENTO_USUARIO': descuento_usuario,
+            'USERIDC_AUTORIZA_DESCUENTO': useridc_autoriza_descuento, 'COD_BODEGA_EGRESO': cod_bodega_egreso,
+            'CANTIDAD_MOV_COMPLETO': cantidad_mov_completo, 'POR_INTERES': por_intereses,
+            'BASE_IMPONIBLE': base_imponible, 'BASE_EXCENTA': base_excenta,
+            'COD_TIPO_COMPROBANTE_REF': cod_tipo_comprobante_ref, 'FECHA_SOL_VER_TELEFONICA': fecha_sol_ver_telefonica,
+            'ES_BANCO': es_banco, 'ICE': ice, 'COD_LIQUIDACION': cod_liquidacion['value'], 'COD_POLITICA': cod_politica,'REBATE': rebate, 'TIPO_COMPROBANTE_FACTURA': tipo_comprobante_factura
+        })
+
+        db.commit()
+        cursor.close()
+        success = 'true'
+        print(cod_comprobante)
+        print(success)
+
+        return True
+    except Exception as e:
+        print(str(e))
+        if db:
+            db.rollback()
+        success = 'false'
+        return False
+def insert_st_proforma_movimiento(db, cod_comprobante, p_cod_tipo_comprobante_pr, p_cod_empresa, cod_producto, secuencia, precio, iva, cod_comprobante_lote, p_fecha ):
+
+    cod_unidad = 'U'
+    es_serie   = 0
+    cod_estado_producto = 'A'
+    cantidad = 1.00
+    cantidad_serie = 0
+    costo = 0.0
+    precio_lista = precio #PRECIO SIN RECARGO DE TARJETA
+    descuento = 0.0
+    financiamiento = 0.0
+    valor = precio*1.0224 #PRECIO FINAL CON REGARGO TARJETA
+    rebate = 0.0
+    por_descuento = 0.0
+    es_iva = 1
+    aplica_promocion = 0
+    ice = 0.0
+    tipo_comprobante_lote ='LT'
+    cod_porcentaje_iva = 4
+
+    try:
+        cursor = db.cursor()
+
+        sql = """
+        INSERT INTO ST_PROFORMA_MOVIMIENTO (
+            cod_comprobante, tipo_comprobante, empresa, secuencia, 
+            cod_producto, cod_unidad, es_serie, cod_estado_producto, 
+            cantidad, cantidad_serie, precio_lista, costo, precio, 
+            descuento, iva, financiamiento, valor, rebate, por_descuento, 
+            es_iva, aplica_promocion, ice, tipo_comprobante_lote, 
+            cod_comprobante_lote, cod_porcentaje_iva
+        ) VALUES (
+            :cod_comprobante, :tipo_comprobante, :empresa, :secuencia, 
+            :cod_producto, :cod_unidad, :es_serie, :cod_estado_producto, 
+            :cantidad, :cantidad_serie, :precio_lista, :costo, :precio, 
+            :descuento, :iva, :financiamiento, :valor, :rebate, :por_descuento, 
+            :es_iva, :aplica_promocion, :ice, :tipo_comprobante_lote, 
+            :cod_comprobante_lote, :cod_porcentaje_iva
+        )
+        """
+
+        cursor.execute(sql, {
+            'cod_comprobante': cod_comprobante,
+            'tipo_comprobante': p_cod_tipo_comprobante_pr,
+            'empresa': p_cod_empresa,
+            'secuencia': secuencia,
+            'cod_producto': cod_producto,
+            'cod_unidad': cod_unidad,
+            'es_serie': es_serie,
+            'cod_estado_producto': cod_estado_producto,
+            'cantidad': cantidad,
+            'cantidad_serie': cantidad_serie,
+            'precio_lista': precio_lista,
+            'costo': costo,
+            'precio': precio,
+            'descuento': descuento,
+            'iva': iva,
+            'financiamiento': financiamiento,
+            'valor': valor,
+            'rebate': rebate,
+            'por_descuento': por_descuento,
+            'es_iva': es_iva,
+            'aplica_promocion': aplica_promocion,
+            'ice': ice,
+            'tipo_comprobante_lote': tipo_comprobante_lote,
+            'cod_comprobante_lote': cod_comprobante_lote,
+            'cod_porcentaje_iva': cod_porcentaje_iva
+        })
+
+        db.commit()
+        cursor.close()
+        return True
+    except Exception as e:
+        print(str(e))
+        if db:
+            db.rollback()
+        return False
+def get_politica_credito_ecommerce(db, p_cod_politica):
+    try:
+        # Establece la conexión
+        cursor = db.cursor()
+
+        # Define y ejecuta la consulta SQL
+        sql = """
+                select factor_credito from st_politica_credito_d a
+                where a.num_cuotas=0
+                and   a.cod_politica=:p_cod_politica
+        """
+        cursor.execute(sql, {'p_cod_politica': p_cod_politica})
+        rules_politica = cursor.fetchone()
+        if rules_politica:
+            result = rules_politica[0]
+        else:
+            # Si no hay resultado, asigna un valor por defecto o maneja el caso adecuadamente
+            result = None
+        return result
+    except cx_Oracle.DatabaseError as e:
+        print(f"Error de base de datos: {e}")
+    finally:
+        # Asegúrate de cerrar el cursor y la conexión
+        if cursor:
+            cursor.close()
 
 @bp.route('/get_invoice_ecommerce', methods = ['GET'])
 @jwt_required()
