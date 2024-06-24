@@ -24,6 +24,7 @@ from src.routes.routes import bp
 from src.routes.routes_auth import au
 from src.routes.routes_custom import bpcustom
 from src.routes.routes_fin import bpfin
+from src.routes.routes_logis import bplog
 
 ###################################################
 
@@ -64,6 +65,7 @@ app.register_blueprint(bp)
 app.register_blueprint(bpcustom)
 app.register_blueprint(au, url_prefix="/auth")
 app.register_blueprint(bpfin, url_prefix="/fin")
+app.register_blueprint(bplog, url_prefix="/log")
 #############################################################################
 
 
