@@ -2153,7 +2153,6 @@ def generate_combo():
                                p_obligatorio=1, result=result_var)
 
                 costo_lote = result_var.getvalue()
-                costo_formula += costo_lote
 
                 if cantidad_lote <= cantidad_detalle and cantidad_lote:
                     movimiento = Movimiento(
@@ -2212,6 +2211,7 @@ def generate_combo():
                     total_iteraciones += 1
                     cantidad_detalle = cantidad_detalle - Decimal(str(cantidad_lote))
                     print('Cantidad Detalle actual: ', cantidad_detalle)
+                    costo_formula += (float(costo_lote)*int(cantidad_lote))
                 else:
                     if Decimal(str(cantidad_lote)) > cantidad_detalle:
                         movimiento = Movimiento(
@@ -2268,6 +2268,7 @@ def generate_combo():
                         )
                         db.session.add(movimiento)
                         print('Ultimo ', cod_comprobante_lote, ' ', fecha_ingreso, ' ', cantidad_lote)
+                        costo_formula += (float(costo_lote) * int(cantidad_detalle))
                         total_iteraciones += 1
                         break
             cursor = db1.cursor()
@@ -2325,7 +2326,7 @@ def generate_combo():
             cantidad_i=None,
             precio=costo_formula,
             descuento=0,
-            costo=float(costo_formula)*int(cantidad),
+            costo=float(costo_formula),
             bodega=cod_agencia,
             iva=0,
             fecha=date.today(),
@@ -2399,7 +2400,7 @@ def generate_combo():
         """
         cursor.execute(query_bodegas)
         bodegas = cursor.fetchall()
-
+        cursor.close()
         ########################################################################ACTUALIZACION DE LISTA DE PRECIOS######################################################################
 
         for row in lista_precios:
@@ -2431,94 +2432,98 @@ def generate_combo():
                 aud_usuario = 'JARTEAGA'
                 aud_terminal = row[25]
 
-                cursor = db1.cursor()
-                cursor.execute("""
-                               INSERT INTO st_lista_precio (
-                                    empresa, 
-                                    cod_producto, 
-                                    cod_modelo_cli, 
-                                    cod_item_cli, 
-                                    cod_modelo_zona, 
-                                    cod_item_zona, 
-                                    cod_agencia, 
-                                    cod_unidad,
-                                    cod_forma_pago, 
-                                    cod_divisa, 
-                                    estado_generacion, 
-                                    fecha_inicio, 
-                                    fecha_final, 
-                                    valor, 
-                                    iva, 
-                                    ice,
-                                    precio, 
-                                    cargos,
-                                    useridc, 
-                                    secuencia_generacion,
-                                    estado_vida,
-                                    valor_alterno, 
-                                    rebate,
-                                    aud_fecha,
-                                    aud_usuario,
-                                    aud_terminal
-                               ) VALUES (
-                                    :empresa,
-                                    :cod_producto,
-                                    :cod_modelo_cli,
-                                    :cod_item_cli,
-                                    :cod_modelo_zona,
-                                    :cod_item_zona,
-                                    :cod_agencia,
-                                    :cod_unidad,
-                                    :cod_forma_pago,
-                                    :cod_divisa,
-                                    :estado_generacion,
-                                    :fecha_inicio,
-                                    :fecha_final,
-                                    :valor,
-                                    :iva,
-                                    :ice,
-                                    :precio,
-                                    :cargos,
-                                    :useridc,
-                                    :secuencia_generacion,
-                                    :estado_vida,
-                                    :valor_alterno,
-                                    :rebate,
-                                    :aud_fecha,
-                                    :aud_usuario,
-                                    :aud_terminal
-    
-                               )
-                               """,
-                                    empresa=empresa,
-                                    cod_producto=cod_producto,
-                                    cod_modelo_cli=cod_modelo_cli,
-                                    cod_item_cli=cod_item_cli,
-                                    cod_modelo_zona=cod_modelo_zona,
-                                    cod_item_zona=cod_item_zona,
-                                    cod_agencia=cod_agencia,
-                                    cod_unidad=cod_unidad,
-                                    cod_forma_pago=cod_forma_pago,
-                                    cod_divisa=cod_divisa,
-                                    estado_generacion=estado_generacion,
-                                    fecha_inicio=fecha_inicio,
-                                    fecha_final=fecha_final,
-                                    valor=valor,
-                                    iva=iva,
-                                    ice=ice,
-                                    precio=precio,
-                                    cargos=cargos,
-                                    useridc=useridc,
-                                    secuencia_generacion=secuencia_generacion,
-                                    estado_vida=estado_vida,
-                                    valor_alterno=valor_alterno,
-                                    rebate=rebate,
-                                    aud_fecha=aud_fecha,
-                                    aud_usuario=aud_usuario,
-                                    aud_terminal=aud_terminal
-                )
+                try:
+                    cursor = db1.cursor()
+                    cursor.execute("""
+                                                   INSERT INTO st_lista_precio (
+                                                        empresa, 
+                                                        cod_producto, 
+                                                        cod_modelo_cli, 
+                                                        cod_item_cli, 
+                                                        cod_modelo_zona, 
+                                                        cod_item_zona, 
+                                                        cod_agencia, 
+                                                        cod_unidad,
+                                                        cod_forma_pago, 
+                                                        cod_divisa, 
+                                                        estado_generacion, 
+                                                        fecha_inicio, 
+                                                        fecha_final, 
+                                                        valor, 
+                                                        iva, 
+                                                        ice,
+                                                        precio, 
+                                                        cargos,
+                                                        useridc, 
+                                                        secuencia_generacion,
+                                                        estado_vida,
+                                                        valor_alterno, 
+                                                        rebate,
+                                                        aud_fecha,
+                                                        aud_usuario,
+                                                        aud_terminal
+                                                   ) VALUES (
+                                                        :empresa,
+                                                        :cod_producto,
+                                                        :cod_modelo_cli,
+                                                        :cod_item_cli,
+                                                        :cod_modelo_zona,
+                                                        :cod_item_zona,
+                                                        :cod_agencia,
+                                                        :cod_unidad,
+                                                        :cod_forma_pago,
+                                                        :cod_divisa,
+                                                        :estado_generacion,
+                                                        :fecha_inicio,
+                                                        :fecha_final,
+                                                        :valor,
+                                                        :iva,
+                                                        :ice,
+                                                        :precio,
+                                                        :cargos,
+                                                        :useridc,
+                                                        :secuencia_generacion,
+                                                        :estado_vida,
+                                                        :valor_alterno,
+                                                        :rebate,
+                                                        :aud_fecha,
+                                                        :aud_usuario,
+                                                        :aud_terminal
+
+                                                   )
+                                                   """,
+                                   empresa=empresa,
+                                   cod_producto=cod_producto,
+                                   cod_modelo_cli=cod_modelo_cli,
+                                   cod_item_cli=cod_item_cli,
+                                   cod_modelo_zona=cod_modelo_zona,
+                                   cod_item_zona=cod_item_zona,
+                                   cod_agencia=cod_agencia,
+                                   cod_unidad=cod_unidad,
+                                   cod_forma_pago=cod_forma_pago,
+                                   cod_divisa=cod_divisa,
+                                   estado_generacion=estado_generacion,
+                                   fecha_inicio=fecha_inicio,
+                                   fecha_final=fecha_final,
+                                   valor=valor,
+                                   iva=iva,
+                                   ice=ice,
+                                   precio=precio,
+                                   cargos=cargos,
+                                   useridc=useridc,
+                                   secuencia_generacion=secuencia_generacion,
+                                   estado_vida=estado_vida,
+                                   valor_alterno=valor_alterno,
+                                   rebate=rebate,
+                                   aud_fecha=aud_fecha,
+                                   aud_usuario=aud_usuario,
+                                   aud_terminal=aud_terminal
+                                   )
+                except Exception as e:
+                    print(f"An error occurred: {e}")
+                finally:
+                    cursor.close()
         db1.commit()
-        cursor.close()
         db1.close()
         return jsonify({'success': cod_comprobante})
 
