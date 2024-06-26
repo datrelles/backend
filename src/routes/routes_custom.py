@@ -2411,7 +2411,7 @@ def generate_combo():
                 cod_item_cli = row[3]
                 cod_modelo_zona = row[4]
                 cod_item_zona = row[5]
-                cod_agencia = bodega[0]
+                cod_agencia_formula = bodega[0]
                 cod_unidad = row[7]
                 cod_forma_pago = row[8]
                 cod_divisa = row[9]
@@ -2498,7 +2498,7 @@ def generate_combo():
                                    cod_item_cli=cod_item_cli,
                                    cod_modelo_zona=cod_modelo_zona,
                                    cod_item_zona=cod_item_zona,
-                                   cod_agencia=cod_agencia,
+                                   cod_agencia=cod_agencia_formula,
                                    cod_unidad=cod_unidad,
                                    cod_forma_pago=cod_forma_pago,
                                    cod_divisa=cod_divisa,
@@ -3801,7 +3801,7 @@ def generate_despiece():
                     cod_item_cli = row[3]
                     cod_modelo_zona = row[4]
                     cod_item_zona = row[5]
-                    cod_agencia = bodega[0]
+                    cod_agencia_precio = bodega[0]
                     cod_unidad = row[7]
                     cod_forma_pago = row[8]
                     cod_divisa = row[9]
@@ -3887,7 +3887,7 @@ def generate_despiece():
                                        cod_item_cli=cod_item_cli,
                                        cod_modelo_zona=cod_modelo_zona,
                                        cod_item_zona=cod_item_zona,
-                                       cod_agencia=cod_agencia,
+                                       cod_agencia=cod_agencia_precio,
                                        cod_unidad=cod_unidad,
                                        cod_forma_pago=cod_forma_pago,
                                        cod_divisa=cod_divisa,
