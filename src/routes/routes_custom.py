@@ -2523,6 +2523,17 @@ def generate_combo():
                     print(f"An error occurred: {e}")
                 finally:
                     cursor.close()
+
+                cursor = db1.cursor()
+                cursor.execute("""
+                    UPDATE st_lista_precio 
+                    SET fecha_final = TRUNC(SYSDATE-1) 
+                    WHERE cod_producto in (:param1) 
+                    AND fecha_inicio < TRUNC(SYSDATE) 
+                    AND fecha_final is null
+                """, param1=cod_producto)
+
+                cursor.close()
         db1.commit()
         db1.close()
         return jsonify({'success': cod_comprobante})
@@ -3902,6 +3913,16 @@ def generate_despiece():
                     finally:
                         cursor.close()
 
+            cursor = db1.cursor()
+            cursor.execute("""
+                               UPDATE st_lista_precio 
+                               SET fecha_final = TRUNC(SYSDATE-1) 
+                               WHERE cod_producto in (:param1) 
+                               AND fecha_inicio < TRUNC(SYSDATE) 
+                               AND fecha_final is null
+                           """, param1=item.cod_producto_f)
+
+            cursor.close()
         #########################################################ADD MOVIMIENTO INGRESO COMBO################################################################################
 
 
