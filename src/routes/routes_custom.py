@@ -3796,7 +3796,7 @@ def generate_despiece():
             for row in lista_precios:
                 for bodega in bodegas:
                     empresa = row[0]
-                    cod_producto = item.cod_producto_f
+                    cod_producto_item = item.cod_producto_f
                     cod_modelo_cli = row[2]
                     cod_item_cli = row[3]
                     cod_modelo_zona = row[4]
@@ -3882,7 +3882,7 @@ def generate_despiece():
                             )
                             """,
                                        empresa=empresa,
-                                       cod_producto=cod_producto,
+                                       cod_producto=cod_producto_item,
                                        cod_modelo_cli=cod_modelo_cli,
                                        cod_item_cli=cod_item_cli,
                                        cod_modelo_zona=cod_modelo_zona,
