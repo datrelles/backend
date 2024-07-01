@@ -2153,7 +2153,6 @@ def generate_combo():
                                p_obligatorio=1, result=result_var)
 
                 costo_lote = result_var.getvalue()
-                costo_formula += costo_lote
 
                 if cantidad_lote <= cantidad_detalle and cantidad_lote:
                     movimiento = Movimiento(
@@ -2165,9 +2164,9 @@ def generate_combo():
                         cantidad=cantidad_lote,
                         debito_credito=item.debito_credito,
                         cantidad_i=None,
-                        precio=0,
+                        precio=costo_lote,
                         descuento=0,
-                        costo=costo_lote,
+                        costo=float(costo_lote)*int(cantidad_lote),
                         bodega=cod_agencia,
                         iva=0,
                         fecha=date.today(),
@@ -2212,6 +2211,7 @@ def generate_combo():
                     total_iteraciones += 1
                     cantidad_detalle = cantidad_detalle - Decimal(str(cantidad_lote))
                     print('Cantidad Detalle actual: ', cantidad_detalle)
+                    costo_formula += (float(costo_lote)*int(cantidad_lote))
                 else:
                     if Decimal(str(cantidad_lote)) > cantidad_detalle:
                         movimiento = Movimiento(
@@ -2223,9 +2223,9 @@ def generate_combo():
                             cantidad=cantidad_detalle,
                             debito_credito=item.debito_credito,
                             cantidad_i=None,
-                            precio=0,
+                            precio=costo_lote,
                             descuento=0,
-                            costo=costo_lote,
+                            costo=float(costo_lote)*int(cantidad_detalle),
                             bodega=cod_agencia,
                             iva=0,
                             fecha=date.today(),
@@ -2268,6 +2268,7 @@ def generate_combo():
                         )
                         db.session.add(movimiento)
                         print('Ultimo ', cod_comprobante_lote, ' ', fecha_ingreso, ' ', cantidad_lote)
+                        costo_formula += (float(costo_lote) * int(cantidad_detalle))
                         total_iteraciones += 1
                         break
             cursor = db1.cursor()
@@ -2325,7 +2326,7 @@ def generate_combo():
             cantidad_i=None,
             precio=costo_formula,
             descuento=0,
-            costo=costo_formula,
+            costo=float(costo_formula),
             bodega=cod_agencia,
             iva=0,
             fecha=date.today(),
@@ -2399,7 +2400,7 @@ def generate_combo():
         """
         cursor.execute(query_bodegas)
         bodegas = cursor.fetchall()
-
+        cursor.close()
         ########################################################################ACTUALIZACION DE LISTA DE PRECIOS######################################################################
 
         for row in lista_precios:
@@ -2410,7 +2411,7 @@ def generate_combo():
                 cod_item_cli = row[3]
                 cod_modelo_zona = row[4]
                 cod_item_zona = row[5]
-                cod_agencia = bodega[0]
+                cod_agencia_formula = bodega[0]
                 cod_unidad = row[7]
                 cod_forma_pago = row[8]
                 cod_divisa = row[9]
@@ -2431,94 +2432,109 @@ def generate_combo():
                 aud_usuario = 'JARTEAGA'
                 aud_terminal = row[25]
 
+                try:
+                    cursor = db1.cursor()
+                    cursor.execute("""
+                                                   INSERT INTO st_lista_precio (
+                                                        empresa, 
+                                                        cod_producto, 
+                                                        cod_modelo_cli, 
+                                                        cod_item_cli, 
+                                                        cod_modelo_zona, 
+                                                        cod_item_zona, 
+                                                        cod_agencia, 
+                                                        cod_unidad,
+                                                        cod_forma_pago, 
+                                                        cod_divisa, 
+                                                        estado_generacion, 
+                                                        fecha_inicio, 
+                                                        fecha_final, 
+                                                        valor, 
+                                                        iva, 
+                                                        ice,
+                                                        precio, 
+                                                        cargos,
+                                                        useridc, 
+                                                        secuencia_generacion,
+                                                        estado_vida,
+                                                        valor_alterno, 
+                                                        rebate,
+                                                        aud_fecha,
+                                                        aud_usuario,
+                                                        aud_terminal
+                                                   ) VALUES (
+                                                        :empresa,
+                                                        :cod_producto,
+                                                        :cod_modelo_cli,
+                                                        :cod_item_cli,
+                                                        :cod_modelo_zona,
+                                                        :cod_item_zona,
+                                                        :cod_agencia,
+                                                        :cod_unidad,
+                                                        :cod_forma_pago,
+                                                        :cod_divisa,
+                                                        :estado_generacion,
+                                                        :fecha_inicio,
+                                                        :fecha_final,
+                                                        :valor,
+                                                        :iva,
+                                                        :ice,
+                                                        :precio,
+                                                        :cargos,
+                                                        :useridc,
+                                                        :secuencia_generacion,
+                                                        :estado_vida,
+                                                        :valor_alterno,
+                                                        :rebate,
+                                                        :aud_fecha,
+                                                        :aud_usuario,
+                                                        :aud_terminal
+
+                                                   )
+                                                   """,
+                                   empresa=empresa,
+                                   cod_producto=cod_producto,
+                                   cod_modelo_cli=cod_modelo_cli,
+                                   cod_item_cli=cod_item_cli,
+                                   cod_modelo_zona=cod_modelo_zona,
+                                   cod_item_zona=cod_item_zona,
+                                   cod_agencia=cod_agencia_formula,
+                                   cod_unidad=cod_unidad,
+                                   cod_forma_pago=cod_forma_pago,
+                                   cod_divisa=cod_divisa,
+                                   estado_generacion=estado_generacion,
+                                   fecha_inicio=fecha_inicio,
+                                   fecha_final=fecha_final,
+                                   valor=valor,
+                                   iva=iva,
+                                   ice=ice,
+                                   precio=precio,
+                                   cargos=cargos,
+                                   useridc=useridc,
+                                   secuencia_generacion=secuencia_generacion,
+                                   estado_vida=estado_vida,
+                                   valor_alterno=valor_alterno,
+                                   rebate=rebate,
+                                   aud_fecha=aud_fecha,
+                                   aud_usuario=aud_usuario,
+                                   aud_terminal=aud_terminal
+                                   )
+                except Exception as e:
+                    print(f"An error occurred: {e}")
+                finally:
+                    cursor.close()
+
                 cursor = db1.cursor()
                 cursor.execute("""
-                               INSERT INTO st_lista_precio (
-                                    empresa, 
-                                    cod_producto, 
-                                    cod_modelo_cli, 
-                                    cod_item_cli, 
-                                    cod_modelo_zona, 
-                                    cod_item_zona, 
-                                    cod_agencia, 
-                                    cod_unidad,
-                                    cod_forma_pago, 
-                                    cod_divisa, 
-                                    estado_generacion, 
-                                    fecha_inicio, 
-                                    fecha_final, 
-                                    valor, 
-                                    iva, 
-                                    ice,
-                                    precio, 
-                                    cargos,
-                                    useridc, 
-                                    secuencia_generacion,
-                                    estado_vida,
-                                    valor_alterno, 
-                                    rebate,
-                                    aud_fecha,
-                                    aud_usuario,
-                                    aud_terminal
-                               ) VALUES (
-                                    :empresa,
-                                    :cod_producto,
-                                    :cod_modelo_cli,
-                                    :cod_item_cli,
-                                    :cod_modelo_zona,
-                                    :cod_item_zona,
-                                    :cod_agencia,
-                                    :cod_unidad,
-                                    :cod_forma_pago,
-                                    :cod_divisa,
-                                    :estado_generacion,
-                                    :fecha_inicio,
-                                    :fecha_final,
-                                    :valor,
-                                    :iva,
-                                    :ice,
-                                    :precio,
-                                    :cargos,
-                                    :useridc,
-                                    :secuencia_generacion,
-                                    :estado_vida,
-                                    :valor_alterno,
-                                    :rebate,
-                                    :aud_fecha,
-                                    :aud_usuario,
-                                    :aud_terminal
-    
-                               )
-                               """,
-                                    empresa=empresa,
-                                    cod_producto=cod_producto,
-                                    cod_modelo_cli=cod_modelo_cli,
-                                    cod_item_cli=cod_item_cli,
-                                    cod_modelo_zona=cod_modelo_zona,
-                                    cod_item_zona=cod_item_zona,
-                                    cod_agencia=cod_agencia,
-                                    cod_unidad=cod_unidad,
-                                    cod_forma_pago=cod_forma_pago,
-                                    cod_divisa=cod_divisa,
-                                    estado_generacion=estado_generacion,
-                                    fecha_inicio=fecha_inicio,
-                                    fecha_final=fecha_final,
-                                    valor=valor,
-                                    iva=iva,
-                                    ice=ice,
-                                    precio=precio,
-                                    cargos=cargos,
-                                    useridc=useridc,
-                                    secuencia_generacion=secuencia_generacion,
-                                    estado_vida=estado_vida,
-                                    valor_alterno=valor_alterno,
-                                    rebate=rebate,
-                                    aud_fecha=aud_fecha,
-                                    aud_usuario=aud_usuario,
-                                    aud_terminal=aud_terminal
-                )
+                    UPDATE st_lista_precio 
+                    SET fecha_final = TRUNC(SYSDATE-1) 
+                    WHERE cod_producto in (:param1) 
+                    AND fecha_inicio < TRUNC(SYSDATE) 
+                    AND fecha_final is null
+                """, param1=cod_producto)
+
+                cursor.close()
         db1.commit()
-        cursor.close()
         db1.close()
         return jsonify({'success': cod_comprobante})
 
@@ -3369,9 +3385,9 @@ def generate_despiece():
             cantidad=cantidad,
             debito_credito=debito_credito,
             cantidad_i=None,
-            precio=0,
+            precio=costo_lote,
             descuento=0,
-            costo=costo_lote,
+            costo=float(costo_lote) * int(cantidad),
             bodega=cod_agencia,
             iva=0,
             fecha=date.today(),
@@ -3426,7 +3442,6 @@ def generate_despiece():
 
         for item in formulaD:
             cantidad_detalle = item.cantidad_f * cantidad
-            print('Detalle: ', item.cod_producto_f, ' ', cantidad_detalle)
             cursor = db1.cursor()
             cursor.execute("""
                             SELECT
@@ -3665,12 +3680,12 @@ def generate_despiece():
                 cod_comprobante=cod_comprobante,
                 secuencia= total_iteraciones,
                 cod_producto=item.cod_producto_f,
-                cantidad=item.cantidad_f * cantidad,
+                cantidad=float(item.cantidad_f) * int(cantidad),
                 debito_credito=item.debito_credito,
                 cantidad_i=None,
-                precio=0,
+                precio=(float(costo_lote) * float(item.costo_standard))/100,
                 descuento=0,
-                costo=(float(costo_lote) * float(item.costo_standard))/100,
+                costo=((float(costo_lote) * float(item.costo_standard))/100) * int(cantidad),
                 bodega=cod_agencia,
                 iva=0,
                 fecha=date.today(),
@@ -3714,6 +3729,200 @@ def generate_despiece():
             db.session.add(movimiento)
             total_iteraciones += 1
 
+            cursor = db1.cursor()
+
+            # Obtener el precio minimo y maximo para cada item
+            cursor.execute("""
+                                        SELECT
+                                            MAX(precio),
+                                            MIN(precio)
+                                        FROM
+                                            st_lista_precio
+                                        WHERE
+                                            empresa = 20
+                                            AND cod_producto = :param1
+                                            AND TRUNC(SYSDATE) BETWEEN fecha_inicio AND NVL(fecha_final, TRUNC(SYSDATE))
+                                       """,
+                           param1=cod_producto)
+            result = cursor.fetchone()
+            max_precio = result[0]
+            min_precio = result[1]
+            precio_maximo_item = float(max_precio) * float(item.costo_standard) / 100
+            precio_minimo_item = float(min_precio) * float(item.costo_standard) / 100
+            cursor.close()
+
+            cursor = db1.cursor()
+            cursor.execute("""
+                                        SELECT
+                                            *
+                                        FROM
+                                            st_lista_precio  s
+                                        WHERE
+                                            s.cod_producto = :param1
+                                            AND s.cod_agencia = 6
+                                            AND TRUNC(SYSDATE) BETWEEN fecha_inicio AND NVL(fecha_final, TRUNC(SYSDATE))
+                                       """,
+                           param1=cod_producto)
+
+            lista_precios = cursor.fetchall()
+
+            ####################################################################OBTENCION DE SECUENCIA#####################################################################################
+            cursor = db1.cursor()
+            cursor.execute("""
+                                    SELECT MAX(secuencia)
+                                    FROM st_gen_lista_precio a
+                                    WHERE empresa = 20
+                                    AND a.useridc = 'OHA'
+                                   """)
+            result = cursor.fetchone()
+            max_secuencia = int(result[0]) + 1 if result else 0
+            cursor.close()
+
+            ###################################################################OBTENCION DE AGENCIAS A ACTUALIZAR LISTA DE PRECIOS DE FORMULA##############################################
+
+            cursor = db1.cursor()
+
+            query_bodegas = """
+                    SELECT bodega
+                    FROM sta_seleccion_bodega
+                    WHERE empresa = 20
+                    AND usuario = 'JARTEAGA'
+                    """
+            cursor.execute(query_bodegas)
+            bodegas = cursor.fetchall()
+
+            ########################################################################ACTUALIZACION DE LISTA DE PRECIOS######################################################################
+
+            for row in lista_precios:
+                for bodega in bodegas:
+                    empresa = row[0]
+                    cod_producto_item = item.cod_producto_f
+                    cod_modelo_cli = row[2]
+                    cod_item_cli = row[3]
+                    cod_modelo_zona = row[4]
+                    cod_item_zona = row[5]
+                    cod_agencia_precio = bodega[0]
+                    cod_unidad = row[7]
+                    cod_forma_pago = row[8]
+                    cod_divisa = row[9]
+                    estado_generacion = row[10]
+                    fecha_inicio = date.today()
+                    fecha_final = None
+                    valor = precio_maximo_item
+                    iva = row[14]
+                    ice = row[15]
+                    precio = precio_maximo_item
+                    cargos = row[17]
+                    useridc = 'OHA'
+                    secuencia_generacion = max_secuencia
+                    estado_vida = row[20]
+                    valor_alterno = row[21]
+                    rebate = row[22]
+                    aud_fecha = row[23]
+                    aud_usuario = 'JARTEAGA'
+                    aud_terminal = row[25]
+
+                    try:
+                        cursor = db1.cursor()
+                        cursor.execute("""
+                            INSERT INTO st_lista_precio (
+                                empresa, 
+                                cod_producto, 
+                                cod_modelo_cli, 
+                                cod_item_cli, 
+                                cod_modelo_zona, 
+                                cod_item_zona, 
+                                cod_agencia, 
+                                cod_unidad,
+                                cod_forma_pago, 
+                                cod_divisa, 
+                                estado_generacion, 
+                                fecha_inicio, 
+                                fecha_final, 
+                                valor, 
+                                iva, 
+                                ice,
+                                precio, 
+                                cargos,
+                                useridc, 
+                                secuencia_generacion,
+                                estado_vida,
+                                valor_alterno, 
+                                rebate,
+                                aud_fecha,
+                                aud_usuario,
+                                aud_terminal
+                            ) VALUES (
+                                :empresa,
+                                :cod_producto,
+                                :cod_modelo_cli,
+                                :cod_item_cli,
+                                :cod_modelo_zona,
+                                :cod_item_zona,
+                                :cod_agencia,
+                                :cod_unidad,
+                                :cod_forma_pago,
+                                :cod_divisa,
+                                :estado_generacion,
+                                :fecha_inicio,
+                                :fecha_final,
+                                :valor,
+                                :iva,
+                                :ice,
+                                :precio,
+                                :cargos,
+                                :useridc,
+                                :secuencia_generacion,
+                                :estado_vida,
+                                :valor_alterno,
+                                :rebate,
+                                :aud_fecha,
+                                :aud_usuario,
+                                :aud_terminal
+                            )
+                            """,
+                                       empresa=empresa,
+                                       cod_producto=cod_producto_item,
+                                       cod_modelo_cli=cod_modelo_cli,
+                                       cod_item_cli=cod_item_cli,
+                                       cod_modelo_zona=cod_modelo_zona,
+                                       cod_item_zona=cod_item_zona,
+                                       cod_agencia=cod_agencia_precio,
+                                       cod_unidad=cod_unidad,
+                                       cod_forma_pago=cod_forma_pago,
+                                       cod_divisa=cod_divisa,
+                                       estado_generacion=estado_generacion,
+                                       fecha_inicio=fecha_inicio,
+                                       fecha_final=fecha_final,
+                                       valor=valor,
+                                       iva=iva,
+                                       ice=ice,
+                                       precio=precio,
+                                       cargos=cargos,
+                                       useridc=useridc,
+                                       secuencia_generacion=secuencia_generacion,
+                                       estado_vida=estado_vida,
+                                       valor_alterno=valor_alterno,
+                                       rebate=rebate,
+                                       aud_fecha=aud_fecha,
+                                       aud_usuario=aud_usuario,
+                                       aud_terminal=aud_terminal
+                                       )
+                    except Exception as e:
+                        print('Ya existe lista de precios para: '+ item.cod_producto_f)
+                    finally:
+                        cursor.close()
+
+            cursor = db1.cursor()
+            cursor.execute("""
+                               UPDATE st_lista_precio 
+                               SET fecha_final = TRUNC(SYSDATE-1) 
+                               WHERE cod_producto in (:param1) 
+                               AND fecha_inicio < TRUNC(SYSDATE) 
+                               AND fecha_final is null
+                           """, param1=item.cod_producto_f)
+
+            cursor.close()
         #########################################################ADD MOVIMIENTO INGRESO COMBO################################################################################
 
 
