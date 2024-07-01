@@ -3332,11 +3332,12 @@ def post_invoice_ecommerce_one(datafast_case, cod_liquidacion):
         p_cod_tipo_comprobante_pr = 'PR'
         cod_persona_age = '001076'
         #p_cod_producto = 'R200-181610GRI'
-        monto_total = round(float(datafast_case["AMOUNT"]), 2)
+        monto_total = round(float(datafast_case["TOTAL"]), 2)
 
 #----------------------------Conexion Base de datos-------------------------------------------
         db = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         id_transaction = datafast_case["ID_TRANSACTION"]
+#-----------------------------------------------------------------------------------------
         cod_productos_data_fast = get_details_by_id_transaction(id_transaction,db)
 
 
@@ -3355,12 +3356,23 @@ def post_invoice_ecommerce_one(datafast_case, cod_liquidacion):
         politica = get_politica_credito_ecommerce(db, p_cod_politica)
         prices_dict = {}
         for p_cod_producto in dict_lotes.keys():
-            price = get_price_of_parts_ecommerce(p_cod_producto, db, p_cod_politica, p_cod_agencia)
+            price = get_price_of_parts_ecommerce(p_cod_producto, db, p_cod_agencia)
             prices_dict[p_cod_producto] = round(price*politica, 2)
         iva = get_iva_porcent(db)
-        base_imponible=(monto_total - monto_total*(iva/100))
+        base_imponible = round(float(datafast_case["SUB_TOTAL"]), 2)
+
+        #print(cod_productos_data_fast)
+        #print(prices_dict)
+        #print(dict_lotes)
 #----------------------------------------INGRESO DE 1 CASO ST_PROFORMA---------------------------------------
-        insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, db, p_cod_politica, base_imponible, iva, monto_total, p_cod_agencia, cod_liquidacion, p_fecha, iva, politica, p_cod_tipo_comprobante_pr, cod_persona_age)
+        insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, db, p_cod_politica, base_imponible, iva, monto_total, p_cod_agencia, cod_liquidacion,p_fecha, p_cod_tipo_comprobante_pr, cod_persona_age, politica)
+
+#----------------------------------------INGRESO_CASOS_PRODUCTOS---------------------------------------------
+        secuencia = 1
+        for cod_producto in cod_productos_data_fast:
+            insert_st_proforma_movimiento(db, cod_comprobante, p_cod_tipo_comprobante_pr, p_cod_empresa, cod_producto, secuencia, iva, dict_lotes, p_fecha, politica  )
+            secuencia += 1
+
         #print(insert_st_proforma_succes )
         #raise ValueError("Se ha forzado una excepción debido a una condición específica")
         db.commit()
@@ -3373,10 +3385,8 @@ def post_invoice_ecommerce_one(datafast_case, cod_liquidacion):
             db.rollback()
             error_message = f"error: se ha producido un error, details: {str(e)}"
         return error_message
-
 def get_cod_comprobante(p_cod_empresa, p_cod_agencia, p_cod_tipo_comprobante_pr,db):
     try:
-
         cursor = db.cursor()
         result = cursor.var(cx_Oracle.STRING)
         cursor.execute("""
@@ -3454,7 +3464,7 @@ def get_details_by_id_transaction(id_transaction, db):
     try:
         cursor = db.cursor()
         sql = """
-        SELECT code, quantity
+        SELECT cod_producto, quantity, price
         FROM ST_DET_DATAFAST
         WHERE id_transaction = :id_transaction
         """
@@ -3462,7 +3472,7 @@ def get_details_by_id_transaction(id_transaction, db):
         rows = cursor.fetchall()
         cursor.close()
         # Convertir los resultados a una lista de diccionarios
-        results = [{'code': row[0], 'quantity': row[1]} for row in rows]
+        results = [{'code': row[0], 'quantity': row[1], 'price': row[2]} for row in rows]
 
         return results
     except Exception as e:
@@ -3515,7 +3525,7 @@ def get_iva_porcent(db):
         return iva
     except Exception as e:
         return str(e)
-def insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, db, p_cod_politica, base_imponible, iva, monto_total, p_cod_agencia, cod_liquidacion,p_fecha, politica, p_cod_tipo_comprobante_pr, cod_persona_age):
+def insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, db, p_cod_politica, base_imponible, iva, monto_total, p_cod_agencia, cod_liquidacion,p_fecha, p_cod_tipo_comprobante_pr, cod_persona_age, politica):
     try:
         # Definiendo las variables necesarias
         cod_politica = p_cod_politica
@@ -3538,7 +3548,7 @@ def insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, 
         entrada = 0
         otros = 0
         descuento = 0
-        iva_pedido = round(monto_total*(iva/100), 2)
+        iva_pedido = round((monto_total)*(iva/(100+iva)), 2)
         financiamiento = 0
         valor = monto_total
         es_anulado = 0
@@ -3613,18 +3623,18 @@ def insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, 
             db.rollback()
         success = 'false'
         return False
-def insert_st_proforma_movimiento(db, cod_comprobante, p_cod_tipo_comprobante_pr, p_cod_empresa, cod_producto, secuencia, precio, iva, cod_comprobante_lote, p_fecha ):
-
+def insert_st_proforma_movimiento(db, cod_comprobante, p_cod_tipo_comprobante_pr, p_cod_empresa, cod_producto, secuencia, iva, dict_lotes, p_fecha,  politica ):
     cod_unidad = 'U'
-    es_serie   = 0
+    es_serie = 0
     cod_estado_producto = 'A'
     cantidad = 1.00
     cantidad_serie = 0
     costo = 0.0
-    precio_lista = precio #PRECIO SIN RECARGO DE TARJETA
+    precio_lista = round(cod_producto['price']/politica, 2)    #PRECIO SIN RECARGO DE TARJETA
     descuento = 0.0
     financiamiento = 0.0
-    valor = precio*1.0224 #PRECIO FINAL CON REGARGO TARJETA
+    valor = cod_producto['price']     #precio*1.0224 #PRECIO FINAL CON REGARGO TARJETA
+    iva = round(cod_producto['price']*(iva/(100+iva)), 2)
     rebate = 0.0
     por_descuento = 0.0
     es_iva = 1
@@ -3632,6 +3642,9 @@ def insert_st_proforma_movimiento(db, cod_comprobante, p_cod_tipo_comprobante_pr
     ice = 0.0
     tipo_comprobante_lote ='LT'
     cod_porcentaje_iva = 4
+    cod_comprobante_lote = dict_lotes[cod_producto['code']]
+    cod_comprobante = cod_comprobante['value']
+    cod_producto    = cod_producto['code']
 
     try:
         cursor = db.cursor()
@@ -3667,7 +3680,7 @@ def insert_st_proforma_movimiento(db, cod_comprobante, p_cod_tipo_comprobante_pr
             'cantidad_serie': cantidad_serie,
             'precio_lista': precio_lista,
             'costo': costo,
-            'precio': precio,
+            'precio': precio_lista,
             'descuento': descuento,
             'iva': iva,
             'financiamiento': financiamiento,
@@ -3694,7 +3707,6 @@ def get_politica_credito_ecommerce(db, p_cod_politica):
     try:
         # Establece la conexión
         cursor = db.cursor()
-
         # Define y ejecuta la consulta SQL
         sql = """
                 select factor_credito from st_politica_credito_d a
