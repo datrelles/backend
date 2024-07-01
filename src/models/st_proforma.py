@@ -182,7 +182,10 @@ class st_cab_datafast(Base):
     id_transaction = Column(VARCHAR(255), primary_key=True, nullable=False)
     payment_type = Column(VARCHAR(10))
     payment_brand = Column(VARCHAR(40))
-    amount = Column(NUMBER(10, 2))
+    total = Column(NUMBER(10, 2))
+    sub_total = Column(NUMBER(10, 2))
+    discount_percentage = Column(NUMBER(10, 2))
+    discount_amount = Column(NUMBER(10, 2))
     currency = Column(VARCHAR(3))
     batch_no = Column(VARCHAR(10))
     id_guia_servientrega = Column(VARCHAR(255))
@@ -198,7 +201,8 @@ class st_cab_datafast(Base):
     client_last_name = Column(VARCHAR(100))
     client_id = Column(VARCHAR(20))
     client_address = Column(VARCHAR(255))
-    cost_shiping = Column(NUMBER(10, 2))
+    cost_shiping_calculate = Column(NUMBER(10, 2))
+    shiping_discount = Column(NUMBER(10, 2))
     cod_orden_ecommerce = Column(VARCHAR(24))
     cod_comprobante = Column(VARCHAR(24))
     fecha = Column(DateTime, nullable=False)
@@ -208,18 +212,17 @@ class st_cab_datafast(Base):
         return db.session.query(cls)
 
 class st_det_datafast(Base):
-        __tablename__ = 'st_det_datafast'
-        __table_args__ = {'schema': 'stock'}
+    __tablename__ = 'st_det_datafast'
+    __table_args__ = {'schema': 'stock'}
 
-        empresa = Column(NUMBER(2), primary_key=True, nullable=False)
-        id_transaction = Column(VARCHAR(32), ForeignKey('stock.st_cab_datafast.id_transaction'), primary_key=True,
-                                nullable=False)
-        code = Column(VARCHAR(20), primary_key=True, nullable=False)
-        quantity = Column(NUMBER(10))
-
-        @classmethod
-        def query(cls):
-            return db.session.query(cls)
+    empresa = Column(NUMBER(2), primary_key=True, nullable=False)
+    id_transaction = Column(VARCHAR(32), ForeignKey('stock.st_cab_datafast.id_transaction'), primary_key=True, nullable=False)
+    cod_producto = Column(VARCHAR(20), primary_key=True, nullable=False)
+    price = Column(NUMBER(10, 2))
+    quantity = Column(NUMBER(10))
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
 
 class st_cab_deuna(Base):
     __tablename__ = 'st_cab_deuna'

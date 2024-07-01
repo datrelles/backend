@@ -3734,9 +3734,11 @@ def get_politica_credito_ecommerce(db, p_cod_politica):
 def get_sell_ecommerce():
     try:
         filtros_params = request.args.to_dict()
-        start_date = datetime.strptime(filtros_params['start_date'], '%d/%m/%Y') if filtros_params['start_date'] else None
-        finish_date = datetime.strptime(filtros_params['finish_date'], '%d/%m/%Y') if filtros_params['finish_date'] else None
-        # Aumentar un dia
+        start_date = datetime.strptime(filtros_params['start_date'],
+                                       '%d/%m/%Y') if 'start_date' in filtros_params else None
+        finish_date = datetime.strptime(filtros_params['finish_date'],
+                                        '%d/%m/%Y') if 'finish_date' in filtros_params else None
+        # Aumentar un día
         if finish_date:
             finish_date += timedelta(days=1)
         if start_date:
@@ -3745,22 +3747,17 @@ def get_sell_ecommerce():
         results = st_cab_datafast.query().filter(
             st_cab_datafast.empresa == 20,
         )
-        # Filter date range
+        # Filtrar por rango de fechas
         if start_date is not None and finish_date is not None:
-                results = results.filter(
-                    st_cab_datafast.fecha.between(start_date, finish_date)
-                )
-        # st_cab_datafast
-        print(start_date)
-        print(finish_date)
+            results = results.filter(
+                st_cab_datafast.fecha.between(start_date, finish_date)
+            )
+        # Obtener todos los resultados
         results = results.all()
-        # Si no se encontraron resultados
+
         results_list = []
         if not results:
             return jsonify(results_list), 200
-        # Procesa los resultados y devuelve una respuesta
-
-
 
         for result in results:
             result_data = {
@@ -3768,7 +3765,10 @@ def get_sell_ecommerce():
                 "id_transaction": result.id_transaction,
                 "payment_type": result.payment_type,
                 "payment_brand": result.payment_brand,
-                "amount": result.amount,
+                "total": result.total,
+                "sub_total": result.sub_total,
+                "discount_percentage": result.discount_percentage,
+                "discount_amount": result.discount_amount,
                 "currency": result.currency,
                 "batch_no": result.batch_no,
                 "id_guia_servientrega": result.id_guia_servientrega,
@@ -3784,7 +3784,8 @@ def get_sell_ecommerce():
                 "client_last_name": result.client_last_name,
                 "client_id": result.client_id,
                 "client_address": result.client_address,
-                "cost_shiping": result.cost_shiping,
+                "cost_shiping_calculate": result.cost_shiping_calculate,
+                "shiping_discount": result.shiping_discount,
                 "cod_orden_ecommerce": result.cod_orden_ecommerce,
                 "cod_comprobante": result.cod_comprobante,
                 "fecha": result.fecha.strftime('%d/%m/%Y')
@@ -3806,11 +3807,12 @@ def buy_parts_ecommerce(id_code):
         cases = st_det_datafast.query().filter(
             st_det_datafast.id_transaction == id_code,
             st_det_datafast.empresa == 20
-        )
+        ).all()
 
         for case in cases:
             case_dict = {
-                "codigo": case.code,
+                "codigo": case.cod_producto,
+                "precio": case.price,
                 "cantidad": case.quantity
             }
             cases_json.append(case_dict)
@@ -3819,4 +3821,4 @@ def buy_parts_ecommerce(id_code):
     except Exception as e:
         print(e)
         error_msg = "An error occurred while processing the request."
-        return jsonify(cases_json), 200
+        return jsonify({"error": error_msg, "details": str(e)}), 500
