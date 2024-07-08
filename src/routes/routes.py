@@ -7,7 +7,7 @@ from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StTracki
 from src.models.productos import Producto
 from src.models.formula import StFormula, StFormulaD
 from src.models.despiece import StDespiece, StDespieceD
-from src.models.st_proforma import st_proforma, st_proforma_movimiento, st_cab_deuna, st_det_deuna, st_cab_datafast, st_det_datafast
+from src.models.st_proforma import st_proforma, st_proforma_movimiento, st_cab_deuna, st_det_deuna, st_cab_datafast, st_det_datafast, st_metodos_de_pago_ecommerce
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
 from src.models.financiero import StFinCabCredito,StFinDetCredito,StFinClientes,StFinPagos
@@ -3277,6 +3277,8 @@ def get_info_year(): #function to get year about a specific  motorcycle part
         return jsonify({"error": "Se ha producido un error al procesar la solicitud: " +str(e)}), 500
 
 #ECOMMERCE INVOICE---------------------------------------------------------------------------------------
+
+#-----------------EN DESARROLLO--------------------------->
 @bp.route('/post_invoice_ecommerce', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -3727,15 +3729,19 @@ def get_politica_credito_ecommerce(db, p_cod_politica):
         # Asegúrate de cerrar el cursor y la conexión
         if cursor:
             cursor.close()
-
+#--------------------------------
 @bp.route('/get_invoice_ecommerce', methods = ['GET'])
 @jwt_required()
 @cross_origin()
 def get_sell_ecommerce():
     try:
         filtros_params = request.args.to_dict()
+        option = filtros_params.get('pay_method').upper()  # Opción para elegir la tabla
+        invoiced = int(filtros_params.get('invoiced'))
+
         start_date = datetime.strptime(filtros_params['start_date'],
                                        '%d/%m/%Y') if 'start_date' in filtros_params else None
+
         finish_date = datetime.strptime(filtros_params['finish_date'],
                                         '%d/%m/%Y') if 'finish_date' in filtros_params else None
         # Aumentar un día
@@ -3744,14 +3750,33 @@ def get_sell_ecommerce():
         if start_date:
             start_date -= timedelta(days=1)
 
-        results = st_cab_datafast.query().filter(
-            st_cab_datafast.empresa == 20,
-        )
+        if option == 'DATAFAST' and invoiced == 1:
+            results = st_cab_datafast.query().filter(st_cab_datafast.empresa == 20,
+            st_cab_datafast.cod_comprobante.isnot(None))
+            model_class = st_cab_datafast
+
+        elif option == 'DEUNA' and invoiced == 1:
+            results = st_cab_deuna.query().filter(st_cab_deuna.empresa == 20,
+            st_cab_deuna.cod_comprobante.isnot(None))
+            model_class = st_cab_deuna
+
+        elif option == 'DATAFAST' and invoiced == 0:
+            results = st_cab_datafast.query().filter(st_cab_datafast.empresa == 20,
+            st_cab_datafast.cod_comprobante == None)
+            model_class = st_cab_datafast
+
+        elif option == 'DEUNA' and invoiced == 0:
+            results = st_cab_deuna.query().filter(st_cab_deuna.empresa == 20,
+            st_cab_deuna.cod_comprobante == None)
+            model_class = st_cab_deuna
+
+        else:
+            return jsonify({"error": "Invalid option"}), 400
+
         # Filtrar por rango de fechas
         if start_date is not None and finish_date is not None:
-            results = results.filter(
-                st_cab_datafast.fecha.between(start_date, finish_date)
-            )
+            results = results.filter(model_class.fecha.between(start_date, finish_date))
+
         # Obtener todos los resultados
         results = results.all()
 
@@ -3763,52 +3788,69 @@ def get_sell_ecommerce():
             result_data = {
                 "empresa": result.empresa,
                 "id_transaction": result.id_transaction,
-                "payment_type": result.payment_type,
-                "payment_brand": result.payment_brand,
                 "total": result.total,
                 "sub_total": result.sub_total,
                 "discount_percentage": result.discount_percentage,
                 "discount_amount": result.discount_amount,
                 "currency": result.currency,
-                "batch_no": result.batch_no,
                 "id_guia_servientrega": result.id_guia_servientrega,
-                "card_type": result.card_type,
-                "bin_card": result.bin_card,
-                "last_4_digits": result.last_4_digits,
-                "holder": result.holder,
-                "expiry_month": result.expiry_month,
-                "expiry_year": result.expiry_year,
-                "acquirer_code": result.acquirer_code,
                 "client_type_id": result.client_type_id,
                 "client_name": result.client_name,
                 "client_last_name": result.client_last_name,
                 "client_id": result.client_id,
                 "client_address": result.client_address,
-                "cost_shiping_calculate": result.cost_shiping_calculate,
-                "shiping_discount": result.shiping_discount,
                 "cod_orden_ecommerce": result.cod_orden_ecommerce,
                 "cod_comprobante": result.cod_comprobante,
-                "fecha": result.fecha.strftime('%d/%m/%Y')
+                "fecha": result.fecha.strftime('%d/%m/%Y'),
+                "shiping_discount": result.shiping_discount
             }
+            if option == 'DATAFAST':
+                result_data.update({
+                    "payment_type": result.payment_type,
+                    "payment_brand": result.payment_brand,
+                    "batch_no": result.batch_no,
+                    "card_type": result.card_type,
+                    "bin_card": result.bin_card,
+                    "last_4_digits": result.last_4_digits,
+                    "holder": result.holder,
+                    "expiry_month": result.expiry_month,
+                    "expiry_year": result.expiry_year,
+                    "acquirer_code": result.acquirer_code,
+                    "cost_shiping": result.cost_shiping_calculate,
+                    "shiping_discount": result.shiping_discount,
+                })
+            if option == 'DEUNA':
+                result_data.update({
+                        "cost_shiping": result.cost_shiping,
+                    })
+
             results_list.append(result_data)
 
         return jsonify(results_list), 200
-
     except Exception as e:
         print(e)
-        return jsonify({"error": "Se ha producido un error", "details": str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 @bp.route('/buy_parts_ecommerce/<id_code>', methods=['GET'])
 @jwt_required()
 @cross_origin()
 def buy_parts_ecommerce(id_code):
     try:
-        cases_json = []
-        cases = st_det_datafast.query().filter(
-            st_det_datafast.id_transaction == id_code,
-            st_det_datafast.empresa == 20
-        ).all()
+        option = request.args.get('pay_method').upper()
+        if option == 'DATAFAST':
+            cases = st_det_datafast.query().filter(
+                st_det_datafast.id_transaction == id_code,
+                st_det_datafast.empresa == 20
+            ).all()
+        elif option == 'DEUNA':
+            cases = st_det_deuna.query().filter(
+                st_det_deuna.id_transaction == id_code,
+                st_det_deuna.empresa == 20
+            ).all()
+        else:
+            return jsonify({"error": "Invalid option"}), 400
 
+        cases_json = []
         for case in cases:
             case_dict = {
                 "codigo": case.cod_producto,
@@ -3816,9 +3858,65 @@ def buy_parts_ecommerce(id_code):
                 "cantidad": case.quantity
             }
             cases_json.append(case_dict)
-        return jsonify(cases_json)
+
+        return jsonify(cases_json), 200
 
     except Exception as e:
         print(e)
         error_msg = "An error occurred while processing the request."
         return jsonify({"error": error_msg, "details": str(e)}), 500
+
+@bp.route('/get_methods_payment_ecommerce', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_ecommerce_payment_method():
+    try:
+        methods_payment = st_metodos_de_pago_ecommerce.query().filter(
+            st_metodos_de_pago_ecommerce.empresa == 20
+        ).all()
+        methods = []
+        print(methods_payment)
+        for method in methods_payment:
+            dict = {
+                "metodo de pago": method.nombre,
+                "metodo_info_fac": method.tipo_facturacion
+            }
+            methods.append(dict)
+
+        return jsonify(methods), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while processing the request."
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+@bp.route('/post_cod_comprobante_ecommerce', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def post_cod_comprobante_ecommerce():
+    try:
+        pay_method = request.args.get("pay_method")
+        pay_id = request.args.get("pay_id")
+        cod_comprobante = request.args.get("cod_comprobante")
+
+        if not pay_method or not pay_id or not cod_comprobante:
+            return jsonify({"error": "Missing parameters"}), 400
+        if pay_method == 'datafast':
+            model = st_cab_datafast
+        elif pay_method == 'deuna':
+            model = st_cab_deuna
+        else:
+            return jsonify({"error": "Invalid pay_method"}), 400
+            # Busca el registro por id_transaction
+        try:
+            record = model.query().filter_by(id_transaction=pay_id).one()
+        except Exception as e:
+            return jsonify({"error": "Transaction not found"}), 404
+        record.cod_comprobante = cod_comprobante
+        db.session.commit()
+        return jsonify({"status": "ok"})
+
+    except Exception as e:
+        db.session.rollback()  # Revierte los cambios en caso de error
+        error_msg = "An error occurred while processing the request."
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
