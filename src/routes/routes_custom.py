@@ -1292,7 +1292,7 @@ def obtener_productos_por_codigo():
 
         query = query.filter(Producto.cod_producto.like(f'%{cod_producto}%'))
         query = query.filter(Producto.activo == 'S')
-        query = query.filter(Producto.cod_item_cat.in_(['Z', 'R']))
+        query = query.filter(Producto.cod_item_cat.in_(['Z', 'R', 'J', 'L']))
 
         productos = query.all()
         serialized_productos = []
@@ -2849,7 +2849,7 @@ def desintegrate_combo():
                 total_linea=0,
                 porce_descuento=0,
                 valor_alterno=None,
-                es_serie=1,
+                es_serie=0,
                 td=None,
                 rebate=None,
                 es_iva=None,
@@ -2982,7 +2982,7 @@ def desintegrate_combo():
                             total_linea=0,
                             porce_descuento=0,
                             valor_alterno=None,
-                            es_serie=1,
+                            es_serie=0,
                             td=None,
                             rebate=None,
                             es_iva=None,
@@ -3039,7 +3039,7 @@ def desintegrate_combo():
                             total_linea=0,
                             porce_descuento=0,
                             valor_alterno=None,
-                            es_serie=1,
+                            es_serie=0,
                             td=None,
                             rebate=None,
                             es_iva=None,
@@ -3406,7 +3406,7 @@ def generate_despiece():
             total_linea=0,
             porce_descuento=0,
             valor_alterno=None,
-            es_serie=1,
+            es_serie=0,
             td=None,
             rebate=None,
             es_iva=None,
@@ -3704,7 +3704,7 @@ def generate_despiece():
                 total_linea=0,
                 porce_descuento=0,
                 valor_alterno=None,
-                es_serie=1,
+                es_serie=0,
                 td=None,
                 rebate=None,
                 es_iva=None,
