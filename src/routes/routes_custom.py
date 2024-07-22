@@ -2287,8 +2287,8 @@ def generate_combo():
                            """,
                            param1=item.cod_producto_f)
             result = cursor.fetchone()
-            max_precio = result[0]
-            min_precio = result[1]
+            max_precio = float(result[0]) * int(item.cantidad_f)
+            min_precio = float(result[1]) * int(item.cantidad_f)
             precio_maximo_formula = precio_maximo_formula + max_precio
             precio_minimo_formula = precio_minimo_formula + min_precio
             cursor.close()
