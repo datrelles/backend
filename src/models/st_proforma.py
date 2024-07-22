@@ -106,7 +106,6 @@ class st_proforma(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
-
 class st_proforma_movimiento(Base):
     __tablename__ = 'st_proforma_movimiento'
     __table_args__ = (
@@ -173,7 +172,6 @@ class st_proforma_movimiento(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
-
 class st_cab_datafast(Base):
     __tablename__ = 'st_cab_datafast'
     __table_args__ = {'schema': 'stock'}
@@ -210,7 +208,6 @@ class st_cab_datafast(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
-
 class st_det_datafast(Base):
     __tablename__ = 'st_det_datafast'
     __table_args__ = {'schema': 'stock'}
@@ -223,7 +220,6 @@ class st_det_datafast(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
-
 class st_cab_deuna(Base):
     __tablename__ = 'st_cab_deuna'
     __table_args__ = {'schema': 'stock'}
@@ -231,7 +227,10 @@ class st_cab_deuna(Base):
     empresa = Column(NUMBER(2), primary_key=True, nullable=False)
     id_transaction = Column(VARCHAR(255), primary_key=True, nullable=False)
     internal_transaction_reference = Column(VARCHAR(255))
-    amount = Column(NUMBER(10, 2))
+    total = Column(NUMBER(10, 2))
+    sub_total = Column(NUMBER(10, 2))
+    discount_percentage = Column(NUMBER(10, 2))
+    discount_amount = Column(NUMBER(10, 2))
     currency = Column(VARCHAR(3))
     id_guia_servientrega = Column(VARCHAR(255))
     client_type_id = Column(VARCHAR(2))
@@ -242,21 +241,34 @@ class st_cab_deuna(Base):
     cost_shiping = Column(NUMBER(10, 2))
     cod_orden_ecommerce = Column(VARCHAR(24))
     cod_comprobante = Column(VARCHAR(24))
+    shiping_discount = Column(NUMBER(10, 2))
     fecha = Column(DateTime)
 
     @classmethod
     def query(cls):
         return db.session.query(cls)
-
 class st_det_deuna(Base):
     __tablename__ = 'st_det_deuna'
     __table_args__ = {'schema': 'stock'}
 
     empresa = Column(NUMBER(2), primary_key=True, nullable=False)
     id_transaction = Column(VARCHAR(32), ForeignKey('stock.st_cab_deuna.id_transaction'), primary_key=True, nullable=False)
-    code = Column(VARCHAR(20), primary_key=True, nullable=False)
+    cod_producto = Column(VARCHAR(20), primary_key=True, nullable=False)
+    price = Column(NUMBER(10, 2))
     quantity = Column(NUMBER(10))
 
     @classmethod
     def query(cls):
         return db.session.query(cls)
+class st_metodos_de_pago_ecommerce(Base):
+    __tablename__ = 'st_metodos_de_pago_ecommerce'
+    __table_args__ = {'schema': 'stock'}
+    empresa = Column(NUMBER(2), primary_key=True, nullable=False)
+    nombre = Column(VARCHAR(32), nullable=False)
+    tipo_facturacion = Column(VARCHAR(32), nullable=False)
+    activo = Column(NUMBER(1), nullable=False)
+    cod_forma_de_pago = Column(VARCHAR(10), primary_key=True, nullable=False)
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
