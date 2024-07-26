@@ -85,3 +85,68 @@ class Producto(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
+class st_gen_lista_precio(Base):
+    __tablename__ = 'st_gen_lista_precio'
+    __table_args__ = {'schema': 'stock'}
+
+    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
+    secuencia = Column(NUMBER(6, 0, False), primary_key=True, nullable=False)
+    fecha = Column(DateTime, nullable=False)
+    observaciones = Column(VARCHAR(2000))
+    useridc = Column(VARCHAR(3), nullable=False)
+    precio = Column(NUMBER(14, 2, True))
+    ice = Column(NUMBER(14, 2, True))
+    cargos = Column(NUMBER(14, 2, True))
+    fecha_inicio = Column(DateTime)
+    fecha_final = Column(DateTime)
+    tipo_generacion = Column(VARCHAR(2))
+    fecha_cierre = Column(DateTime)
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+class st_lista_precio(Base):
+    __tablename__ = 'st_lista_precio'
+    __table_args__ = (
+        Index('idx_lista_precio_agencia', 'empresa', 'cod_agencia'),
+        Index('idx_lista_precio_divisa', 'cod_divisa'),
+        Index('idx_lista_precio_forma_pago', 'empresa', 'cod_forma_pago'),
+        Index('idx_lista_precio_productos', 'empresa', 'cod_producto'),
+        Index('idx_lista_precio_region', 'empresa', 'cod_modelo_zona', 'cod_item_zona'),
+        Index('idx_lista_precio_tipo_clientes', 'empresa', 'cod_modelo_cli', 'cod_item_cli'),
+        Index('idx_lista_precio_unidad', 'empresa', 'cod_unidad'),
+        Index('idx_lista_precio_useridc', 'empresa', 'useridc'),
+        Index('ind$_lista_precio_borra', 'empresa', 'estado_generacion', 'fecha_inicio'),
+        Index('ind$_lista_precio_cod_producto', 'cod_producto', 'empresa'),
+        {'schema': 'stock'}
+    )
+
+    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
+    cod_producto = Column(VARCHAR(14), primary_key=True, nullable=False)
+    cod_modelo_cli = Column(VARCHAR(8), primary_key=True, nullable=False)
+    cod_item_cli = Column(VARCHAR(3), primary_key=True, nullable=False)
+    cod_modelo_zona = Column(VARCHAR(8), primary_key=True, nullable=False)
+    cod_item_zona = Column(VARCHAR(3), primary_key=True, nullable=False)
+    cod_agencia = Column(NUMBER(4, 0, False), primary_key=True, nullable=False)
+    cod_unidad = Column(VARCHAR(8), primary_key=True, nullable=False)
+    cod_forma_pago = Column(VARCHAR(3), primary_key=True, nullable=False)
+    cod_divisa = Column(VARCHAR(20), primary_key=True, nullable=False)
+    estado_generacion = Column(VARCHAR(1), primary_key=True, nullable=False)
+    fecha_inicio = Column(DateTime, primary_key=True, nullable=False)
+    fecha_final = Column(DateTime)
+    valor = Column(NUMBER(14, 2, False), nullable=False)
+    iva = Column(NUMBER(14, 2, True))
+    ice = Column(NUMBER(14, 2, True))
+    precio = Column(NUMBER(14, 2, False), nullable=False)
+    cargos = Column(NUMBER(14, 2, True))
+    useridc = Column(VARCHAR(3), nullable=False)
+    secuencia_generacion = Column(NUMBER(6, 0, True))
+    estado_vida = Column(VARCHAR(1), nullable=False)
+    valor_alterno = Column(NUMBER(14, 2, True))
+    rebate = Column(NUMBER(14, 2, True))
+    aud_fecha = Column(DateTime)
+    aud_usuario = Column(VARCHAR(30))
+    aud_terminal = Column(VARCHAR(50))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
