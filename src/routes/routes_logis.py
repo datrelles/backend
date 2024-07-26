@@ -23,18 +23,18 @@ def parse_date(date_string):
         return datetime.strptime(date_string, '%d/%m/%Y').date()
     return None
 @bplog.route('/pedidos', methods=['POST'])
-@jwt_required()
+#@jwt_required()
 @cross_origin()
 def get_pedidos():
     data = request.json
     pd_fecha_inicial = parse_date(data.get('pd_fecha_inicial'))
     pd_fecha_final = parse_date(data.get('pd_fecha_final'))
-    pv_cod_pedido = data.get('pv_cod_pedido')
+    pv_cod_pedido = data.get('pedido')
     pv_comprobante_manual = data.get('pv_comprobante_manual')
     pv_cod_persona_ven = data.get('pv_cod_persona_ven')
     pv_nombre_persona_ven = data.get('pv_nombre_persona_ven')
     pv_cod_persona_cli = data.get('pv_cod_persona_cli')
-    pv_nombre_persona_cli = data.get('pv_nombre_persona_cli')
+    pv_nombre_persona_cli = data.get('cliente')
     pv_estado = data.get('pv_estado')
     pn_cod_agencia = data.get('pn_cod_agencia')
     pn_empresa = data.get('pn_empresa')
@@ -42,11 +42,9 @@ def get_pedidos():
     pn_cod_bodega_despacho = data.get('pn_cod_bodega_despacho')
     p_orden = data.get('p_orden', 'COD_PEDIDO')
     p_tipo_orden = data.get('p_tipo_orden', 'DESC')
-    pv_bodega_envia = data.get('pv_bodega_envia')
-    pv_direccion = data.get('pv_direccion')
-    pv_cod_orden = data.get('pv_cod_orden')
-    print(pd_fecha_inicial)
-    print(pd_fecha_final)
+    pv_bodega_envia = data.get('bodega_consignacion')
+    pv_direccion = data.get('direccion')
+    pv_cod_orden = data.get('orden')
 
     try:
         db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
@@ -62,11 +60,12 @@ def get_pedidos():
         ])
         result = []
         cursor_output = result_rc_listado_pedidos.getvalue()
-
-        if cursor_output:
-            columns = [col[0] for col in cursor_output.description]
-            for row in cursor_output:
-                result.append(dict(zip(columns, row)))
+        columns = [col[0] for col in cursor_output.description]
+        for row in cursor_output:
+            row_dict = dict(zip(columns, row))
+            if 'FECHA_PEDIDO' in row_dict and row_dict['FECHA_PEDIDO']:
+                row_dict['FECHA_PEDIDO'] = datetime.strftime(row_dict['FECHA_PEDIDO'],"%d/%m/%Y") if row_dict['FECHA_PEDIDO'] else ""
+            result.append(row_dict)
 
         return jsonify(result)
     except cx_Oracle.DatabaseError as e:
