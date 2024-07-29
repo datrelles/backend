@@ -3991,7 +3991,6 @@ def generar_listas_de_precio(p_cod_empresa, p_user, p_tipo_generacion, p_useridc
         return {"success": True, "p_secuencia": secuencia}
     except Exception as e:
         return {"success": False, "error": str(e)}
-
 def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia):
     try:
         # Define the records with the current date and time
@@ -4028,3 +4027,34 @@ def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia):
         # Handle the exception and rollback the session
         session.rollback()
         return {"success": False, "error": str(e)}
+
+@bp.route('/post_image_material_imagen_despiece', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def post_image_material_imagen_despiece():
+    try:
+        pay_method = request.args.get("pay_method")
+        pay_id = request.args.get("pay_id")
+        cod_comprobante = request.args.get("cod_comprobante")
+
+        if not pay_method or not pay_id or not cod_comprobante:
+            return jsonify({"error": "Missing parameters"}), 400
+        if pay_method == 'datafast':
+            model = st_cab_datafast
+        elif pay_method == 'deuna':
+            model = st_cab_deuna
+        else:
+            return jsonify({"error": "Invalid pay_method"}), 400
+            # Busca el registro por id_transaction
+        try:
+            record = model.query().filter_by(id_transaction=pay_id).one()
+        except Exception as e:
+            return jsonify({"error": "Transaction not found"}), 404
+        record.cod_comprobante = cod_comprobante
+        db.session.commit()
+        return jsonify({"status": "ok"})
+
+    except Exception as e:
+        db.session.rollback()  # Revierte los cambios en caso de error
+        error_msg = "An error occurred while processing the request."
+        return jsonify({"error": error_msg, "details": str(e)}), 500
