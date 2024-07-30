@@ -1,5 +1,8 @@
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
+from PIL import Image
+from io import BytesIO
+import base64
 from src.models.users import Usuario, Empresa
 from src.models.tipo_comprobante import TipoComprobante
 from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
@@ -16,6 +19,7 @@ from src.models.tipo_aforo import StTipoAforo
 from src.models.comprobante_electronico import tc_doc_elec_recibidos
 from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, st_casos_tipo_problema, st_casos_url, ArCiudades, ADcantones, ADprovincias
 from src.models.despiece_repuestos import st_producto_despiece, st_despiece, st_producto_rep_anio
+from src.models.images import st_material_imagen, st_despiece_d_imagen
 from src.config.database import db, engine, session
 from sqlalchemy import func, text, bindparam, Integer, event, desc
 from sqlalchemy.orm import scoped_session
@@ -32,6 +36,7 @@ from sqlalchemy.exc import SQLAlchemyError
 import cx_Oracle
 import json
 from sqlalchemy import and_
+from werkzeug.utils import secure_filename
 bp = Blueprint('routes', __name__)
 
 logger = logging.getLogger(__name__)
@@ -4033,25 +4038,59 @@ def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia):
 @cross_origin()
 def post_image_material_imagen_despiece():
     try:
-        pay_method = request.args.get("pay_method")
-        pay_id = request.args.get("pay_id")
-        cod_comprobante = request.args.get("cod_comprobante")
+        cod_tipo_material = 'PRO'
+        cod_material = request.form['cod_material']
+        empresa = 20
+        secuencia = 1
+        nombre_vista = request.form.get('nombre_vista')
+        usuario = request.form.get('user_shineray')
 
-        if not pay_method or not pay_id or not cod_comprobante:
-            return jsonify({"error": "Missing parameters"}), 400
-        if pay_method == 'datafast':
-            model = st_cab_datafast
-        elif pay_method == 'deuna':
-            model = st_cab_deuna
-        else:
-            return jsonify({"error": "Invalid pay_method"}), 400
-            # Busca el registro por id_transaction
-        try:
-            record = model.query().filter_by(id_transaction=pay_id).one()
-        except Exception as e:
-            return jsonify({"error": "Transaction not found"}), 404
-        record.cod_comprobante = cod_comprobante
-        db.session.commit()
+        if 'imagen' not in request.files:
+            return jsonify({"error": "No image part"}), 400
+        file = request.files['imagen']
+        if file:
+            filename = secure_filename(file.filename)
+            image_data = file.read()
+
+            # Crear la miniatura
+            original_image = Image.open(BytesIO(image_data))
+            original_image.thumbnail((240, 240))  # Tamaño de la miniatura
+            thumbnail_io = BytesIO()
+            original_image.save(thumbnail_io, format='JPEG')
+            thumbnail_data = thumbnail_io.getvalue()
+
+            # Buscar el registro existente
+            existing_record = st_material_imagen.query().filter_by(
+                cod_tipo_material=cod_tipo_material,
+                cod_material=cod_material,
+                empresa=empresa,
+                secuencia=secuencia
+            ).first()
+
+            if existing_record:
+                # Actualizar el registro existente
+                existing_record.nombre_vista = nombre_vista
+                existing_record.imagen = image_data
+                existing_record.nombre_archivo = filename
+                existing_record.miniatura = thumbnail_data
+                existing_record.usuario = usuario
+            else:
+                # Crear un nuevo registro
+                material_image = st_material_imagen(
+                    cod_tipo_material=cod_tipo_material,
+                    cod_material=cod_material,
+                    empresa=empresa,
+                    secuencia=secuencia,
+                    nombre_vista=nombre_vista,
+                    imagen=image_data,
+                    nombre_archivo=filename,
+                    miniatura=thumbnail_data,
+                    usuario=usuario
+                )
+                db.session.add(material_image)
+
+            db.session.commit()
+
         return jsonify({"status": "ok"})
 
     except Exception as e:
