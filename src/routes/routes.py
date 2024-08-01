@@ -1,10 +1,13 @@
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
+from PIL import Image
+from io import BytesIO
+import base64
 from src.models.users import Usuario, Empresa
 from src.models.tipo_comprobante import TipoComprobante
 from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
 from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StTracking, StPackinglist, stProformaImpFp
-from src.models.productos import Producto
+from src.models.productos import Producto, st_lista_precio, st_gen_lista_precio
 from src.models.formula import StFormula, StFormulaD
 from src.models.despiece import StDespiece, StDespieceD
 from src.models.st_proforma import st_proforma, st_proforma_movimiento, st_cab_deuna, st_det_deuna, st_cab_datafast, st_det_datafast, st_metodos_de_pago_ecommerce
@@ -16,6 +19,7 @@ from src.models.tipo_aforo import StTipoAforo
 from src.models.comprobante_electronico import tc_doc_elec_recibidos
 from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, st_casos_tipo_problema, st_casos_url, ArCiudades, ADcantones, ADprovincias
 from src.models.despiece_repuestos import st_producto_despiece, st_despiece, st_producto_rep_anio
+from src.models.images import st_material_imagen, st_despiece_d_imagen
 from src.config.database import db, engine, session
 from sqlalchemy import func, text, bindparam, Integer, event, desc
 from sqlalchemy.orm import scoped_session
@@ -32,6 +36,7 @@ from sqlalchemy.exc import SQLAlchemyError
 import cx_Oracle
 import json
 from sqlalchemy import and_
+from werkzeug.utils import secure_filename
 bp = Blueprint('routes', __name__)
 
 logger = logging.getLogger(__name__)
@@ -3920,3 +3925,184 @@ def post_cod_comprobante_ecommerce():
         error_msg = "An error occurred while processing the request."
         return jsonify({"error": error_msg, "details": str(e)}), 500
 
+@bp.route('/post_change_price_ecommerce', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def post_change_price_ecommerce():
+    try:
+        p_cod_empresa = 20
+        p_cod_agencia = 50
+        p_user = 'stock'
+        p_tipo_generacion = 'VF'
+        p_useridc = 'st'
+
+        # Obtén los parámetros de la solicitud
+        cod_producto = "YSLZCT1001"
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        price = request.args.get("price")
+        p_cod_politica = 48
+        politica = get_politica_credito_ecommerce(db1, p_cod_politica)
+        price = round(float(price) / politica, 2)
+        if not cod_producto or not price:
+            return jsonify({"error": "Missing cod_producto or price"}), 400
+        # search producto code
+        producto = Producto.query().filter_by(cod_producto=cod_producto).first()
+
+        if producto:
+            # Actualiza el precio del producto
+            producto.precio = price
+            result = generar_listas_de_precio(p_cod_empresa, p_user, p_tipo_generacion, p_useridc, db1)
+
+            db.session.commit()  # Guarda los cambios en la base de datos
+            secuencia = result["p_secuencia"]
+            print(secuencia)
+            status_inset = insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia)
+            print(status_inset)
+            return jsonify({"status": "ok", "message": "Price updated successfully"})
+
+        else:
+            return jsonify({"error": "Product not found"}), 404
+
+    except SQLAlchemyError as e:
+        db.session.rollback()  # Revierte los cambios en caso de error
+        error_msg = "An error occurred while processing the request."
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+def generar_listas_de_precio(p_cod_empresa, p_user, p_tipo_generacion, p_useridc, db1):
+    try:
+        # Conexión a la base de datos
+        cursor = db1.cursor()
+        # Variable para almacenar el resultado de salida
+        p_secuencia = cursor.var(cx_Oracle.NUMBER)
+        # Ejecución del procedimiento PL/SQL
+        cursor.execute("""
+                        begin
+                        ks_lista_precio.generar_listas_de_precio(p_cod_empresa => :p_cod_empresa,
+                                                                p_user => :p_user,
+                                                                p_tipo_generacion => :p_tipo_generacion,
+                                                                p_useridc => :p_useridc,
+                                                                p_fecha_inicio => '',
+                                                                p_fecha_final => '',
+                                                                p_precio => '',
+                                                                p_observaciones => '',
+                                                                p_secuencia => :p_secuencia);
+                        end;
+                """, p_cod_empresa=p_cod_empresa, p_user=p_user, p_tipo_generacion=p_tipo_generacion, p_useridc=p_useridc, p_secuencia=p_secuencia)
+
+        #Obtener el valor del parámetro de salida
+        secuencia = p_secuencia.getvalue()
+
+        #Cerrar el cursor y la conexión
+        cursor.close()
+        return {"success": True, "p_secuencia": secuencia}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia):
+    try:
+        # Define the records with the current date and time
+        current_datetime = datetime.now()
+        print(current_datetime)
+
+        current_datetime_without_hours = current_datetime.date()
+        print(current_datetime_without_hours)
+
+        records = [
+            (p_cod_empresa, 'YSLZCT1001', 'CLI1', 'CF', 'REG1', 'COS', p_cod_agencia, 'U', 'EFE', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD'),
+            (p_cod_empresa, 'YSLZCT1001', 'CLI1', 'CF', 'REG1', 'COS', p_cod_agencia, 'U', 'TCR', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD'),
+            (p_cod_empresa, 'YSLZCT1001', 'CLI1', 'TA', 'REG1', 'COS', p_cod_agencia, 'U', 'EFE', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD'),
+            (p_cod_empresa, 'YSLZCT1001', 'CLI1', 'TA', 'REG1', 'COS', p_cod_agencia, 'U', 'TCR', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD')
+        ]
+
+        # Insert the records
+        for record in records:
+            new_entry = st_lista_precio(
+                empresa=record[0], cod_producto=record[1], cod_modelo_cli=record[2], cod_item_cli=record[3],
+                cod_modelo_zona=record[4], cod_item_zona=record[5], cod_agencia=record[6], cod_unidad=record[7],
+                cod_forma_pago=record[8], cod_divisa=record[9], estado_generacion=record[10], fecha_inicio=record[11],
+                fecha_final=record[12], valor=record[13], iva=record[14], ice=record[15], precio=record[16],
+                cargos=record[17], useridc=record[18], secuencia_generacion=record[19], estado_vida=record[20],
+                valor_alterno=record[21], rebate=record[22], aud_fecha=record[23], aud_usuario=record[24],
+                aud_terminal=record[25]
+            )
+            session.add(new_entry)
+
+        # Commit the session
+        session.commit()
+        return {"success": True}
+    except Exception as e:
+        # Handle the exception and rollback the session
+        session.rollback()
+        return {"success": False, "error": str(e)}
+
+@bp.route('/post_image_material_imagen_despiece', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def post_image_material_imagen_despiece():
+    try:
+        cod_tipo_material = 'PRO'
+        cod_material = request.form['cod_material']
+        empresa = 20
+        secuencia = 1
+        usuario = request.form.get('user_shineray')
+
+        if 'imagen' not in request.files:
+            return jsonify({"error": "No image part"}), 400
+
+        file = request.files['imagen']
+        if file:
+            filename = secure_filename(file.filename)
+            image_data = file.read()
+
+            # Crear la miniatura
+            original_image = Image.open(BytesIO(image_data))
+
+            # Convertir la imagen a RGB si es necesario
+            if original_image.mode in ('P', 'RGBA'):
+                original_image = original_image.convert('RGB')
+
+            # Redimensionar la imagen para crear la miniatura
+            original_image.thumbnail((240, 240))
+            thumbnail_io = BytesIO()
+            original_image.save(thumbnail_io, format='JPEG')
+            thumbnail_data = thumbnail_io.getvalue()
+
+            # Buscar el registro existente en la base de datos
+            existing_record = st_material_imagen.query().filter_by(
+                cod_tipo_material=cod_tipo_material,
+                cod_material=cod_material,
+                empresa=empresa,
+                secuencia=secuencia
+            ).first()
+
+            if existing_record:
+                # Actualizar el registro existente
+                existing_record.nombre_vista = filename
+                existing_record.imagen = image_data
+                existing_record.nombre_archivo = filename
+                existing_record.miniatura = thumbnail_data
+                existing_record.usuario = usuario
+            else:
+                # Crear un nuevo registro
+                material_image = st_material_imagen(
+                    cod_tipo_material=cod_tipo_material,
+                    cod_material=cod_material,
+                    empresa=empresa,
+                    secuencia=secuencia,
+                    nombre_vista=filename,
+                    imagen=image_data,
+                    nombre_archivo=filename,
+                    miniatura=thumbnail_data,
+                    usuario=usuario
+                )
+                db.session.add(material_image)
+
+            # Guardar los cambios en la base de datos
+            db.session.commit()
+
+        return jsonify({"status": "ok"})
+
+    except Exception as e:
+        # Revierte los cambios en caso de error
+        db.session.rollback()
+        error_msg = "An error occurred while processing the request."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
