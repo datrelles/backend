@@ -4042,11 +4042,11 @@ def post_image_material_imagen_despiece():
         cod_material = request.form['cod_material']
         empresa = 20
         secuencia = 1
-        nombre_vista = request.form.get('nombre_vista')
         usuario = request.form.get('user_shineray')
 
         if 'imagen' not in request.files:
             return jsonify({"error": "No image part"}), 400
+
         file = request.files['imagen']
         if file:
             filename = secure_filename(file.filename)
@@ -4054,12 +4054,18 @@ def post_image_material_imagen_despiece():
 
             # Crear la miniatura
             original_image = Image.open(BytesIO(image_data))
-            original_image.thumbnail((240, 240))  # Tamaño de la miniatura
+
+            # Convertir la imagen a RGB si es necesario
+            if original_image.mode in ('P', 'RGBA'):
+                original_image = original_image.convert('RGB')
+
+            # Redimensionar la imagen para crear la miniatura
+            original_image.thumbnail((240, 240))
             thumbnail_io = BytesIO()
             original_image.save(thumbnail_io, format='JPEG')
             thumbnail_data = thumbnail_io.getvalue()
 
-            # Buscar el registro existente
+            # Buscar el registro existente en la base de datos
             existing_record = st_material_imagen.query().filter_by(
                 cod_tipo_material=cod_tipo_material,
                 cod_material=cod_material,
@@ -4069,7 +4075,7 @@ def post_image_material_imagen_despiece():
 
             if existing_record:
                 # Actualizar el registro existente
-                existing_record.nombre_vista = nombre_vista
+                existing_record.nombre_vista = filename
                 existing_record.imagen = image_data
                 existing_record.nombre_archivo = filename
                 existing_record.miniatura = thumbnail_data
@@ -4081,7 +4087,7 @@ def post_image_material_imagen_despiece():
                     cod_material=cod_material,
                     empresa=empresa,
                     secuencia=secuencia,
-                    nombre_vista=nombre_vista,
+                    nombre_vista=filename,
                     imagen=image_data,
                     nombre_archivo=filename,
                     miniatura=thumbnail_data,
@@ -4089,11 +4095,14 @@ def post_image_material_imagen_despiece():
                 )
                 db.session.add(material_image)
 
+            # Guardar los cambios en la base de datos
             db.session.commit()
 
         return jsonify({"status": "ok"})
 
     except Exception as e:
-        db.session.rollback()  # Revierte los cambios en caso de error
+        # Revierte los cambios en caso de error
+        db.session.rollback()
         error_msg = "An error occurred while processing the request."
+        print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
