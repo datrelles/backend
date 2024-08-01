@@ -799,7 +799,6 @@ def obtener_clientes_por_codigo():
         data = request.get_json()
         empresa = data.get('empresa', None)
         cod_cliente = data.get('cod_cliente', None)
-        print(cod_cliente)
         if not cod_cliente:
             return jsonify({'error': 'Falta ingresar el codigo de cliente.'}), 404
 
@@ -813,7 +812,7 @@ def obtener_clientes_por_codigo():
 
         clientes = query.all()
         serialized_clientes = []
-
+        print(clientes)
         for cliente in clientes:
             empresa = cliente.empresa if cliente.empresa else ""
             cod_cliente = cliente.cod_cliente if cliente.cod_cliente else ""
