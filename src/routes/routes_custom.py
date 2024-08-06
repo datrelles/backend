@@ -2287,7 +2287,7 @@ def generate_combo():
                            """,
                            param1=item.cod_producto_f)
             result = cursor.fetchone()
-            if result[0] or result[1] is None:
+            if result[0] is None or result[1] is None:
                 return jsonify({'error': 'No existe lista de precios para: ' + item.cod_producto_f })
             max_precio = float(result[0]) * int(item.cantidad_f)
             min_precio = float(result[1]) * int(item.cantidad_f)
