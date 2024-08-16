@@ -4293,4 +4293,34 @@ def post_modelo_crecimiento_bi():
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
 
+
+@bp.route('/get_modelo_crecimiento_bi', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_modelo_crecimiento_bi():
+    try:
+        # Obtener todos los registros de la tabla
+        records = st_modelo_crecimiento_bi.query().all()
+
+        # Convertir los registros a una lista de diccionarios
+        records_data = []
+        for record in records:
+            records_data.append({
+                "empresa": record.empresa,
+                "cod_modelo": record.cod_modelo,
+                #"valor": record.valor,
+                "periodo": record.periodo,
+                "cod_despiece": record.cod_despiece,
+                "nivel": record.nivel,
+                #"anio": record.anio
+            })
+
+        return jsonify(records_data), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while processing the request."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+
 #-----------------------------------------------------------------------------------------------
