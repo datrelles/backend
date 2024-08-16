@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Index, VARCHAR, NVARCHAR, text, CHAR,Float, Unicode
+from sqlalchemy import Column, DateTime, Index, VARCHAR, NVARCHAR, text, CHAR,Float, Unicode, ForeignKey
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
@@ -63,6 +63,27 @@ class st_producto_rep_anio(Base):
     usuario_modifica = Column(VARCHAR(20))
     fecha_modificacion = Column(DateTime)
     cod_producto = Column(VARCHAR(14), nullable=False, primary_key=True)
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class st_modelo_crecimiento_bi(Base):
+    __tablename__ = 'ST_MODELO_CRECIMIENTO_BI'
+    __table_args__ = (
+        Index("FK_MOD_CRE_BI_DESPIEC", "cod_despiece", "empresa"),
+        Index("PK_MOD_CRE_BI", "empresa", "cod_modelo", "periodo"),
+        {'schema': 'stock'}
+    )
+
+    empresa = Column(NUMBER(precision=2, scale=0), primary_key=True, nullable=False)
+    cod_modelo = Column(VARCHAR(14), primary_key=True, nullable=False)
+    valor = Column(NUMBER(precision=5, scale=0))
+    periodo = Column(NUMBER(precision=4, scale=0), primary_key=True, nullable=False)
+    cod_despiece = Column(VARCHAR(20), ForeignKey('stock.ST_DESPIECE.cod_despiece'), nullable=False)
+    nivel = Column(NUMBER(precision=1, scale=0), default=3, nullable=False)
+    anio = Column(NUMBER(precision=4, scale=0))
+
+
     @classmethod
     def query(cls):
         return db.session.query(cls)
