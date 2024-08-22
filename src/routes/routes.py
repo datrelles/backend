@@ -18,12 +18,12 @@ from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque
 from src.models.tipo_aforo import StTipoAforo
 from src.models.comprobante_electronico import tc_doc_elec_recibidos
 from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, st_casos_tipo_problema, st_casos_url, ArCiudades, ADcantones, ADprovincias
-from src.models.despiece_repuestos import st_producto_despiece, st_despiece, st_producto_rep_anio
+from src.models.despiece_repuestos import st_producto_despiece, st_despiece, st_producto_rep_anio, st_modelo_crecimiento_bi
 from src.models.images import st_material_imagen, st_despiece_d_imagen
 from src.config.database import db, engine, session
 from sqlalchemy import func, text, bindparam, Integer, event, desc
-from sqlalchemy.orm import scoped_session
-from sqlalchemy import and_, or_, func, tuple_
+from sqlalchemy.orm import scoped_session, aliased
+from sqlalchemy import and_, or_, func, tuple_, select, distinct, not_
 import logging
 import datetime
 from datetime import datetime, date
@@ -3734,7 +3734,7 @@ def get_politica_credito_ecommerce(db, p_cod_politica):
         # Asegúrate de cerrar el cursor y la conexión
         if cursor:
             cursor.close()
-#--------------------------------
+#-----------------------------------------------------------------------------------------------------
 @bp.route('/get_invoice_ecommerce', methods = ['GET'])
 @jwt_required()
 @cross_origin()
@@ -4106,3 +4106,263 @@ def post_image_material_imagen_despiece():
         error_msg = "An error occurred while processing the request."
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
+
+
+
+
+#-----------------------------------UPDATE MODELOS_MOTOS MODELOS_DESPIECE------------------------------------------------------------
+@bp.route('/get_list_model_motorcycle', methods = ['GET'])
+@jwt_required()
+@cross_origin()
+def get_list_model_motorcycle():
+    try:
+        # Alias de la tabla para mayor claridad
+        A = aliased(Producto)
+        empresa = request.args.get("empresa")
+
+        # Expresiones regulares y reemplazos de texto
+
+        modelo_expr = func.ltrim(
+            func.replace(
+                func.replace(
+                    func.replace(
+                        func.replace(
+                            func.replace(
+                                func.regexp_replace(
+                                    A.nombre,
+                                    r'201[0-9]|20[2-9][0-9]|2030|CR|USB NEW|\.|USB|PANA|SCO|AÑO|XX XX|XX|ROJO|ELEC|NIN|NEGRO|AZUL|CAFE|CHASIS|BLANCO|/|MATE|PLOMO|AMARILLO|NARANJA|BULTACO|VERDE|PLATEADO',
+                                    ''
+                                ),
+                                '(', ''
+                            ),
+                            ')', ''
+                        ),
+                        '*', ''
+                    ),
+                    'MOTOR', ''
+                ),
+                'MOT', ''
+            )
+        ).label('modelo')
+
+        # Consulta
+        query = (
+            select(
+                distinct(A.cod_producto),
+                modelo_expr,
+                func.ltrim(A.nombre).label('producto')
+            )
+            .where(
+                and_(
+                    A.empresa == empresa,
+                    A.cod_producto.notin_([
+                        'MPA52XX000100', 'MPA106XX000100', 'MPA115XX000100',
+                        'MMO33XX000100', 'MPA116XX000100', 'MMO32XX000100',
+                        'MPA107XX000100', 'TMTMT0001', 'T61MZ2013'
+                    ]),
+                    A.cod_modelo_cat == 'PRO2',
+                    or_(
+                        A.cod_item_cat == 'T',
+                        A.cod_item_cat == 'E'
+                    ),
+                    A.es_grupo_modelo == 1,
+                    A.activo == 'S'
+                )
+            )
+            .order_by(A.cod_producto, modelo_expr.desc(), func.ltrim(A.nombre))
+        )
+
+        # Ejecutar la consulta
+        results = db.session.execute(query).fetchall()
+
+        # Convertir los resultados a una lista de diccionarios
+        result_list = [
+            {
+                "cod_producto": row[0],
+                "modelo": row[1],
+                "producto": row[2]
+            }
+            for row in results
+        ]
+
+        # Devolver los resultados como JSON
+        return jsonify(result_list), 200
+
+    except Exception as e:
+        # Registrar el error
+        logging.error(f"Error al obtener productos filtrados: {str(e)}")
+
+        # Devolver un mensaje de error al cliente
+        return jsonify({"error": "Ocurrió un error al procesar la solicitud"}), 500
+
+
+@bp.route('/get_list_model_despiece_motorcycle', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_despiece_data():
+    try:
+        # Definición de los filtros para la consulta
+        empresa_id = request.args.get("empresa")
+        nivel_value = 3
+        cod_despiece_padre_values = ['SPA', 'SCR', 'SMT', 'SNJ', 'SPD', 'SSC', 'EBI']
+        cod_despiece_values = [
+            'SPA150-00', 'SCR200-06', 'SCR250-06', 'SPA150-10', 'SPA150-15', 'SNJ250-II',
+            'SMT125-30', 'SCR200-6E', 'SPA150-1F', 'SPA200-18', 'SSC150-JD', 'SCR150-AR',
+            'SSC175-CT', 'SPA250-11', 'EBI600-FL', 'EBIPONY-5', 'SPA250-SP', 'SSC150-CM',
+            'SPA150-24', 'SCR250-18', 'SCR250-08', 'SPA200-24', 'SCRSMX-8', 'SPA125-22',
+            'EBILEO-MAX', 'EBIE-MAX', 'SPA150-CS', 'SCR300-13', 'SPAGN-X', 'EBIAVATAR',
+            'SSC180-XP', 'SCR200-XT', 'SPA170-ST', 'SPA200-ST'
+        ]
+
+        # Realización de la consulta
+        despiece_data = StDespiece.query().filter(
+            StDespiece.empresa == empresa_id,
+            StDespiece.nivel == nivel_value,
+            StDespiece.cod_despiece_padre.in_(cod_despiece_padre_values),
+            StDespiece.cod_despiece.in_(cod_despiece_values)
+        ).all()
+
+        # Construcción de la respuesta
+        despieces = []
+        for despiece in despiece_data:
+            dict = {
+                "cod_despiece": despiece.cod_despiece,
+                "nombre_i": despiece.nombre_i
+            }
+            despieces.append(dict)
+
+        return jsonify(despieces), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while processing the request."
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+
+@bp.route('/post_modelo_crecimiento_bi', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def post_modelo_crecimiento_bi():
+    try:
+        # Obtener los datos del JSON
+        data = request.get_json()
+
+        # Acceder a los datos directamente
+        empresa = data['empresa']
+        cod_modelo = data['cod_modelo']
+        #valor = data['valor']
+        periodo = data['periodo']
+        cod_despiece = data['cod_despiece']
+        nivel = data.get('nivel', 3)  # Valor por defecto es 3 si no se proporciona
+        #anio = data['anio']
+
+        # Verificar si el registro ya existe
+        existing_record = st_modelo_crecimiento_bi.query().filter_by(
+            empresa=empresa,
+            cod_modelo=cod_modelo,
+            periodo=periodo
+        ).first()
+
+        if existing_record:
+            # Actualizar el registro existente
+            #existing_record.valor = valor
+            existing_record.cod_despiece = cod_despiece
+            existing_record.nivel = nivel
+            #existing_record.anio = anio
+        else:
+            # Crear un nuevo registro
+            nuevo_modelo_crecimiento_bi = st_modelo_crecimiento_bi(
+                empresa=empresa,
+                cod_modelo=cod_modelo,
+                #valor=valor,
+                periodo=periodo,
+                cod_despiece=cod_despiece,
+                nivel=nivel,
+                #anio=anio
+            )
+            db.session.add(nuevo_modelo_crecimiento_bi)
+
+        # Guardar los cambios en la base de datos
+        db.session.commit()
+
+        return jsonify({"status": "ok"})
+
+    except Exception as e:
+        # Revierte los cambios en caso de error
+        db.session.rollback()
+        error_msg = "An error occurred while processing the request."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+
+@bp.route('/get_modelo_crecimiento_bi', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_modelo_crecimiento_bi():
+    try:
+        # Obtener todos los registros de la tabla
+        records = st_modelo_crecimiento_bi.query().all()
+
+        # Convertir los registros a una lista de diccionarios
+        records_data = []
+        for record in records:
+            records_data.append({
+                "empresa": record.empresa,
+                "cod_modelo": record.cod_modelo,
+                "valor": record.valor,
+                "periodo": record.periodo,
+                "cod_despiece": record.cod_despiece,
+                "nivel": record.nivel,
+                "anio": record.anio
+            })
+
+        return jsonify(records_data), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while processing the request."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+
+@bp.route('/update_modelo_crecimiento_bi', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def update_modelo_crecimiento_bi():
+    try:
+        # Obtener los parámetros de la solicitud
+        data = request.get_json()
+        cod_modelo = data.get('cod_modelo')
+        cod_despiece = data.get('cod_despiece')
+        anio = data.get('anio')
+        valor = data.get('valor')
+
+        # Validar que los campos requeridos están presentes
+        if not cod_modelo or not cod_despiece:
+            return jsonify({"error": "cod_modelo and cod_despiece are required"}), 400
+
+        # Buscar el registro en la base de datos
+        record = st_modelo_crecimiento_bi.query().filter_by(
+            cod_modelo=cod_modelo,
+            cod_despiece=cod_despiece
+        ).first()
+
+        # Si no se encuentra el registro, devolver un error
+        if not record:
+            return jsonify({"error": "Record not found"}), 404
+
+        # Actualizar los campos anio y valor
+        if anio is not None:
+            record.anio = anio
+        if valor is not None:
+            record.valor = valor
+
+        # Guardar los cambios en la base de datos
+        db.session.commit()
+
+        return jsonify({"message": "Record updated successfully"}), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while processing the request."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+#-----------------------------------------------------------------------------------------------
