@@ -4308,11 +4308,11 @@ def get_modelo_crecimiento_bi():
             records_data.append({
                 "empresa": record.empresa,
                 "cod_modelo": record.cod_modelo,
-                #"valor": record.valor,
+                "valor": record.valor,
                 "periodo": record.periodo,
                 "cod_despiece": record.cod_despiece,
                 "nivel": record.nivel,
-                #"anio": record.anio
+                "anio": record.anio
             })
 
         return jsonify(records_data), 200
@@ -4322,5 +4322,47 @@ def get_modelo_crecimiento_bi():
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
 
+
+@bp.route('/update_modelo_crecimiento_bi', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def update_modelo_crecimiento_bi():
+    try:
+        # Obtener los parámetros de la solicitud
+        data = request.get_json()
+        cod_modelo = data.get('cod_modelo')
+        cod_despiece = data.get('cod_despiece')
+        anio = data.get('anio')
+        valor = data.get('valor')
+
+        # Validar que los campos requeridos están presentes
+        if not cod_modelo or not cod_despiece:
+            return jsonify({"error": "cod_modelo and cod_despiece are required"}), 400
+
+        # Buscar el registro en la base de datos
+        record = st_modelo_crecimiento_bi.query().filter_by(
+            cod_modelo=cod_modelo,
+            cod_despiece=cod_despiece
+        ).first()
+
+        # Si no se encuentra el registro, devolver un error
+        if not record:
+            return jsonify({"error": "Record not found"}), 404
+
+        # Actualizar los campos anio y valor
+        if anio is not None:
+            record.anio = anio
+        if valor is not None:
+            record.valor = valor
+
+        # Guardar los cambios en la base de datos
+        db.session.commit()
+
+        return jsonify({"message": "Record updated successfully"}), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while processing the request."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
 
 #-----------------------------------------------------------------------------------------------
