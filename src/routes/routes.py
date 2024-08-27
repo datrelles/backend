@@ -4204,14 +4204,14 @@ def get_despiece_data():
         # Definición de los filtros para la consulta
         empresa_id = request.args.get("empresa")
         nivel_value = 3
-        cod_despiece_padre_values = ['SPA', 'SCR', 'SMT', 'SNJ', 'SPD', 'SSC', 'EBI']
+        cod_despiece_padre_values = ['SPA', 'SCR', 'SMT', 'SNJ', 'SPD', 'SSC', 'EBI', 'BSC']
         cod_despiece_values = [
             'SPA150-00', 'SCR200-06', 'SCR250-06', 'SPA150-10', 'SPA150-15', 'SNJ250-II',
             'SMT125-30', 'SCR200-6E', 'SPA150-1F', 'SPA200-18', 'SSC150-JD', 'SCR150-AR',
             'SSC175-CT', 'SPA250-11', 'EBI600-FL', 'EBIPONY-5', 'SPA250-SP', 'SSC150-CM',
             'SPA150-24', 'SCR250-18', 'SCR250-08', 'SPA200-24', 'SCRSMX-8', 'SPA125-22',
             'EBILEO-MAX', 'EBIE-MAX', 'SPA150-CS', 'SCR300-13', 'SPAGN-X', 'EBIAVATAR',
-            'SSC180-XP', 'SCR200-XT', 'SPA170-ST', 'SPA200-ST'
+            'SSC180-XP', 'SCR200-XT', 'SPA170-ST', 'SPA200-ST', 'BSC150-FR'
         ]
 
         # Realización de la consulta
