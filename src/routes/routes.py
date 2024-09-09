@@ -5,7 +5,7 @@ from io import BytesIO
 import base64
 from src.models.users import Usuario, Empresa
 from src.models.tipo_comprobante import TipoComprobante
-from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
+from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor, st_transportistas
 from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StTracking, StPackinglist, stProformaImpFp
 from src.models.productos import Producto, st_lista_precio, st_gen_lista_precio
 from src.models.formula import StFormula, StFormulaD
@@ -4365,4 +4365,161 @@ def update_modelo_crecimiento_bi():
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
 
+@bp.route('/create_transportista_ecommerce', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def create_transportista():
+    try:
+
+        data = request.get_json()
+        cod_transportista = data.get('cod_transportista')
+        empresa = data.get('empresa')
+        nombre = data.get('nombre')
+        apellido1 = data.get('apellido1')
+        direccion = data.get('direccion')
+        telefono = data.get('telefono')
+        es_activo = data.get('es_activo', 1)
+        placa = data.get('placa', '')
+        cod_tipo_identificacion = data.get('cod_tipo_identificacion', '')
+        activo_ecommerce = data.get('activo_ecommerce', 1)
+
+
+        if not cod_transportista or not empresa or not nombre:
+            print('error')
+            return jsonify({"error": "Los campos cod_transportista, empresa, nombre y apellido1 son requeridos"}), 400
+
+
+        new_transportista = st_transportistas(
+            cod_transportista=cod_transportista,
+            empresa=empresa,
+            nombre=nombre,
+            apellido1=apellido1,
+            direccion=direccion,
+            telefono=telefono,
+            es_activo=es_activo,
+            placa=placa,
+            cod_tipo_identificacion=cod_tipo_identificacion,
+            activo_ecommerce=activo_ecommerce
+        )
+
+
+        db.session.add(new_transportista)
+        db.session.commit()
+
+        return jsonify({"message": "Transportista creado exitosamente"}), 201
+
+    except Exception as e:
+        error_msg = "An error occurred while creating the transportista."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+@bp.route('/update_transportista_ecommerce', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def update_transportista():
+    try:
+        data = request.get_json()
+        cod_transportista = data.get('cod_transportista')
+        empresa = data.get('empresa')
+
+        if not cod_transportista or not empresa:
+            return jsonify({"error": "Los campos cod_transportista y empresa son requeridos"}), 400
+
+        transportista = st_transportistas.query().filter_by(
+            cod_transportista=cod_transportista,
+            empresa=empresa
+        ).first()
+
+        if not transportista:
+            return jsonify({"error": "Transportista no encontrado"}), 404
+
+        transportista.nombre = data.get('nombre', transportista.nombre)
+        transportista.apellido1 = data.get('apellido1', transportista.apellido1)
+        transportista.direccion = data.get('direccion', transportista.direccion)
+        transportista.telefono = data.get('telefono', transportista.telefono)
+        transportista.es_activo = data.get('es_activo', transportista.es_activo)
+        transportista.placa = data.get('placa', transportista.placa)
+        transportista.cod_tipo_identificacion = data.get('cod_tipo_identificacion', transportista.cod_tipo_identificacion)
+        transportista.activo_ecommerce = data.get('activo_ecommerce', transportista.activo_ecommerce)
+
+        db.session.commit()
+
+        return jsonify({"message": "Transportista actualizado exitosamente"}), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while updating the transportista."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+@bp.route('/delete_transportista_ecommerce', methods=['DELETE'])
+@jwt_required()
+@cross_origin()
+def delete_transportista():
+    try:
+        data = request.get_json()
+        cod_transportista = data.get('cod_transportista')
+        empresa = data.get('empresa')
+
+        if not cod_transportista or not empresa:
+            return jsonify({"error": "Los campos cod_transportista y empresa son requeridos"}), 400
+
+        transportista = st_transportistas.query().filter_by(
+            cod_transportista=cod_transportista,
+            empresa=empresa
+        ).first()
+
+        if not transportista:
+            return jsonify({"error": "Transportista no encontrado"}), 404
+
+        db.session.delete(transportista)
+        db.session.commit()
+
+        return jsonify({"message": "Transportista eliminado exitosamente"}), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while deleting the transportista."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+@bp.route('/get_transportistas_ecommerce', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_transportistas():
+    try:
+        # Obtiene el parámetro de consulta 'empresa' de la solicitud
+        empresa = request.args.get('empresa')
+
+        # Validar que se haya proporcionado el parámetro 'empresa'
+        if not empresa:
+            return jsonify({"error": "El campo empresa es requerido"}), 400
+
+        # Consulta para obtener todos los transportistas de la empresa especificada
+        transportistas = st_transportistas.query().filter(
+            st_transportistas.empresa == empresa,
+            st_transportistas.activo_ecommerce == 1
+        ).all()
+
+        # Formatear los resultados en una lista de diccionarios
+        transportistas_list = [
+            {
+                'cod_transportista': t.cod_transportista,
+                'empresa': t.empresa,
+                'nombre': t.nombre,
+                'apellido1': t.apellido1,
+                'direccion': t.direccion,
+                'telefono': t.telefono,
+                'es_activo': t.es_activo,
+                'placa': t.placa,
+                'cod_tipo_identificacion': t.cod_tipo_identificacion,
+                'activo_ecommerce': t.activo_ecommerce
+            }
+            for t in transportistas
+        ]
+
+        return jsonify(transportistas_list), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while fetching transportistas."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
 #-----------------------------------------------------------------------------------------------
