@@ -272,3 +272,51 @@ class st_metodos_de_pago_ecommerce(Base):
     def query(cls):
         return db.session.query(cls)
 
+
+class st_cab_credito_directo(Base):
+    __tablename__ = 'st_cab_credito_directo'
+    __table_args__ = {'schema': 'stock'}
+
+    empresa = Column(NUMBER(2), nullable=False)
+    id_transaction = Column(VARCHAR(255), primary_key=True, nullable=False)
+    internal_transaction_reference = Column(VARCHAR(255))
+    total = Column(NUMBER(10, 2))
+    sub_total = Column(NUMBER(10, 2))
+    discount_percentage = Column(NUMBER(10, 2))
+    discount_amount = Column(NUMBER(10, 2))
+    currency = Column(VARCHAR(3))
+    id_guia_servientrega = Column(VARCHAR(255))
+    client_type_id = Column(VARCHAR(2))
+    client_name = Column(VARCHAR(100))
+    client_last_name = Column(VARCHAR(100))
+    client_id = Column(VARCHAR(20))
+    client_address = Column(VARCHAR(255))
+    cost_shiping = Column(NUMBER(10, 2))
+    cod_orden_ecommerce = Column(VARCHAR(24))
+    cod_comprobante = Column(VARCHAR(24))
+    fecha = Column(DateTime, default='SYSDATE')
+    shiping_discount = Column(NUMBER(10, 2))
+    cuotas = Column(NUMBER(3))
+    estado_aprobacion = Column(VARCHAR(20))
+    fecha_aprobacion = Column(DateTime)
+    descripcion = Column(VARCHAR(255))
+    id_agencia_transporte = Column(VARCHAR(20))
+    nombre_agencia_transporte = Column(VARCHAR(100))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class st_det_credito_directo(Base):
+    __tablename__ = 'st_det_credito_directo'
+    __table_args__ = {'schema': 'stock'}
+
+    empresa = Column(NUMBER(2),  nullable=False, primary_key=True)
+    id_transaction = Column(VARCHAR(255), ForeignKey('stock.st_cab_credito_directo.id_transaction'), nullable=False , primary_key=True)
+    cod_producto = Column(VARCHAR(20),  nullable=False, primary_key=True)
+    price = Column(NUMBER(10, 2))
+    quantity = Column(NUMBER(10))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
