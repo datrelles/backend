@@ -5,12 +5,12 @@ from io import BytesIO
 import base64
 from src.models.users import Usuario, Empresa
 from src.models.tipo_comprobante import TipoComprobante
-from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor
+from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor, st_transportistas
 from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StTracking, StPackinglist, stProformaImpFp
 from src.models.productos import Producto, st_lista_precio, st_gen_lista_precio
 from src.models.formula import StFormula, StFormulaD
 from src.models.despiece import StDespiece, StDespieceD
-from src.models.st_proforma import st_proforma, st_proforma_movimiento, st_cab_deuna, st_det_deuna, st_cab_datafast, st_det_datafast, st_metodos_de_pago_ecommerce
+from src.models.st_proforma import st_proforma, st_proforma_movimiento, st_cab_deuna, st_det_deuna, st_cab_datafast, st_det_datafast, st_metodos_de_pago_ecommerce, st_cab_credito_directo, st_det_credito_directo
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
 from src.models.financiero import StFinCabCredito,StFinDetCredito,StFinClientes,StFinPagos
@@ -4364,5 +4364,273 @@ def update_modelo_crecimiento_bi():
         error_msg = "An error occurred while processing the request."
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
+
+@bp.route('/create_transportista_ecommerce', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def create_transportista():
+    try:
+
+        data = request.get_json()
+        cod_transportista = data.get('cod_transportista')
+        empresa = data.get('empresa')
+        nombre = data.get('nombre')
+        apellido1 = data.get('apellido1')
+        direccion = data.get('direccion')
+        telefono = data.get('telefono')
+        es_activo = data.get('es_activo', 1)
+        placa = data.get('placa', '')
+        cod_tipo_identificacion = data.get('cod_tipo_identificacion', '')
+        activo_ecommerce = data.get('activo_ecommerce', 1)
+
+
+        if not cod_transportista or not empresa or not nombre:
+            print('error')
+            return jsonify({"error": "Los campos cod_transportista, empresa, nombre y apellido1 son requeridos"}), 400
+
+
+        new_transportista = st_transportistas(
+            cod_transportista=cod_transportista,
+            empresa=empresa,
+            nombre=nombre,
+            apellido1=apellido1,
+            direccion=direccion,
+            telefono=telefono,
+            es_activo=es_activo,
+            placa=placa,
+            cod_tipo_identificacion=cod_tipo_identificacion,
+            activo_ecommerce=activo_ecommerce
+        )
+
+
+        db.session.add(new_transportista)
+        db.session.commit()
+
+        return jsonify({"message": "Transportista creado exitosamente"}), 201
+
+    except Exception as e:
+        error_msg = "An error occurred while creating the transportista."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+@bp.route('/update_transportista_ecommerce', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def update_transportista():
+    try:
+        data = request.get_json()
+        cod_transportista = data.get('cod_transportista')
+        empresa = data.get('empresa')
+
+        if not cod_transportista or not empresa:
+            return jsonify({"error": "Los campos cod_transportista y empresa son requeridos"}), 400
+
+        transportista = st_transportistas.query().filter_by(
+            cod_transportista=cod_transportista,
+            empresa=empresa
+        ).first()
+
+        if not transportista:
+            return jsonify({"error": "Transportista no encontrado"}), 404
+
+        transportista.nombre = data.get('nombre', transportista.nombre)
+        transportista.apellido1 = data.get('apellido1', transportista.apellido1)
+        transportista.direccion = data.get('direccion', transportista.direccion)
+        transportista.telefono = data.get('telefono', transportista.telefono)
+        transportista.es_activo = data.get('es_activo', transportista.es_activo)
+        transportista.placa = data.get('placa', transportista.placa)
+        transportista.cod_tipo_identificacion = data.get('cod_tipo_identificacion', transportista.cod_tipo_identificacion)
+        transportista.activo_ecommerce = data.get('activo_ecommerce', transportista.activo_ecommerce)
+
+        db.session.commit()
+
+        return jsonify({"message": "Transportista actualizado exitosamente"}), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while updating the transportista."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+@bp.route('/delete_transportista_ecommerce', methods=['DELETE'])
+@jwt_required()
+@cross_origin()
+def delete_transportista():
+    try:
+        data = request.get_json()
+        cod_transportista = data.get('cod_transportista')
+        empresa = data.get('empresa')
+
+        if not cod_transportista or not empresa:
+            return jsonify({"error": "Los campos cod_transportista y empresa son requeridos"}), 400
+
+        transportista = st_transportistas.query().filter_by(
+            cod_transportista=cod_transportista,
+            empresa=empresa
+        ).first()
+
+        if not transportista:
+            return jsonify({"error": "Transportista no encontrado"}), 404
+
+        db.session.delete(transportista)
+        db.session.commit()
+
+        return jsonify({"message": "Transportista eliminado exitosamente"}), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while deleting the transportista."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+@bp.route('/get_transportistas_ecommerce', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_transportistas():
+    try:
+        # Obtiene el parámetro de consulta 'empresa' de la solicitud
+        empresa = request.args.get('empresa')
+
+        # Validar que se haya proporcionado el parámetro 'empresa'
+        if not empresa:
+            return jsonify({"error": "El campo empresa es requerido"}), 400
+
+        # Consulta para obtener todos los transportistas de la empresa especificada
+        transportistas = st_transportistas.query().filter(
+            st_transportistas.empresa == empresa,
+            st_transportistas.activo_ecommerce == 1
+        ).all()
+
+        # Formatear los resultados en una lista de diccionarios
+        transportistas_list = [
+            {
+                'cod_transportista': t.cod_transportista,
+                'empresa': t.empresa,
+                'nombre': t.nombre,
+                'apellido1': t.apellido1,
+                'direccion': t.direccion,
+                'telefono': t.telefono,
+                'es_activo': t.es_activo,
+                'placa': t.placa,
+                'cod_tipo_identificacion': t.cod_tipo_identificacion,
+                'activo_ecommerce': t.activo_ecommerce
+            }
+            for t in transportistas
+        ]
+
+        return jsonify(transportistas_list), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while fetching transportistas."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+@bp.route('/get_cab_credito_directo', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_cab_credito_directo():
+    try:
+        # Obtener todos los registros de la cabecera
+        records = st_cab_credito_directo.query().all()
+
+        # Convertir los registros a una lista de diccionarios
+        records_data = []
+        for record in records:
+            records_data.append({
+                "empresa": record.empresa,
+                "id_transaction": record.id_transaction,
+                "internal_transaction_reference": record.internal_transaction_reference,
+                "total": record.total,
+                "sub_total": record.sub_total,
+                "discount_percentage": record.discount_percentage,
+                "discount_amount": record.discount_amount,
+                "currency": record.currency,
+                "id_guia_servientrega": record.id_guia_servientrega,
+                "client_type_id": record.client_type_id,
+                "client_name": record.client_name,
+                "client_last_name": record.client_last_name,
+                "client_id": record.client_id,
+                "client_address": record.client_address,
+                "cost_shiping": record.cost_shiping,
+                "cod_orden_ecommerce": record.cod_orden_ecommerce,
+                "cod_comprobante": record.cod_comprobante,
+                "fecha": record.fecha.strftime('%d/%m/%Y'),
+                "shiping_discount": record.shiping_discount,
+                "cuotas": record.cuotas,
+                "estado_aprobacion": record.estado_aprobacion,
+                "fecha_aprobacion": record.fecha_aprobacion,
+                "descripcion": record.descripcion,
+                "id_agencia_transporte": record.id_agencia_transporte,
+                "nombre_agencia_transporte": record.nombre_agencia_transporte
+            })
+
+        return jsonify(records_data), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while processing the request."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+@bp.route('/update_cab_credito_directo', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def update_cab_credito_directo():
+    try:
+        # Obtener los datos del JSON
+        data = request.get_json()
+        id_transaction = data.get('id_transaction')
+
+        # Validar que el ID de transacción está presente
+        if not id_transaction:
+            return jsonify({"error": "id_transaction is required"}), 400
+
+        # Buscar el registro en la base de datos
+        record = st_cab_credito_directo.query().filter_by(id_transaction=id_transaction).first()
+
+        # Si no se encuentra el registro, devolver un error
+        if not record:
+            return jsonify({"error": "Record not found"}), 404
+
+        # Actualizar los campos si están presentes en los datos
+        for key, value in data.items():
+            if hasattr(record, key):
+                setattr(record, key, value)
+
+        # Guardar los cambios en la base de datos
+        db.session.commit()
+
+        return jsonify({"message": "Record updated successfully"}), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while processing the request."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+@bp.route('/get_det_credito_directo', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_det_credito_directo():
+    try:
+        # Obtener todos los registros del detalle
+        id_transation = request.args.get('id_transaction')
+        records = st_det_credito_directo.query().filter(
+            st_det_credito_directo.id_transaction==id_transation
+        ).all()
+        # Convertir los registros a una lista de diccionarios
+        records_data = []
+        for record in records:
+            records_data.append({
+                "empresa": record.empresa,
+                "id_transaction": record.id_transaction,
+                "cod_producto": record.cod_producto,
+                "price": record.price,
+                "quantity": record.quantity
+            })
+        return jsonify(records_data), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while processing the request."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+
 
 #-----------------------------------------------------------------------------------------------

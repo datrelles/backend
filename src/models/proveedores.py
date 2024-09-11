@@ -168,3 +168,26 @@ class TgAgencia(Base):
     cod_sitio = Column(VARCHAR(3), nullable=False)
     es_autorizado_sri = Column(NUMBER(1, 0, False), nullable=False, server_default=text("0 "))
     tipo_relacion_polcre = Column(VARCHAR(1), nullable=False, server_default=text("'N' "))
+
+
+
+class st_transportistas(Base):
+    __tablename__ = 'ST_TRANSPORTISTA'
+    __table_args__ = (
+        {'schema': 'stock'}  # Ajusta el esquema si es necesario
+    )
+
+    cod_transportista = Column(VARCHAR(14), primary_key=True, nullable=False)
+    empresa = Column(NUMBER(2, 0, False), nullable=False)
+    nombre = Column(VARCHAR(50), nullable=False)
+    apellido1 = Column(VARCHAR(40), nullable=False)
+    direccion = Column(VARCHAR(50))
+    telefono = Column(VARCHAR(20))
+    es_activo = Column(NUMBER(1, 0, False), nullable=False, server_default=text("1"))
+    placa = Column(VARCHAR(20))
+    cod_tipo_identificacion = Column(NUMBER(2, 0, False))
+    activo_ecommerce = Column(NUMBER(1, 0, False), server_default=text("0"))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
