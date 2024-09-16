@@ -271,8 +271,6 @@ class st_metodos_de_pago_ecommerce(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
-
-
 class st_cab_credito_directo(Base):
     __tablename__ = 'st_cab_credito_directo'
     __table_args__ = {'schema': 'stock'}
@@ -306,7 +304,6 @@ class st_cab_credito_directo(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
-
 class st_det_credito_directo(Base):
     __tablename__ = 'st_det_credito_directo'
     __table_args__ = {'schema': 'stock'}
@@ -314,6 +311,108 @@ class st_det_credito_directo(Base):
     empresa = Column(NUMBER(2),  nullable=False, primary_key=True)
     id_transaction = Column(VARCHAR(255), ForeignKey('stock.st_cab_credito_directo.id_transaction'), nullable=False , primary_key=True)
     cod_producto = Column(VARCHAR(20),  nullable=False, primary_key=True)
+    price = Column(NUMBER(10, 2))
+    quantity = Column(NUMBER(10))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+
+class st_cab_datafast_b2b(Base):
+    __tablename__ = 'st_cab_datafast_b2b'
+    __table_args__ = {'schema': 'stock'}
+
+    empresa = Column(NUMBER(2), nullable=False)
+    id_transaction = Column(VARCHAR(255), primary_key=True, nullable=False)
+    payment_type = Column(VARCHAR(10))
+    payment_brand = Column(VARCHAR(40))
+    total = Column(NUMBER(10, 2))
+    sub_total = Column(NUMBER(10, 2))
+    discount_percentage = Column(NUMBER(10, 2))
+    discount_amount = Column(NUMBER(10, 2))
+    currency = Column(VARCHAR(3))
+    batch_no = Column(VARCHAR(10))
+    id_guia_servientrega = Column(VARCHAR(255))
+    card_type = Column(VARCHAR(10))
+    bin_card = Column(VARCHAR(6))
+    last_4_digits = Column(VARCHAR(4))
+    holder = Column(VARCHAR(100))
+    expiry_month = Column(VARCHAR(2))
+    expiry_year = Column(VARCHAR(4))
+    acquirer_code = Column(VARCHAR(20))
+    client_type_id = Column(VARCHAR(2))
+    client_name = Column(VARCHAR(100))
+    client_last_name = Column(VARCHAR(100))
+    client_id = Column(VARCHAR(20))
+    client_address = Column(VARCHAR(255))
+    cost_shiping_calculate = Column(NUMBER(10, 2))
+    shiping_discount = Column(NUMBER(10, 2))
+    cod_orden_ecommerce = Column(VARCHAR(24))
+    cod_comprobante = Column(VARCHAR(24))
+    fecha = Column(DateTime, nullable=False)
+    cuotas = Column(NUMBER(3))
+    descripcion = Column(VARCHAR(255))
+    id_agencia_transporte = Column(VARCHAR(20))
+    nombre_agencia_transporte = Column(VARCHAR(100))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class st_det_datafast_b2b(Base):
+    __tablename__ = 'st_det_datafast_b2b'
+    __table_args__ = {'schema': 'stock'}
+
+    empresa = Column(NUMBER(2), primary_key=True, nullable=False)
+    id_transaction = Column(VARCHAR(32), ForeignKey('stock.st_cab_datafast_b2b.id_transaction'), primary_key=True, nullable=False)
+    cod_producto = Column(VARCHAR(20), primary_key=True, nullable=False)
+    price = Column(NUMBER(10, 2))
+    quantity = Column(NUMBER(10))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class st_cab_deuna_b2b(Base):
+    __tablename__ = 'st_cab_deuna_b2b'
+    __table_args__ = {'schema': 'stock'}
+
+    empresa = Column(NUMBER(2), primary_key=True, nullable=False)
+    id_transaction = Column(VARCHAR(255), primary_key=True, nullable=False)
+    internal_transaction_reference = Column(VARCHAR(255))
+    total = Column(NUMBER(10, 2))
+    sub_total = Column(NUMBER(10, 2))
+    discount_percentage = Column(NUMBER(10, 2))
+    discount_amount = Column(NUMBER(10, 2))
+    currency = Column(VARCHAR(3))
+    id_guia_servientrega = Column(VARCHAR(255))
+    client_type_id = Column(VARCHAR(2))
+    client_name = Column(VARCHAR(100))
+    client_last_name = Column(VARCHAR(100))
+    client_id = Column(VARCHAR(20))
+    client_address = Column(VARCHAR(255))
+    cost_shiping = Column(NUMBER(10, 2))
+    cod_orden_ecommerce = Column(VARCHAR(24))
+    cod_comprobante = Column(VARCHAR(24))
+    fecha = Column(DateTime)
+    shiping_discount = Column(NUMBER(10, 2))
+    number_of_payment = Column(NUMBER(2))
+    descripcion = Column(VARCHAR(255))
+    id_agencia_transporte = Column(VARCHAR(20))
+    nombre_agencia_transporte = Column(VARCHAR(100))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class st_det_deuna_b2b(Base):
+    __tablename__ = 'st_det_deuna_b2b'
+    __table_args__ = {'schema': 'stock'}
+
+    empresa = Column(NUMBER(2), primary_key=True, nullable=False)
+    id_transaction = Column(VARCHAR(255), ForeignKey('stock.st_cab_deuna_b2b.id_transaction'), primary_key=True, nullable=False)
+    cod_producto = Column(VARCHAR(20), primary_key=True, nullable=False)
     price = Column(NUMBER(10, 2))
     quantity = Column(NUMBER(10))
 

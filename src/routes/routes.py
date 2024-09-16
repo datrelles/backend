@@ -10,7 +10,7 @@ from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StTracki
 from src.models.productos import Producto, st_lista_precio, st_gen_lista_precio
 from src.models.formula import StFormula, StFormulaD
 from src.models.despiece import StDespiece, StDespieceD
-from src.models.st_proforma import st_proforma, st_proforma_movimiento, st_cab_deuna, st_det_deuna, st_cab_datafast, st_det_datafast, st_metodos_de_pago_ecommerce, st_cab_credito_directo, st_det_credito_directo
+from src.models.st_proforma import st_proforma, st_proforma_movimiento, st_cab_deuna, st_det_deuna, st_cab_datafast, st_det_datafast, st_metodos_de_pago_ecommerce, st_cab_credito_directo, st_det_credito_directo, st_cab_datafast_b2b, st_det_datafast_b2b, st_cab_deuna_b2b, st_det_deuna_b2b
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
 from src.models.financiero import StFinCabCredito,StFinDetCredito,StFinClientes,StFinPagos
@@ -3734,7 +3734,7 @@ def get_politica_credito_ecommerce(db, p_cod_politica):
         # Asegúrate de cerrar el cursor y la conexión
         if cursor:
             cursor.close()
-#-----------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------------------------
 @bp.route('/get_invoice_ecommerce', methods = ['GET'])
 @jwt_required()
 @cross_origin()
@@ -4108,9 +4108,8 @@ def post_image_material_imagen_despiece():
         return jsonify({"error": error_msg, "details": str(e)}), 500
 
 
-
-
 #-----------------------------------UPDATE MODELOS_MOTOS MODELOS_DESPIECE------------------------------------------------------------
+
 @bp.route('/get_list_model_motorcycle', methods = ['GET'])
 @jwt_required()
 @cross_origin()
@@ -4364,7 +4363,7 @@ def update_modelo_crecimiento_bi():
         error_msg = "An error occurred while processing the request."
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
-
+#---------------------------------------TRANSPORT ECOMMERCE---------------------------------------------
 @bp.route('/create_transportista_ecommerce', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -4631,6 +4630,139 @@ def get_det_credito_directo():
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
 
+@bp.route('/get_invoice_b2b', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_invoice_b2b():
+    try:
+        filtros_params = request.args.to_dict()
+        option = filtros_params.get('pay_method').upper()  # Opción para elegir la tabla
+        invoiced = int(filtros_params.get('invoiced'))
 
+        start_date = datetime.strptime(filtros_params['start_date'],
+                                       '%d/%m/%Y') if 'start_date' in filtros_params else None
+
+        finish_date = datetime.strptime(filtros_params['finish_date'],
+                                        '%d/%m/%Y') if 'finish_date' in filtros_params else None
+        # Aumentar un día
+        if finish_date:
+            finish_date += timedelta(days=1)
+        if start_date:
+            start_date -= timedelta(days=1)
+
+        if option == 'DATAFAST' and invoiced == 1:
+            results = st_cab_datafast_b2b.query().filter(st_cab_datafast_b2b.empresa == 20,
+                                                         st_cab_datafast_b2b.cod_comprobante.isnot(None))
+            model_class = st_cab_datafast_b2b
+
+        elif option == 'DEUNA' and invoiced == 1:
+            results = st_cab_deuna_b2b.query().filter(st_cab_deuna_b2b.empresa == 20,
+                                                      st_cab_deuna_b2b.cod_comprobante.isnot(None))
+            model_class = st_cab_deuna_b2b
+
+        elif option == 'DATAFAST' and invoiced == 0:
+            results = st_cab_datafast_b2b.query().filter(st_cab_datafast_b2b.empresa == 20,
+                                                         st_cab_datafast_b2b.cod_comprobante == None)
+            model_class = st_cab_datafast_b2b
+
+        elif option == 'DEUNA' and invoiced == 0:
+            results = st_cab_deuna_b2b.query().filter(st_cab_deuna_b2b.empresa == 20,
+                                                      st_cab_deuna_b2b.cod_comprobante == None)
+            model_class = st_cab_deuna_b2b
+
+        else:
+            return jsonify({"error": "Invalid option"}), 400
+
+        # Filtrar por rango de fechas
+        if start_date is not None and finish_date is not None:
+            results = results.filter(model_class.fecha.between(start_date, finish_date))
+
+        # Obtener todos los resultados
+        results = results.all()
+
+        results_list = []
+        if not results:
+            return jsonify(results_list), 200
+
+        for result in results:
+            result_data = {
+                "empresa": result.empresa,
+                "id_transaction": result.id_transaction,
+                "total": result.total,
+                "sub_total": result.sub_total,
+                "discount_percentage": result.discount_percentage,
+                "discount_amount": result.discount_amount,
+                "currency": result.currency,
+                "id_guia_servientrega": result.id_guia_servientrega,
+                "client_type_id": result.client_type_id,
+                "client_name": result.client_name,
+                "client_last_name": result.client_last_name,
+                "client_id": result.client_id,
+                "client_address": result.client_address,
+                "cod_orden_ecommerce": result.cod_orden_ecommerce,
+                "cod_comprobante": result.cod_comprobante,
+                "fecha": result.fecha.strftime('%d/%m/%Y'),
+                "shiping_discount": result.shiping_discount
+            }
+            if option == 'DATAFAST':
+                result_data.update({
+                    "payment_type": result.payment_type,
+                    "payment_brand": result.payment_brand,
+                    "batch_no": result.batch_no,
+                    "card_type": result.card_type,
+                    "bin_card": result.bin_card,
+                    "last_4_digits": result.last_4_digits,
+                    "holder": result.holder,
+                    "expiry_month": result.expiry_month,
+                    "expiry_year": result.expiry_year,
+                    "acquirer_code": result.acquirer_code,
+                    "cost_shiping": result.cost_shiping_calculate,
+                })
+            if option == 'DEUNA':
+                result_data.update({
+                    "cost_shiping": result.cost_shiping,
+                })
+
+            results_list.append(result_data)
+
+        return jsonify(results_list), 200
+    except Exception as e:
+        print(e)
+        return jsonify({"error": str(e)}), 500
+
+@bp.route('/buy_parts_b2b/<id_code>', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def buy_parts_b2b(id_code):
+    try:
+        option = request.args.get('pay_method').upper()
+        if option == 'DATAFAST':
+            cases = st_det_datafast_b2b.query().filter(
+                st_det_datafast_b2b.id_transaction == id_code,
+                st_det_datafast_b2b.empresa == 20
+            ).all()
+        elif option == 'DEUNA':
+            cases = st_det_deuna_b2b.query().filter(
+                st_det_deuna_b2b.id_transaction == id_code,
+                st_det_deuna_b2b.empresa == 20
+            ).all()
+        else:
+            return jsonify({"error": "Invalid option"}), 400
+
+        cases_json = []
+        for case in cases:
+            case_dict = {
+                "codigo": case.cod_producto,
+                "precio": case.price,
+                "cantidad": case.quantity
+            }
+            cases_json.append(case_dict)
+
+        return jsonify(cases_json), 200
+
+    except Exception as e:
+        print(e)
+        error_msg = "An error occurred while processing the request."
+        return jsonify({"error": error_msg, "details": str(e)}), 500
 
 #-----------------------------------------------------------------------------------------------
