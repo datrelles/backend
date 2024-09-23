@@ -4369,7 +4369,6 @@ def update_modelo_crecimiento_bi():
 @cross_origin()
 def create_transportista():
     try:
-
         data = request.get_json()
         cod_transportista = data.get('cod_transportista')
         empresa = data.get('empresa')
@@ -4381,7 +4380,6 @@ def create_transportista():
         placa = data.get('placa', '')
         cod_tipo_identificacion = data.get('cod_tipo_identificacion', '')
         activo_ecommerce = data.get('activo_ecommerce', 1)
-
 
         if not cod_transportista or not empresa or not nombre:
             print('error')
@@ -4764,5 +4762,86 @@ def buy_parts_b2b(id_code):
         print(e)
         error_msg = "An error occurred while processing the request."
         return jsonify({"error": error_msg, "details": str(e)}), 500
+
+@bp.route('/get_balance_data_client_b2b', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_balance_data():
+    try:
+        empresa = request.args.get("empresa")
+        client_id = request.args.get("client_id")
+
+        # Verificar si los parámetros son válidos
+        if not empresa or not client_id:
+            return jsonify({"error": "Parámetros faltantes: empresa y client_id son requeridos"}), 400
+
+        # Usar la sesión de SQLAlchemy para ejecutar las funciones PL/SQL
+        with db.session() as session:
+            # Llamar a las funciones PL/SQL
+            total_x_vencer = get_balance_function(session, 'ksa_balance_cartera.total_x_vencer', empresa, client_id)
+            total_vencido = get_balance_function(session, 'ksa_balance_cartera.total_vencido', empresa, client_id)
+            total_deuda = get_balance_function(session, 'ksa_balance_cartera.total_deuda', empresa, client_id)
+
+        # Devolver los resultados en formato JSON
+        result = {
+            "total_x_vencer": total_x_vencer,
+            "total_vencido": total_vencido,
+            "total_deuda": total_deuda
+        }
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logging.error(f"Error al obtener los datos de balance: {str(e)}")
+        return jsonify({"error": "Ocurrió un error al procesar la solicitud"}), 500
+def get_balance_function(session, function_name, empresa, client_id):
+    try:
+        # Ejecuta la función desde DUAL para obtener el resultado
+        query = f"""
+            SELECT {function_name}(:param1, :param2) AS resultado
+            FROM dual
+        """
+        result = session.execute(
+            text(query),
+            {"param1": empresa, "param2": client_id}
+        ).fetchone()
+
+        # Devuelve el resultado convertido a float
+        return float(result[0]) if result and result[0] is not None else None
+    except Exception as e:
+        logging.error(f"Error en la llamada a la función {function_name}: {e}")
+        return None  # Manejo de errores
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #-----------------------------------------------------------------------------------------------
