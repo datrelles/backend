@@ -3834,7 +3834,7 @@ def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod
             existing_entry = session.query(st_lista_precio).filter_by(
                 empresa=record[0], cod_producto=record[1], cod_modelo_cli=record[2], cod_item_cli=record[3],
                 cod_modelo_zona=record[4], cod_item_zona=record[5], cod_agencia=record[6], cod_unidad=record[7],
-                cod_forma_pago=record[8], cod_divisa=record[9], estado_generacion=record[10], fecha_inicio=record[11]
+                cod_forma_pago=record[8], cod_divisa=record[9], estado_generacion=record[10]
             ).first()
 
             if existing_entry:
