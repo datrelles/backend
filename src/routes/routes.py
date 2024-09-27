@@ -3283,7 +3283,7 @@ def get_info_year(): #function to get year about a specific  motorcycle part
 
 #ECOMMERCE INVOICE---------------------------------------------------------------------------------------
 
-#-----------------EN DESARROLLO--------------------------->
+#-----------------EN DESARROLLO----------------------------------------------------------->
 @bp.route('/post_invoice_ecommerce', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -3734,6 +3734,140 @@ def get_politica_credito_ecommerce(db, p_cod_politica):
         # Asegúrate de cerrar el cursor y la conexión
         if cursor:
             cursor.close()
+
+
+@bp.route('/post_change_price_ecommerce', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def post_change_price_ecommerce():
+    try:
+        p_cod_empresa = 20
+        p_cod_agencia = 50
+        p_user = 'stock'
+        p_tipo_generacion = 'VF'
+        p_useridc = 'st'
+
+        # Obtener los parámetros de la solicitud
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        price = request.args.get("price")
+        p_cod_politica = 48
+        politica = get_politica_credito_ecommerce(db1, p_cod_politica)
+        price = round(float(price) / politica, 2)
+
+        if not price:
+            return jsonify({"error": "Missing price"}), 400
+
+        # Lista de códigos de producto
+        cod_productos = ["YSL2", "YSLZCT1001"]
+
+        for cod_producto in cod_productos:
+            # Buscar el producto por código
+            producto = Producto.query().filter_by(cod_producto=cod_producto).first()
+
+            if producto:
+                # Actualiza el precio del producto
+                producto.precio = price
+                result = generar_listas_de_precio(p_cod_empresa, p_user, p_tipo_generacion, p_useridc, db1)
+
+                # Guarda los cambios en la base de datos
+                db.session.commit()
+                secuencia = result["p_secuencia"]
+                print(secuencia)
+
+                # Insertar precios en el eCommerce
+                status_insert = insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod_producto )
+                print(status_insert)
+            else:
+                return jsonify({"error": f"Product not found: {cod_producto}"}), 404
+
+        return jsonify({"status": "ok", "message": "Prices updated successfully"})
+
+    except SQLAlchemyError as e:
+        db.session.rollback()  # Revierte los cambios en caso de error
+        error_msg = "An error occurred while processing the request."
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+def generar_listas_de_precio(p_cod_empresa, p_user, p_tipo_generacion, p_useridc, db1):
+    try:
+        # Conexión a la base de datos
+        cursor = db1.cursor()
+        # Variable para almacenar el resultado de salida
+        p_secuencia = cursor.var(cx_Oracle.NUMBER)
+        # Ejecución del procedimiento PL/SQL
+        cursor.execute("""
+                        begin
+                        ks_lista_precio.generar_listas_de_precio(p_cod_empresa => :p_cod_empresa,
+                                                                p_user => :p_user,
+                                                                p_tipo_generacion => :p_tipo_generacion,
+                                                                p_useridc => :p_useridc,
+                                                                p_fecha_inicio => '',
+                                                                p_fecha_final => '',
+                                                                p_precio => '',
+                                                                p_observaciones => '',
+                                                                p_secuencia => :p_secuencia);
+                        end;
+                """, p_cod_empresa=p_cod_empresa, p_user=p_user, p_tipo_generacion=p_tipo_generacion, p_useridc=p_useridc, p_secuencia=p_secuencia)
+
+        #Obtener el valor del parámetro de salida
+        secuencia = p_secuencia.getvalue()
+
+        #Cerrar el cursor y la conexión
+        cursor.close()
+        return {"success": True, "p_secuencia": secuencia}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod_producto):
+    try:
+        # Define the records with the current date and time
+        cod_producto_selected = cod_producto
+        current_datetime = datetime.now()
+        current_datetime_without_hours = current_datetime.date()
+
+        records = [
+            (p_cod_empresa, cod_producto_selected, 'CLI1', 'CF', 'REG1', 'COS', p_cod_agencia, 'U', 'EFE', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD'),
+            (p_cod_empresa, cod_producto_selected, 'CLI1', 'CF', 'REG1', 'COS', p_cod_agencia, 'U', 'TCR', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD'),
+            (p_cod_empresa, cod_producto_selected, 'CLI1', 'TA', 'REG1', 'COS', p_cod_agencia, 'U', 'EFE', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD'),
+            (p_cod_empresa, cod_producto_selected, 'CLI1', 'TA', 'REG1', 'COS', p_cod_agencia, 'U', 'TCR', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD')
+        ]
+
+        for record in records:
+            # Search for an existing record with the same primary key values
+            existing_entry = session.query(st_lista_precio).filter_by(
+                empresa=record[0], cod_producto=record[1], cod_modelo_cli=record[2], cod_item_cli=record[3],
+                cod_modelo_zona=record[4], cod_item_zona=record[5], cod_agencia=record[6], cod_unidad=record[7],
+                cod_forma_pago=record[8], cod_divisa=record[9], estado_generacion=record[10], fecha_inicio=record[11]
+            ).first()
+
+            if existing_entry:
+                # If the record exists, update its price and other necessary fields
+                existing_entry.valor = record[13]
+                existing_entry.precio = record[16]
+                #existing_entry.secuencia_generacion = record[19]
+                existing_entry.aud_fecha = record[23]
+                existing_entry.aud_usuario = record[24]
+                existing_entry.aud_terminal = record[25]
+            else:
+                # If the record does not exist, create a new one
+                new_entry = st_lista_precio(
+                    empresa=record[0], cod_producto=record[1], cod_modelo_cli=record[2], cod_item_cli=record[3],
+                    cod_modelo_zona=record[4], cod_item_zona=record[5], cod_agencia=record[6], cod_unidad=record[7],
+                    cod_forma_pago=record[8], cod_divisa=record[9], estado_generacion=record[10], fecha_inicio=record[11],
+                    fecha_final=record[12], valor=record[13], iva=record[14], ice=record[15], precio=record[16],
+                    cargos=record[17], useridc=record[18], secuencia_generacion=record[19], estado_vida=record[20],
+                    valor_alterno=record[21], rebate=record[22], aud_fecha=record[23], aud_usuario=record[24],
+                    aud_terminal=record[25]
+                )
+                session.add(new_entry)
+
+        # Commit the session
+        session.commit()
+        return {"success": True}
+    except Exception as e:
+        # Handle the exception and rollback the session
+        session.rollback()
+        return {"success": False, "error": str(e)}
+
+
+
 #--------------------------------------------------------------------------------------------------------------------
 @bp.route('/get_invoice_ecommerce', methods = ['GET'])
 @jwt_required()
@@ -3925,113 +4059,6 @@ def post_cod_comprobante_ecommerce():
         error_msg = "An error occurred while processing the request."
         return jsonify({"error": error_msg, "details": str(e)}), 500
 
-@bp.route('/post_change_price_ecommerce', methods=['POST'])
-@jwt_required()
-@cross_origin()
-def post_change_price_ecommerce():
-    try:
-        p_cod_empresa = 20
-        p_cod_agencia = 50
-        p_user = 'stock'
-        p_tipo_generacion = 'VF'
-        p_useridc = 'st'
-
-        # Obtén los parámetros de la solicitud
-        cod_producto = "YSLZCT1001"
-        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
-        price = request.args.get("price")
-        p_cod_politica = 48
-        politica = get_politica_credito_ecommerce(db1, p_cod_politica)
-        price = round(float(price) / politica, 2)
-        if not cod_producto or not price:
-            return jsonify({"error": "Missing cod_producto or price"}), 400
-        # search producto code
-        producto = Producto.query().filter_by(cod_producto=cod_producto).first()
-
-        if producto:
-            # Actualiza el precio del producto
-            producto.precio = price
-            result = generar_listas_de_precio(p_cod_empresa, p_user, p_tipo_generacion, p_useridc, db1)
-
-            db.session.commit()  # Guarda los cambios en la base de datos
-            secuencia = result["p_secuencia"]
-            print(secuencia)
-            status_inset = insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia)
-            print(status_inset)
-            return jsonify({"status": "ok", "message": "Price updated successfully"})
-
-        else:
-            return jsonify({"error": "Product not found"}), 404
-
-    except SQLAlchemyError as e:
-        db.session.rollback()  # Revierte los cambios en caso de error
-        error_msg = "An error occurred while processing the request."
-        return jsonify({"error": error_msg, "details": str(e)}), 500
-def generar_listas_de_precio(p_cod_empresa, p_user, p_tipo_generacion, p_useridc, db1):
-    try:
-        # Conexión a la base de datos
-        cursor = db1.cursor()
-        # Variable para almacenar el resultado de salida
-        p_secuencia = cursor.var(cx_Oracle.NUMBER)
-        # Ejecución del procedimiento PL/SQL
-        cursor.execute("""
-                        begin
-                        ks_lista_precio.generar_listas_de_precio(p_cod_empresa => :p_cod_empresa,
-                                                                p_user => :p_user,
-                                                                p_tipo_generacion => :p_tipo_generacion,
-                                                                p_useridc => :p_useridc,
-                                                                p_fecha_inicio => '',
-                                                                p_fecha_final => '',
-                                                                p_precio => '',
-                                                                p_observaciones => '',
-                                                                p_secuencia => :p_secuencia);
-                        end;
-                """, p_cod_empresa=p_cod_empresa, p_user=p_user, p_tipo_generacion=p_tipo_generacion, p_useridc=p_useridc, p_secuencia=p_secuencia)
-
-        #Obtener el valor del parámetro de salida
-        secuencia = p_secuencia.getvalue()
-
-        #Cerrar el cursor y la conexión
-        cursor.close()
-        return {"success": True, "p_secuencia": secuencia}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia):
-    try:
-        # Define the records with the current date and time
-        current_datetime = datetime.now()
-        print(current_datetime)
-
-        current_datetime_without_hours = current_datetime.date()
-        print(current_datetime_without_hours)
-
-        records = [
-            (p_cod_empresa, 'YSLZCT1001', 'CLI1', 'CF', 'REG1', 'COS', p_cod_agencia, 'U', 'EFE', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD'),
-            (p_cod_empresa, 'YSLZCT1001', 'CLI1', 'CF', 'REG1', 'COS', p_cod_agencia, 'U', 'TCR', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD'),
-            (p_cod_empresa, 'YSLZCT1001', 'CLI1', 'TA', 'REG1', 'COS', p_cod_agencia, 'U', 'EFE', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD'),
-            (p_cod_empresa, 'YSLZCT1001', 'CLI1', 'TA', 'REG1', 'COS', p_cod_agencia, 'U', 'TCR', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD')
-        ]
-
-        # Insert the records
-        for record in records:
-            new_entry = st_lista_precio(
-                empresa=record[0], cod_producto=record[1], cod_modelo_cli=record[2], cod_item_cli=record[3],
-                cod_modelo_zona=record[4], cod_item_zona=record[5], cod_agencia=record[6], cod_unidad=record[7],
-                cod_forma_pago=record[8], cod_divisa=record[9], estado_generacion=record[10], fecha_inicio=record[11],
-                fecha_final=record[12], valor=record[13], iva=record[14], ice=record[15], precio=record[16],
-                cargos=record[17], useridc=record[18], secuencia_generacion=record[19], estado_vida=record[20],
-                valor_alterno=record[21], rebate=record[22], aud_fecha=record[23], aud_usuario=record[24],
-                aud_terminal=record[25]
-            )
-            session.add(new_entry)
-
-        # Commit the session
-        session.commit()
-        return {"success": True}
-    except Exception as e:
-        # Handle the exception and rollback the session
-        session.rollback()
-        return {"success": False, "error": str(e)}
 
 @bp.route('/post_image_material_imagen_despiece', methods=['POST'])
 @jwt_required()
