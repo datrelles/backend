@@ -1514,19 +1514,6 @@ def formule_total():
     empresa = data['formula']['empresa']
     cod_formula = asigna_cod_comprobante(empresa, 'FD',1)
 
-    query = StFormula.query()
-    if empresa:
-        query = query.filter(StFormula.empresa == empresa)
-    if data['formula']['cod_producto']:
-        query = query.filter(StFormula.cod_producto == data['formula']['cod_producto'])
-    if data['formula']['debito_credito']:
-        query = query.filter(StFormula.debito_credito == data['formula']['debito_credito'])
-
-    existencia = query.first()
-
-    if existencia:
-        return jsonify({'error': 'Ya existe formula para: ' + data['formula']['cod_producto']})
-
     if data['detalles'] is None or data['detalles'] == []:
         return jsonify({'error': 'No hay items ingresados para la formula'})
 
