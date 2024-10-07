@@ -26,7 +26,7 @@ from src.routes.routes_custom import bpcustom
 from src.routes.routes_fin import bpfin
 from src.routes.routes_logis import bplog
 from src.routes.routes_com import bpcom
-from src.routes.email_alert import aem
+from src.routes.email_alert import aem, execute_send_alert_emails
 
 ###################################################
 
@@ -289,6 +289,13 @@ def logout():
     unset_jwt_cookies(response)
     return response
 
+
+def scheduled_task():
+    with app.app_context():
+        execute_send_alert_emails()
+
+scheduler.add_job(scheduled_task, 'interval', minutes=30)
+scheduler.start()
 
 if __name__ == '__main__':
     load_dotenv(find_dotenv())

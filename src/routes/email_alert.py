@@ -1,10 +1,11 @@
-from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
+from flask import Blueprint, jsonify
 from src.config.database import db
 from src.models.alerta_email import alert_email
 from src.models.st_proforma import st_cab_deuna, st_cab_datafast, st_cab_deuna_b2b, st_cab_datafast_b2b, st_cab_credito_directo
 from flask_mail import Message, Mail
 import logging
+from datetime import datetime
 
 # Configurar el blueprint y el logger
 aem = Blueprint('routes_mail_sending', __name__)
@@ -13,10 +14,18 @@ logger = logging.getLogger(__name__)
 # Configurar Flask-Mail
 mail = Mail()
 
-@aem.route('/send_alert_emails', methods=['POST'])
-@jwt_required()
-def send_alert_emails():
+# Función independiente para enviar correos
+def execute_send_alert_emails():
     try:
+        # Verificar si la tarea debe ejecutarse según el día y la hora
+        now = datetime.now()
+        current_hour = now.hour
+        current_day = now.weekday()  # 0 = Lunes, 6 = Domingo
+
+        # Verificar días y horas: Lunes-Viernes 8:00-18:00, Sábado 8:00-17:00
+        if not ((0 <= current_day <= 4 and 8 <= current_hour < 18) or (current_day == 5 and 8 <= current_hour < 17)):
+            return  # No ejecutar la tarea fuera de los horarios especificados
+
         # Consultar las tablas cab para registros con cod_comprobante vacío
         registros_datafast = st_cab_datafast.query().filter(st_cab_datafast.cod_comprobante == None).all()
         registros_deuna = st_cab_deuna.query().filter(st_cab_deuna.cod_comprobante == None).all()
@@ -29,7 +38,8 @@ def send_alert_emails():
         alertas_ecomer = alert_email.query().filter_by(cod_alerta='ECOMER').all()
 
         if not alertas_ecomerb2b and not alertas_ecomer:
-            return jsonify({"message": "No hay correos registrados."}), 404
+            logger.info("No hay correos registrados.")
+            return
 
         # Crear una lista de destinatarios por tipo de alerta
         destinatarios_ecomerb2b = [alert.email for alert in alertas_ecomerb2b]
@@ -54,8 +64,13 @@ def send_alert_emails():
             tipo = 'Datafast' if isinstance(registro, st_cab_datafast) else 'De_Una' if isinstance(registro, st_cab_deuna) else 'Crédito Directo'
             enviar_correo(destinatarios_ecomer, tipo, registro)
 
-        return jsonify({"message": "Correos enviados exitosamente."}), 200
-
+        logger.info("Correos enviados exitosamente.")
     except Exception as e:
         logger.error(f"Error al enviar correos: {e}")
-        return jsonify({"message": "Error al enviar correos."}), 500
+
+# Endpoint para enviar correos (opcional)
+@aem.route('/send_alert_emails', methods=['POST'])
+@jwt_required()
+def send_alert_emails():
+    execute_send_alert_emails()
+    return jsonify({"message": "Proceso de envío de correos completado."}), 200
