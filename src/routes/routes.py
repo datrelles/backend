@@ -4036,7 +4036,6 @@ def post_cod_comprobante_ecommerce():
         pay_method = request.args.get("pay_method")
         pay_id = request.args.get("pay_id")
         cod_comprobante = request.args.get("cod_comprobante")
-
         if not pay_method or not pay_id or not cod_comprobante:
             return jsonify({"error": "Missing parameters"}), 400
         if pay_method == 'datafast':
