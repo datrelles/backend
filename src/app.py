@@ -73,7 +73,6 @@ app.register_blueprint(aem, url_prefix="/alert_email")
 
 #############################################################################
 
-
 jwt = JWTManager(app)
 CORS(app, resources={
     r"/*": {
