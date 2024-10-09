@@ -155,25 +155,70 @@ def get_presupuesto():
 def update_value():
     data = request.json
     empresa = data.get('empresa')
-    cod_persona = data.get('pv_cod_tipo_pedido')
-    cod_producto_modelo = data.get('pedido')
-    mes = data.get('pn_cod_agencia')
-    anio = data.get('bodega_consignacion')
+    cod_persona = data.get('cod_persona')
+    cod_producto_modelo = data.get('cod_producto_modelo')
+    mes = data.get('mes')
+    anio = data.get('anio')
+    valor = data.get('valor')
 
     try:
         db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cursor = db1.cursor()
-        sql = """
-                        SELECT v.*, s.valor 
-                        FROM vt_presupuesto_sellout v 
-                        LEFT JOIN st_presupuesto_valor s 
-                        ON v.empresa = s.empresa and v.cod_producto_modelo = s.cod_producto_modelo 
-                        and v.cod_persona = s.cod_cliente and v.anio = s.aaaa and v.mes = s.mm 
-                        """
-        cursor = cursor.execute(sql, [empresa, cod_persona, cod_producto_modelo, mes, anio])
-        columns = [col[0] for col in cursor.description]
-        results = cursor.fetchall()
-        data = [dict(zip(columns, row)) for row in results]
+
+        sql_select = """
+                    SELECT 1 
+                    FROM st_presupuesto_valor 
+                    WHERE empresa = :empresa 
+                    AND cod_producto_modelo = :cod_producto_modelo 
+                    AND cod_cliente = :cod_persona 
+                    AND aaaa = :anio 
+                    AND mm = :mes
+                """
+
+        cursor.execute(sql_select, {
+            'empresa': empresa,
+            'cod_producto_modelo': cod_producto_modelo,
+            'cod_persona': cod_persona,
+            'anio': anio,
+            'mes': mes
+        })
+
+        existing_record = cursor.fetchone()
+
+        if existing_record:
+            sql_update = """
+                        UPDATE st_presupuesto_valor 
+                        SET valor = :valor 
+                        WHERE empresa = :empresa 
+                        AND cod_producto_modelo = :cod_producto_modelo 
+                        AND cod_cliente = :cod_persona 
+                        AND aaaa = :anio 
+                        AND mm = :mes
+                    """
+            cursor.execute(sql_update, {
+                'valor': valor,
+                'empresa': empresa,
+                'cod_producto_modelo': cod_producto_modelo,
+                'cod_persona': cod_persona,
+                'anio': anio,
+                'mes': mes
+            })
+        else:
+            sql_insert = """
+                        INSERT INTO st_presupuesto_valor 
+                        (empresa, cod_producto_modelo, cod_cliente, aaaa, mm, valor) 
+                        VALUES (:empresa, :cod_producto_modelo, :cod_persona, :anio, :mes, :valor)
+                    """
+            cursor.execute(sql_insert, {
+                'empresa': empresa,
+                'cod_producto_modelo': cod_producto_modelo,
+                'cod_persona': cod_persona,
+                'anio': anio,
+                'mes': mes,
+                'valor': valor
+            })
+
+        db1.commit()
         cursor.close()
         db1.close()
 
