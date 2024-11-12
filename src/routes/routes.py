@@ -3752,7 +3752,7 @@ def post_change_price_ecommerce():
         price = request.args.get("price")
         p_cod_politica = 48
         politica = get_politica_credito_ecommerce(db1, p_cod_politica)
-        price = round(float(price) / politica, 2)
+        price = round(float(price) / politica, 3)
 
         if not price:
             return jsonify({"error": "Missing price"}), 400
