@@ -1828,7 +1828,7 @@ def generate_combo():
 
         lote = StLote(
             empresa=empresa,
-            tipo_comprobante='LT',
+            tipo_comprobante='IC',
             cod_comprobante=cod_comprobante,
             fecha=date.today(),
             descripcion='Lote para creacion de combos',
@@ -1920,7 +1920,7 @@ def generate_combo():
                 cod_estado_proceso=None,
                 transportador=None,
                 placa=None,
-                tipo_comprobante_lote='LT',
+                tipo_comprobante_lote='IC',
                 cod_comprobante_lote=cod_comprobante,
                 cod_comprobante_ingreso=None,
                 tipo_comprobante_ingreso=None,
@@ -2355,7 +2355,7 @@ def generate_combo():
             cod_promocion=None,
             ubicacion_bodega=None,
             cantidad_promocion=None,
-            tipo_comprobante_lote='LT',
+            tipo_comprobante_lote='IC',
             cod_comprobante_lote=cod_comprobante,
             descuento_regalo=None,
             precio_unitario_xml=None,
