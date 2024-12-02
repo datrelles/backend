@@ -76,7 +76,6 @@ app.register_blueprint(rmc, url_prefix="/cont")
 
 #############################################################################
 
-
 jwt = JWTManager(app)
 CORS(app, resources={
     r"/*": {
