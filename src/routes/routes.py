@@ -2609,15 +2609,16 @@ def insertFortLote():
         # Obtén el JSON enviado desde el front-end
         data = request.get_json()
         query = tc_doc_elec_recibidos.query()
+        print(data)
         # Verifica si se recibió correctamente el JSON
         if data:
             # Puedes acceder a los datos del JSON usando dataSr
             for item in data:
+
                 existing_entry = query.filter(
                     tc_doc_elec_recibidos.ruc_emisor == item['RUC_EMISOR'],
                     tc_doc_elec_recibidos.serie_comprobante == item['SERIE_COMPROBANTE']
                 ).first()
-
                 if existing_entry:
                     pass
                 else:
@@ -2645,6 +2646,7 @@ def insertFortLote():
 
                     db.session.add(new_entry)
                     db.session.commit()
+
         else:
             return jsonify({'error': 'No se recibió el JSON esperado'}), 400
         return jsonify({'message': 'success'})
@@ -3753,7 +3755,7 @@ def post_change_price_ecommerce():
         p_cod_politica = 48
         politica = get_politica_credito_ecommerce(db1, p_cod_politica)
         price = round(float(price) / politica, 3)
-
+        print(price)
         if not price:
             return jsonify({"error": "Missing price"}), 400
 
@@ -3772,11 +3774,9 @@ def post_change_price_ecommerce():
                 # Guarda los cambios en la base de datos
                 db.session.commit()
                 secuencia = result["p_secuencia"]
-                print(secuencia)
 
                 # Insertar precios en el eCommerce
                 status_insert = insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod_producto )
-                print(status_insert)
             else:
                 return jsonify({"error": f"Product not found: {cod_producto}"}), 404
 
@@ -3865,8 +3865,6 @@ def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod
         # Handle the exception and rollback the session
         session.rollback()
         return {"success": False, "error": str(e)}
-
-
 
 #--------------------------------------------------------------------------------------------------------------------
 @bp.route('/get_invoice_ecommerce', methods = ['GET'])
@@ -4545,7 +4543,7 @@ def get_transportistas():
         error_msg = "An error occurred while fetching transportistas."
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
-
+#---------------------------------------TRANSPORT ECOMMERCE---------------------------------------------////
 @bp.route('/get_cab_credito_directo', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -4789,6 +4787,36 @@ def buy_parts_b2b(id_code):
         error_msg = "An error occurred while processing the request."
         return jsonify({"error": error_msg, "details": str(e)}), 500
 
+@bp.route('/post_cod_comprobante_ecommerce_b2b', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def post_cod_comprobante_ecommerce_b2b():
+    try:
+        pay_method = request.args.get("pay_method")
+        pay_id = request.args.get("pay_id")
+        cod_comprobante = request.args.get("cod_comprobante")
+        if not pay_method or not pay_id or not cod_comprobante:
+            return jsonify({"error": "Missing parameters"}), 400
+        if pay_method == 'datafast':
+            model = st_cab_datafast_b2b
+        elif pay_method == 'deuna':
+            model = st_cab_deuna_b2b
+        else:
+            return jsonify({"error": "Invalid pay_method"}), 400
+            # Busca el registro por id_transaction
+        try:
+            record = model.query().filter_by(id_transaction=pay_id).one()
+        except Exception as e:
+            return jsonify({"error": "Transaction not found"}), 404
+        record.cod_comprobante = cod_comprobante
+        db.session.commit()
+        return jsonify({"status": "ok"})
+
+    except Exception as e:
+        db.session.rollback()  # Revierte los cambios en caso de error
+        error_msg = "An error occurred while processing the request."
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
 @bp.route('/get_balance_data_client_b2b', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -4837,7 +4865,6 @@ def get_balance_function(session, function_name, empresa, client_id):
     except Exception as e:
         logging.error(f"Error en la llamada a la función {function_name}: {e}")
         return None  # Manejo de errores
-
 
 
 

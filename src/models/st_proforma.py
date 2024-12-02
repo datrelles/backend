@@ -317,8 +317,6 @@ class st_det_credito_directo(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
-
-
 class st_cab_datafast_b2b(Base):
     __tablename__ = 'st_cab_datafast_b2b'
     __table_args__ = {'schema': 'stock'}
@@ -359,7 +357,6 @@ class st_cab_datafast_b2b(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
-
 class st_det_datafast_b2b(Base):
     __tablename__ = 'st_det_datafast_b2b'
     __table_args__ = {'schema': 'stock'}
@@ -373,7 +370,6 @@ class st_det_datafast_b2b(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
-
 class st_cab_deuna_b2b(Base):
     __tablename__ = 'st_cab_deuna_b2b'
     __table_args__ = {'schema': 'stock'}
@@ -405,7 +401,6 @@ class st_cab_deuna_b2b(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
-
 class st_det_deuna_b2b(Base):
     __tablename__ = 'st_det_deuna_b2b'
     __table_args__ = {'schema': 'stock'}
