@@ -4903,7 +4903,75 @@ def get_balance_function(session, function_name, empresa, client_id):
         return None  # Manejo de errores
 
 
+@bp.route('/get_product_details_without_images', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_product_details_without_images():
+    try:
+        empresa = request.args.get("enterprise", type=int, default=20)  # Parámetro opcional, por defecto 20
 
+        if not empresa:
+            return jsonify({"error": "El parámetro 'enterprise' es requerido"}), 400
+
+        # Consulta SQL completa
+        query = text("""
+            SELECT
+                D.COD_PRODUCTO,
+                P.NOMBRE AS NOMBRE_PRODUCTO,
+                P.IVA,
+                P.ICE,
+                C.NOMBRE AS COLOR,
+                BUF.ES_BUFFER AS CONTROL_BUFFER,
+                DP.COD_DESPIECE_PADRE AS CODIGO_MODELO_MOTO,
+                DP2.NOMBRE_E AS MOTO_MODELO,
+                MI.NOMBRE AS NOMBRE_SUBSISTEMA,
+                MI.COD_ITEM AS CODIGO_SUBSISTEMA,
+                DP2.COD_DESPIECE_PADRE AS CODIGO_CATEGORIA,
+                DP3.NOMBRE_E AS NOMBRE_CATEGORIA,
+                DP4.NOMBRE_E AS NOMBRE_MARCA,
+                DP4.COD_DESPIECE AS CODIGO_MARCA,
+                L.COD_AGENCIA,
+                B.BODEGA,
+                B.NOMBRE AS NOMBRE_BODEGA,
+                L.COD_UNIDAD,
+                L.PRECIO,
+                P.VOLUMEN AS PESO,
+                COALESCE(RPA.ANIO_DESDE, NULL) AS FROM_YEAR,
+                COALESCE(RPA.ANIO_HASTA, NULL) AS TO_YEAR,
+                'No Imagen' AS ESTADO_IMAGEN
+            FROM
+                ST_PRODUCTO_DESPIECE D
+                JOIN ST_DESPIECE DP ON D.COD_DESPIECE = DP.COD_DESPIECE AND D.EMPRESA = DP.EMPRESA
+                JOIN PRODUCTO P ON P.EMPRESA = D.EMPRESA AND D.COD_PRODUCTO = P.COD_PRODUCTO
+                JOIN TG_MODELO_ITEM MI ON MI.EMPRESA = P.EMPRESA AND P.COD_ITEM_CAT1 = MI.COD_ITEM
+                JOIN ST_DESPIECE DP2 ON DP2.EMPRESA = D.EMPRESA AND DP.COD_DESPIECE_PADRE = DP2.COD_DESPIECE
+                JOIN ST_DESPIECE DP3 ON DP3.EMPRESA = DP2.EMPRESA AND DP2.COD_DESPIECE_PADRE = DP3.COD_DESPIECE
+                JOIN ST_DESPIECE DP4 ON DP4.EMPRESA = DP3.EMPRESA AND DP3.COD_DESPIECE_PADRE = DP4.COD_DESPIECE
+                JOIN ST_COLOR C ON C.COD_COLOR = P.PARTIDA
+                JOIN ST_PRODUCTO_BUFFER BUF ON BUF.COD_PRODUCTO = P.COD_PRODUCTO AND BUF.EMPRESA = P.EMPRESA
+                JOIN ST_LISTA_PRECIO L ON L.COD_PRODUCTO = P.COD_PRODUCTO AND L.COD_AGENCIA = 6 AND L.COD_UNIDAD = P.COD_UNIDAD 
+                                        AND L.COD_FORMA_PAGO = 'EFE' AND L.COD_DIVISA = 'DOLARES' AND L.COD_MODELO_CLI = 'CLI1' 
+                                        AND L.COD_ITEM_CLI = 'CF' AND L.ESTADO_GENERACION = 'R' AND (L.FECHA_FINAL IS NULL OR L.FECHA_FINAL >= TRUNC(SYSDATE))
+                JOIN BODEGA B ON B.EMPRESA = L.EMPRESA AND B.BODEGA = L.COD_AGENCIA
+                LEFT JOIN ST_MATERIAL_IMAGEN IM ON IM.COD_TIPO_MATERIAL = 'PRO' AND IM.COD_MATERIAL = P.COD_PRODUCTO AND IM.EMPRESA = P.EMPRESA
+                LEFT JOIN ST_PRODUCTO_REP_ANIO RPA ON RPA.EMPRESA = MI.EMPRESA AND RPA.COD_PRODUCTO = P.COD_PRODUCTO
+            WHERE
+                DP.EMPRESA = :empresa
+                AND IM.Cod_Material IS NULL
+        """)
+
+        # Ejecutar la consulta
+        with db.session() as session:
+            result = session.execute(query, {"empresa": empresa}).fetchall()
+
+        # Procesar los resultados para devolverlos en formato JSON
+        response = [dict(row._mapping) for row in result]
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        logging.error(f"Error al obtener detalles del producto: {str(e)}")
+        return jsonify({"error": "Ocurrió un error al procesar la solicitud"}), 500
 
 
 
