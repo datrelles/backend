@@ -4908,7 +4908,7 @@ def get_balance_function(session, function_name, empresa, client_id):
 @cross_origin()
 def get_product_details_without_images():
     try:
-        empresa = request.args.get("enterprise", type=int, default=20)  # Parámetro opcional, por defecto 20
+        empresa = request.args.get("enterprise", type=int, default=20)
 
         if not empresa:
             return jsonify({"error": "El parámetro 'enterprise' es requerido"}), 400
