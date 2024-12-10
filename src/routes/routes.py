@@ -2609,15 +2609,16 @@ def insertFortLote():
         # Obtén el JSON enviado desde el front-end
         data = request.get_json()
         query = tc_doc_elec_recibidos.query()
+        print(data)
         # Verifica si se recibió correctamente el JSON
         if data:
             # Puedes acceder a los datos del JSON usando dataSr
             for item in data:
+
                 existing_entry = query.filter(
                     tc_doc_elec_recibidos.ruc_emisor == item['RUC_EMISOR'],
                     tc_doc_elec_recibidos.serie_comprobante == item['SERIE_COMPROBANTE']
                 ).first()
-
                 if existing_entry:
                     pass
                 else:
@@ -2645,6 +2646,7 @@ def insertFortLote():
 
                     db.session.add(new_entry)
                     db.session.commit()
+
         else:
             return jsonify({'error': 'No se recibió el JSON esperado'}), 400
         return jsonify({'message': 'success'})
@@ -3753,7 +3755,7 @@ def post_change_price_ecommerce():
         p_cod_politica = 48
         politica = get_politica_credito_ecommerce(db1, p_cod_politica)
         price = round(float(price) / politica, 3)
-
+        print(price)
         if not price:
             return jsonify({"error": "Missing price"}), 400
 
@@ -3772,11 +3774,9 @@ def post_change_price_ecommerce():
                 # Guarda los cambios en la base de datos
                 db.session.commit()
                 secuencia = result["p_secuencia"]
-                print(secuencia)
 
                 # Insertar precios en el eCommerce
                 status_insert = insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod_producto )
-                print(status_insert)
             else:
                 return jsonify({"error": f"Product not found: {cod_producto}"}), 404
 
@@ -3865,8 +3865,6 @@ def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod
         # Handle the exception and rollback the session
         session.rollback()
         return {"success": False, "error": str(e)}
-
-
 
 #--------------------------------------------------------------------------------------------------------------------
 @bp.route('/get_invoice_ecommerce', methods = ['GET'])
@@ -4057,6 +4055,42 @@ def post_cod_comprobante_ecommerce():
         db.session.rollback()  # Revierte los cambios en caso de error
         error_msg = "An error occurred while processing the request."
         return jsonify({"error": error_msg, "details": str(e)}), 500
+
+
+@bp.route('/post_cod_comprobante_ecommerce_credito_directo', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def post_cod_comprobante_ecommerce_credito_directo():
+    try:
+        pay_method = request.args.get("pay_method")
+        pay_id = request.args.get("pay_id")
+        cod_comprobante = request.args.get("cod_comprobante")
+        if not pay_method or not pay_id or not cod_comprobante:
+            return jsonify({"error": "Missing parameters"}), 400
+        if pay_method == 'credito_directo':
+            model = st_cab_credito_directo
+        else:
+            return jsonify({"error": "Invalid pay_method"}), 400
+            # Busca el registro por id_transaction
+        try:
+            record = model.query().filter_by(id_transaction=pay_id).one()
+        except Exception as e:
+            return jsonify({"error": "Transaction not found"}), 404
+
+        record.cod_comprobante = cod_comprobante
+        db.session.commit()
+
+        return jsonify({"status": "ok"})
+
+    except Exception as e:
+        db.session.rollback()  # Revierte los cambios en caso de error
+        error_msg = "An error occurred while processing the request."
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
+
+
+
+
 
 
 @bp.route('/post_image_material_imagen_despiece', methods=['POST'])
@@ -4545,7 +4579,7 @@ def get_transportistas():
         error_msg = "An error occurred while fetching transportistas."
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
-
+#---------------------------------------TRANSPORT ECOMMERCE---------------------------------------------////
 @bp.route('/get_cab_credito_directo', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -4789,6 +4823,36 @@ def buy_parts_b2b(id_code):
         error_msg = "An error occurred while processing the request."
         return jsonify({"error": error_msg, "details": str(e)}), 500
 
+@bp.route('/post_cod_comprobante_ecommerce_b2b', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def post_cod_comprobante_ecommerce_b2b():
+    try:
+        pay_method = request.args.get("pay_method")
+        pay_id = request.args.get("pay_id")
+        cod_comprobante = request.args.get("cod_comprobante")
+        if not pay_method or not pay_id or not cod_comprobante:
+            return jsonify({"error": "Missing parameters"}), 400
+        if pay_method == 'datafast':
+            model = st_cab_datafast_b2b
+        elif pay_method == 'deuna':
+            model = st_cab_deuna_b2b
+        else:
+            return jsonify({"error": "Invalid pay_method"}), 400
+            # Busca el registro por id_transaction
+        try:
+            record = model.query().filter_by(id_transaction=pay_id).one()
+        except Exception as e:
+            return jsonify({"error": "Transaction not found"}), 404
+        record.cod_comprobante = cod_comprobante
+        db.session.commit()
+        return jsonify({"status": "ok"})
+
+    except Exception as e:
+        db.session.rollback()  # Revierte los cambios en caso de error
+        error_msg = "An error occurred while processing the request."
+        return jsonify({"error": error_msg, "details": str(e)}), 500
+
 @bp.route('/get_balance_data_client_b2b', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -4839,8 +4903,75 @@ def get_balance_function(session, function_name, empresa, client_id):
         return None  # Manejo de errores
 
 
+@bp.route('/get_product_details_without_images', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_product_details_without_images():
+    try:
+        empresa = request.args.get("enterprise", type=int, default=20)
 
+        if not empresa:
+            return jsonify({"error": "El parámetro 'enterprise' es requerido"}), 400
 
+        # Consulta SQL completa
+        query = text("""
+            SELECT
+                D.COD_PRODUCTO,
+                P.NOMBRE AS NOMBRE_PRODUCTO,
+                P.IVA,
+                P.ICE,
+                C.NOMBRE AS COLOR,
+                BUF.ES_BUFFER AS CONTROL_BUFFER,
+                DP.COD_DESPIECE_PADRE AS CODIGO_MODELO_MOTO,
+                DP2.NOMBRE_E AS MOTO_MODELO,
+                MI.NOMBRE AS NOMBRE_SUBSISTEMA,
+                MI.COD_ITEM AS CODIGO_SUBSISTEMA,
+                DP2.COD_DESPIECE_PADRE AS CODIGO_CATEGORIA,
+                DP3.NOMBRE_E AS NOMBRE_CATEGORIA,
+                DP4.NOMBRE_E AS NOMBRE_MARCA,
+                DP4.COD_DESPIECE AS CODIGO_MARCA,
+                L.COD_AGENCIA,
+                B.BODEGA,
+                B.NOMBRE AS NOMBRE_BODEGA,
+                L.COD_UNIDAD,
+                L.PRECIO,
+                P.VOLUMEN AS PESO,
+                COALESCE(RPA.ANIO_DESDE, NULL) AS FROM_YEAR,
+                COALESCE(RPA.ANIO_HASTA, NULL) AS TO_YEAR,
+                'No Imagen' AS ESTADO_IMAGEN
+            FROM
+                ST_PRODUCTO_DESPIECE D
+                JOIN ST_DESPIECE DP ON D.COD_DESPIECE = DP.COD_DESPIECE AND D.EMPRESA = DP.EMPRESA
+                JOIN PRODUCTO P ON P.EMPRESA = D.EMPRESA AND D.COD_PRODUCTO = P.COD_PRODUCTO
+                JOIN TG_MODELO_ITEM MI ON MI.EMPRESA = P.EMPRESA AND P.COD_ITEM_CAT1 = MI.COD_ITEM
+                JOIN ST_DESPIECE DP2 ON DP2.EMPRESA = D.EMPRESA AND DP.COD_DESPIECE_PADRE = DP2.COD_DESPIECE
+                JOIN ST_DESPIECE DP3 ON DP3.EMPRESA = DP2.EMPRESA AND DP2.COD_DESPIECE_PADRE = DP3.COD_DESPIECE
+                JOIN ST_DESPIECE DP4 ON DP4.EMPRESA = DP3.EMPRESA AND DP3.COD_DESPIECE_PADRE = DP4.COD_DESPIECE
+                JOIN ST_COLOR C ON C.COD_COLOR = P.PARTIDA
+                JOIN ST_PRODUCTO_BUFFER BUF ON BUF.COD_PRODUCTO = P.COD_PRODUCTO AND BUF.EMPRESA = P.EMPRESA
+                JOIN ST_LISTA_PRECIO L ON L.COD_PRODUCTO = P.COD_PRODUCTO AND L.COD_AGENCIA = 6 AND L.COD_UNIDAD = P.COD_UNIDAD 
+                                        AND L.COD_FORMA_PAGO = 'EFE' AND L.COD_DIVISA = 'DOLARES' AND L.COD_MODELO_CLI = 'CLI1' 
+                                        AND L.COD_ITEM_CLI = 'CF' AND L.ESTADO_GENERACION = 'R' AND (L.FECHA_FINAL IS NULL OR L.FECHA_FINAL >= TRUNC(SYSDATE))
+                JOIN BODEGA B ON B.EMPRESA = L.EMPRESA AND B.BODEGA = L.COD_AGENCIA
+                LEFT JOIN ST_MATERIAL_IMAGEN IM ON IM.COD_TIPO_MATERIAL = 'PRO' AND IM.COD_MATERIAL = P.COD_PRODUCTO AND IM.EMPRESA = P.EMPRESA
+                LEFT JOIN ST_PRODUCTO_REP_ANIO RPA ON RPA.EMPRESA = MI.EMPRESA AND RPA.COD_PRODUCTO = P.COD_PRODUCTO
+            WHERE
+                DP.EMPRESA = :empresa
+                AND IM.Cod_Material IS NULL
+        """)
+
+        # Ejecutar la consulta
+        with db.session() as session:
+            result = session.execute(query, {"empresa": empresa}).fetchall()
+
+        # Procesar los resultados para devolverlos en formato JSON
+        response = [dict(row._mapping) for row in result]
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        logging.error(f"Error al obtener detalles del producto: {str(e)}")
+        return jsonify({"error": "Ocurrió un error al procesar la solicitud"}), 500
 
 
 

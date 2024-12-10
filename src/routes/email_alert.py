@@ -1,7 +1,7 @@
 from flask_jwt_extended import jwt_required
 from flask import Blueprint, jsonify
 from src.config.database import db
-from src.models.alerta_email import alert_email
+from src.models.alerta_email import alerta_email, alerta_dias, alerta_email_type
 from src.models.st_proforma import st_cab_deuna, st_cab_datafast, st_cab_deuna_b2b, st_cab_datafast_b2b, st_cab_credito_directo
 from flask_mail import Message, Mail
 import logging
@@ -34,8 +34,8 @@ def execute_send_alert_emails():
         registros_credito_directo = st_cab_credito_directo.query().filter(st_cab_credito_directo.cod_comprobante == None).all()
 
         # Obtener todos los registros de alert_email para los diferentes cod_alerta
-        alertas_ecomerb2b = alert_email.query().filter_by(cod_alerta='ECOMERB2B').all()
-        alertas_ecomer = alert_email.query().filter_by(cod_alerta='ECOMER').all()
+        alertas_ecomerb2b = alerta_email.query().filter_by(cod_alerta='ECOMERB2B').all()
+        alertas_ecomer = alerta_email.query().filter_by(cod_alerta='ECOMER').all()
 
         if not alertas_ecomerb2b and not alertas_ecomer:
             logger.info("No hay correos registrados.")
@@ -67,6 +67,22 @@ def execute_send_alert_emails():
         logger.info("Correos enviados exitosamente.")
     except Exception as e:
         logger.error(f"Error al enviar correos: {e}")
+
+def execute_send_alert_emails_for_role():
+    try:
+        type_alert = alerta_email_type.query().all()
+        resultado = {}
+        for type in type_alert:
+            # Filtrar emails asociados a cada tipo de alerta
+            emails_asociados = alerta_email.query().filter_by(
+                cod_alerta=type.cod_alerta,
+                empresa=type.empresa
+            ).all()
+
+        pass
+    except Exception as e:
+        pass
+
 
 # Endpoint para enviar correos (opcional)
 @aem.route('/send_alert_emails', methods=['POST'])

@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager
 
 ###################################################
+
 from src.config.database import db
 from src.routes.routes import bp
 from src.routes.routes_auth import au
@@ -26,6 +27,7 @@ from src.routes.routes_custom import bpcustom
 from src.routes.routes_fin import bpfin
 from src.routes.routes_logis import bplog
 from src.routes.routes_com import bpcom
+from src.routes.module_contabilidad import rmc
 from src.routes.email_alert import aem, execute_send_alert_emails
 
 ###################################################
@@ -70,6 +72,7 @@ app.register_blueprint(bpfin, url_prefix="/fin")
 app.register_blueprint(bplog, url_prefix="/log")
 app.register_blueprint(bpcom, url_prefix="/com")
 app.register_blueprint(aem, url_prefix="/alert_email")
+app.register_blueprint(rmc, url_prefix="/cont")
 
 #############################################################################
 

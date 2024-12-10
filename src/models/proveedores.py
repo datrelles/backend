@@ -1,5 +1,5 @@
 # coding: utf-8
-from sqlalchemy import Column, DateTime, Index, VARCHAR, text
+from sqlalchemy import Column, DateTime, Index, VARCHAR, text, Date
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship,deferred
@@ -169,8 +169,6 @@ class TgAgencia(Base):
     es_autorizado_sri = Column(NUMBER(1, 0, False), nullable=False, server_default=text("0 "))
     tipo_relacion_polcre = Column(VARCHAR(1), nullable=False, server_default=text("'N' "))
 
-
-
 class st_transportistas(Base):
     __tablename__ = 'ST_TRANSPORTISTA'
     __table_args__ = (
@@ -187,6 +185,130 @@ class st_transportistas(Base):
     placa = Column(VARCHAR(20))
     cod_tipo_identificacion = Column(NUMBER(2, 0, False))
     activo_ecommerce = Column(NUMBER(1, 0, False), server_default=text("0"))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class st_provedor(Base):
+    __tablename__ = 'proveedor'
+    __table_args__ = (
+        Index('PK_PROVEEDOR', 'empresa', 'cod_proveedor'),
+        {'schema': 'stock'}
+    )
+
+    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
+    cod_proveedor = Column(VARCHAR(14), primary_key=True, nullable=False)
+    nombre = Column(VARCHAR(100), nullable=False)
+    direccion = Column(VARCHAR(200))
+    pais_telefono = Column(VARCHAR(3))
+    telefono = Column(VARCHAR(10))
+    telefono1 = Column(VARCHAR(10))
+    fax = Column(VARCHAR(10))
+    e_mail = Column(VARCHAR(50))
+    casilla = Column(VARCHAR(10))
+    ruc = Column(VARCHAR(13))
+    useridc = Column(VARCHAR(3), nullable=False)
+    contacto = Column(VARCHAR(50))
+    cargo = Column(VARCHAR(30))
+    activo = Column(VARCHAR(1))
+    direccion_numero = Column(VARCHAR(10))
+    interseccion = Column(VARCHAR(50))
+    autorizacion_imprenta = Column(VARCHAR(10))
+    cod_modelo = Column(VARCHAR(8))
+    cod_item = Column(VARCHAR(3))
+    tipo_bodega = Column(NUMBER(1), nullable=False, server_default=text("3"))
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class st_proveedor_cuenta(Base):
+    __tablename__ = 'st_proveedor_cuenta'
+    __table_args__ = (
+        Index('IND_PROVEEDOR_CUENTA01', 'codigo', 'aa', 'empresa'),
+        {'schema': 'stock'}
+    )
+
+    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
+    cod_proveedor = Column(VARCHAR(14), primary_key=True, nullable=False)
+    aa = Column(NUMBER(4), primary_key=True, nullable=False)
+    codigo = Column(VARCHAR(14), primary_key=True, nullable=False)
+    cod_sistema = Column(VARCHAR(3), primary_key=True, nullable=False)
+    cod_parametro = Column(VARCHAR(2), primary_key=True, nullable=False)
+    codigo_ant = Column(VARCHAR(14))
+    codigo_tran = Column(VARCHAR(14))
+    codigo_tran_ant = Column(VARCHAR(14))
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class tc_coa_tipo_contribuyente(Base):
+    __tablename__ = 'tc_coa_tipo_contribuyente'
+    __table_args__ = (
+        {'schema': 'contabilidad'}
+    )
+
+    cod_tipo_contribuyente = Column(NUMBER(2), primary_key=True, nullable=False)
+    descripcion = Column(VARCHAR(300))
+    adicionador_por = Column(VARCHAR(30), server_default=text("USER"))
+    fecha_adicion = Column(Date, server_default=text("SYSDATE"))
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class st_banco(Base):
+    __tablename__ = 'st_banco'
+    __table_args__ = (
+        Index('PK_ST_BANCO', 'cod_banco'),
+        {'schema': 'stock'}
+    )
+
+    cod_banco = Column(VARCHAR(3), primary_key=True, nullable=False)
+    nombre = Column(VARCHAR(40), nullable=False)
+    telefono = Column(VARCHAR(8))
+    pais_banco = Column(VARCHAR(20))
+    ciudad = Column(VARCHAR(20))
+    logo = Column(VARCHAR(50))
+    genera_cheque = Column(VARCHAR(1))
+    activa_banco = Column(VARCHAR(1))
+    es_multicash = Column(NUMBER(1))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class tc_instituciones_multicash(Base):
+    __tablename__ = 'tc_instituciones_multicash'
+    __table_args__ = (
+        Index('PK_INST_MULTICASH', 'codigo', 'cod_banco'),
+        {'schema': 'contabilidad'}
+    )
+
+    codigo = Column(VARCHAR(9), primary_key=True, nullable=False)
+    nombre = Column(VARCHAR(100), nullable=False)
+    cod_banco = Column(VARCHAR(9),  primary_key=True, nullable=False)
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class tc_prov_cta_multicash(Base):
+    __tablename__ = 'tc_prov_cta_multicash'
+    __table_args__ = (
+        Index('PK_PROV_CTA_MULTICASH', 'empresa', 'ruc', 'codigo_institucion', 'num_cuenta', 'cod_banco'),
+        {'schema': 'contabilidad'}
+    )
+
+    empresa = Column(NUMBER(2, 0, False), primary_key=True, nullable=False)
+    ruc = Column(VARCHAR(20), primary_key=True, nullable=False)
+    codigo_institucion = Column(VARCHAR(9), primary_key=True, nullable=False)
+    num_cuenta = Column(VARCHAR(50), primary_key=True, nullable=False)
+    cod_banco = Column(VARCHAR(3), primary_key=True, nullable=False)
+    tipo_cuenta = Column(VARCHAR(10), nullable=False)
+    nombre_banco = Column(VARCHAR(150), nullable=False)
+    tipo_identificacion = Column(VARCHAR(1))
+    identificacion_titular = Column(VARCHAR(20))
+    nombre_titular = Column(VARCHAR(100))
 
     @classmethod
     def query(cls):
