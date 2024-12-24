@@ -1,4 +1,4 @@
-from sqlalchemy import Column, VARCHAR, ForeignKey
+from sqlalchemy import Column, VARCHAR, ForeignKey, CLOB
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
 from sqlalchemy.dialects.oracle import NUMBER
@@ -52,5 +52,18 @@ class alerta_email_type(Base):
     def query(cls):
         return db.session.query(cls)
 
+class email_type_body(Base):
+    __tablename__ = 'EMAIL_TYPE_BODY'
+    __table_args__ = (
+        {'schema': 'stock'},  # Esquema stock
+    )
+    cod_alerta = Column(VARCHAR(20),  primary_key=True, nullable=False)
+    empresa = Column(NUMBER(2), primary_key=True, nullable=False)
+    cod_rol = Column(VARCHAR(50),  primary_key=True, nullable=False)
+    subject = Column(VARCHAR(255), nullable=False)
+    body_template = Column(CLOB, nullable=False)
 
-
+    # Clase de consulta
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
