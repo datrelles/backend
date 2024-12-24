@@ -28,7 +28,7 @@ from src.routes.routes_fin import bpfin
 from src.routes.routes_logis import bplog
 from src.routes.routes_com import bpcom
 from src.routes.module_contabilidad import rmc
-from src.routes.email_alert import aem, execute_send_alert_emails
+from src.routes.email_alert import aem, execute_send_alert_emails, execute_send_alert_emails_for_role
 
 ###################################################
 
@@ -294,7 +294,7 @@ def logout():
 
 def scheduled_task():
     with app.app_context():
-        execute_send_alert_emails()
+        execute_send_alert_emails_for_role()
 
 scheduler.add_job(scheduled_task, 'interval', minutes=30)
 scheduler.start()

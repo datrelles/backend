@@ -1,5 +1,5 @@
 # coding: utf-8
-from sqlalchemy import Column, DateTime, ForeignKey, VARCHAR
+from sqlalchemy import Column, DateTime, ForeignKey, VARCHAR, Date
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.orm import relationship,deferred
 from sqlalchemy.ext.declarative import declarative_base
@@ -157,3 +157,24 @@ class Usuario(Base):
     def query(cls):
         return db.session.query(cls)
 
+
+class tg_rol(Base):
+    __tablename__ = 'TG_ROL'
+    __table_args__ = (
+        {'schema': 'COMPUTO'},  # Esquema COMPUTO
+    )
+    # Definición de columnas
+    empresa = Column(NUMBER(2), ForeignKey('COMPUTO.EMPRESA.EMPRESA'), primary_key=True, nullable=False)
+    cod_rol = Column(VARCHAR(9), primary_key=True, nullable=False)
+    nombre = Column(VARCHAR(100), nullable=True)
+    activo = Column(NUMBER(1), nullable=True)
+    descripcion = Column(VARCHAR(200), nullable=True)
+    usuario_crea = Column(VARCHAR(14), nullable=True)
+    fecha_crea = Column(Date, nullable=True)
+    usuario_modifica = Column(VARCHAR(14), nullable=True)
+    fecha_modifica = Column(Date, nullable=True)
+
+    # Clase de consulta
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
