@@ -129,7 +129,7 @@ def craft_email_alert_ecommerce(cod_type, rol):
                 registros_credito_directo = st_cab_credito_directo.query().filter(st_cab_credito_directo.cod_comprobante == None).all()
 
     except Exception as e:
-        print(f"Error al consultar las tablas: {e}")
+        #print(f"Error al consultar las tablas: {e}")
         return
     try:
         # Obtener el correo del destino
@@ -141,20 +141,17 @@ def craft_email_alert_ecommerce(cod_type, rol):
         ).first()
 
         if not body_email_destiny:
-            print("No se encontró ningún registro de body." + rol +cod_type)
+            #print("No se encontró ningún registro de body." + rol +cod_type)
             return
-
-
-        print(body_email_destiny.body_template)
 
         if not register_email_destiny:
-            print("No se encontró ningún registro de destino para el correo electrónico.")
+            #print("No se encontró ningún registro de destino para el correo electrónico.")
             return
         email_destiny = [register_email_destiny.email]
-        print(f"Correo destino: {email_destiny}")
+        #print(f"Correo destino: {email_destiny}")
 
     except Exception as e:
-        print(f"Error al obtener el correo de destino: {e}")
+        #print(f"Error al obtener el correo de destino: {e}")
         return
 
     try:
@@ -164,26 +161,29 @@ def craft_email_alert_ecommerce(cod_type, rol):
                    'De_Una' if isinstance(registro, st_cab_deuna) else None
             try:
                 status = send_email_sms_outlook(email_destiny, tipo, registro, body_email_destiny.body_template)
-                print(f"Correo enviado con estado: {status}")
+                #print(f"Correo enviado con estado: {status}")
             except Exception as e:
-                print(f"Error al enviar correo para el registro {registro}: {e}")
+                pass
+                #print(f"Error al enviar correo para el registro {registro}: {e}")
 
         for registrob2b in registros_datafast_b2b + registros_deuna_b2b:
             tipo = 'Datafast B2B' if isinstance(registrob2b, registros_datafast_b2b) else \
                    'De_Una B2B' if isinstance(registrob2b, registros_deuna_b2b) else None
             try:
                 status = send_email_sms_outlook(email_destiny, tipo, registrob2b, body_email_destiny.body_template)
-                print(f"Correo enviado con estado: {status}")
+                #print(f"Correo enviado con estado: {status}")
             except Exception as e:
-                print(f"Error al enviar correo para el registro {registrob2b}: {e}")
+                pass
+                #print(f"Error al enviar correo para el registro {registrob2b}: {e}")
 
         for registro_cred in registros_credito_directo:
             tipo = 'Credito Directo' if isinstance(registro_cred, st_cab_credito_directo) else None
             try:
                 status = send_email_sms_outlook(email_destiny, tipo, registro_cred, body_email_destiny.body_template)
-                print(f"Correo enviado con estado: {status}")
+                #print(f"Correo enviado con estado: {status}")
             except Exception as e:
-                print(f"Error al enviar correo para el registro {registro_cred}: {e}")
+                pass
+                #print(f"Error al enviar correo para el registro {registro_cred}: {e}")
 
 
     except Exception as e:
@@ -194,10 +194,8 @@ def execute_send_alert_emails_for_role():
         role_users = tg_rol.query().filter(tg_rol.activo==1)
 
         for type in type_alert:
-            print(type.cod_alerta)
             for rol in role_users:
                 flag_check_range = check_range_time(type.cod_alerta, rol.cod_rol)
-                print(flag_check_range)
                 if flag_check_range:
                     craft_email_alert_ecommerce(type.cod_alerta, rol.cod_rol)
         pass
