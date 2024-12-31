@@ -69,6 +69,8 @@ def execute_send_alert_emails():
         logger.info("Correos enviados exitosamente.")
     except Exception as e:
         logger.error(f"Error al enviar correos: {e}")
+
+#system alert for role.
 def check_range_time(type, rol):
     # Obtener la hora y el día actual
     now = datetime.now()
@@ -80,10 +82,8 @@ def check_range_time(type, rol):
         alerta_dias.cod_alerta == type,
         alerta_dias.rol == rol,
         alerta_dias.dia == current_day,
-        or_(
-            alerta_dias.hora_inicio <= current_hour,  # Hora de inicio <= hora actual
-            alerta_dias.hora_final >= current_hour  # Hora de fin >= hora actual
-        )
+        alerta_dias.hora_inicio <= current_hour,  # Hora de inicio <= hora actual
+        alerta_dias.hora_final >= current_hour  # Hora de fin >= hora actual
     ).all()
 
     # Devolver True si hay resultados, False si no
