@@ -82,19 +82,11 @@ def check_range_time(type, rol):
         alerta_dias.cod_alerta == type,
         alerta_dias.rol == rol,
         alerta_dias.dia == current_day,
-        or_(
-            alerta_dias.hora_inicio <= current_hour,  # Hora de inicio <= hora actual
-            alerta_dias.hora_final >= current_hour  # Hora de fin >= hora actual
-        )
+        alerta_dias.hora_inicio <= current_hour,  # Hora de inicio <= hora actual
+        alerta_dias.hora_final >= current_hour  # Hora de fin >= hora actual
     ).all()
 
-    for time in times:
-        print(time.hora_inicio, time.hora_final, current_hour)
-
-
     # Devolver True si hay resultados, False si no
-    print(bool(times))
-    print('-------------')
     return bool(times)
 def send_email_sms_outlook(destinatarios, tipo, registro, body_template):
 
