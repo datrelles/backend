@@ -69,6 +69,8 @@ def execute_send_alert_emails():
         logger.info("Correos enviados exitosamente.")
     except Exception as e:
         logger.error(f"Error al enviar correos: {e}")
+
+#system alert for role.
 def check_range_time(type, rol):
     # Obtener la hora y el día actual
     now = datetime.now()
@@ -86,7 +88,13 @@ def check_range_time(type, rol):
         )
     ).all()
 
+    for time in times:
+        print(time.hora_inicio, time.hora_final, current_hour)
+
+
     # Devolver True si hay resultados, False si no
+    print(bool(times))
+    print('-------------')
     return bool(times)
 def send_email_sms_outlook(destinatarios, tipo, registro, body_template):
 
