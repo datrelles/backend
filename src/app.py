@@ -38,7 +38,7 @@ app = Flask(__name__)
 
 #####################mail################################
 
-app.config['MAIL_SERVER'] = 'mail.massline.com.ec'
+app.config['MAIL_SERVER'] = '200.105.245.182'
 app.config['MAIL_PORT'] = 25
 app.config['MAIL_USERNAME'] = ''
 app.config['MAIL_PASSWORD'] = ''
