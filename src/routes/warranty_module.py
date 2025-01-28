@@ -2,6 +2,7 @@ from flask_jwt_extended import jwt_required
 from flask import Blueprint, jsonify, request
 from src import oracle
 from src.models.postVenta import ar_taller_servicio_tecnico, ADprovincias, ADcantones
+from src.models.clientes import Cliente
 from sqlalchemy import (and_)
 #here modules
 
@@ -12,7 +13,6 @@ rmwa = Blueprint('routes_module_warranty', __name__)
 @rmwa.route('/manual_entry_of_warranty_cases', methods=['POST'])
 @jwt_required()
 def manual_entry_of_warranty_cases():
-    print('PRINT')
     return jsonify("test" , "test")
 
 #check information by engine code
@@ -92,3 +92,53 @@ def get_talleres_authorized_warranty():
         })
 
     return jsonify(data), 200
+
+
+@rmwa.route('/get_cliente_data_for_id', methods=['GET'])
+@jwt_required()
+def get_cliente_data_for_id():
+    # Retrieve parameters from the query string
+    cod_cliente = request.args.get('cod_cliente', None)
+    enterprise = request.args.get('enterprise', None)
+
+    # Validate if both parameters were provided
+    if not cod_cliente or not enterprise:
+        return jsonify({"error": "Missing parameters: 'cod_cliente' and/or 'enterprise'"}), 400
+
+    try:
+        # Insert a dash before the last digit of 'cod_cliente'
+        cod_cliente_with_dash = add_dash_before_last_digit(cod_cliente)
+
+        # Query the model using the class method 'query'
+        cliente = (
+            Cliente.query()
+            .filter(
+                Cliente.cod_cliente == cod_cliente_with_dash,
+                Cliente.empresa == enterprise
+            )
+            .first()
+        )
+
+        # Check if a record was found
+        if not cliente:
+            return jsonify({"error": "Client not found"}), 404
+
+        # Prepare the response as a dictionary
+        data = {
+            "empresa": cliente.empresa,
+            "cod_cliente": cliente.cod_cliente,
+            "cod_tipo_identificacion": cliente.cod_tipo_identificacion,
+            "nombre": cliente.nombre,
+            "apellido1": cliente.apellido1,
+            "ruc": cliente.ruc
+        }
+        return jsonify(data), 200
+
+    except Exception as e:
+        # Handle any unexpected error
+        return jsonify({"error": str(e)}), 500
+
+def add_dash_before_last_digit(cod_cliente: str) -> str:
+    if len(cod_cliente) < 2:
+        return cod_cliente
+    return cod_cliente[:-1] + '-' + cod_cliente[-1]
