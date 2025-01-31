@@ -349,4 +349,31 @@ class ar_taller_servicio_tecnico(Base):
     def query(cls):
         return db.session.query(cls)
 
+class ar_duracion_reparacion(Base):
+    __tablename__ = 'AR_DURACION_REPARACION'
+    __table_args__ = (
+        PrimaryKeyConstraint('codigo_duracion', 'codigo_empresa', name='PK_AR_DUR_REP_COD_DUR_COD_EMP'),
+        ForeignKeyConstraint(
+            ['codigo_empresa'],
+            ['JAHER.AD_EMPRESAS.CODIGO_EMPRESA'],
+            name='FK_AR_DUR_REP_COD_EMP'
+        ),
+        CheckConstraint("anulado IN ('S','N')", name='CK_AR_DUR_REP_ANULADO'),
+        CheckConstraint("tipo_duracion IN ('D','H','N')", name='CK_AR_DUR_REP_TIP_DUR'),
+        {'schema': 'JAHER'}
+    )
 
+    codigo_duracion = Column(NUMBER(6), nullable=False)
+    codigo_empresa = Column(NUMBER(2), nullable=False)
+    descripcion = Column(VARCHAR(200), nullable=False)
+    duracion = Column(NUMBER(3), nullable=False)
+    anulado = Column(VARCHAR(1), nullable=False)
+    adicionado_por = Column(VARCHAR(30), nullable=False, server_default=text("USER"))
+    fecha_adicion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    modificado_por = Column(VARCHAR(30))
+    fecha_modificacion = Column(DateTime)
+    tipo_duracion = Column(VARCHAR(1), nullable=False)
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
