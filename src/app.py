@@ -81,10 +81,9 @@ app.register_blueprint(rmwa, url_prefix="/warranty")
 jwt = JWTManager(app)
 CORS(app, resources={
     r"/*": {
-        "origins": "https://app.massline.com.ec",
-        "methods": ["GET", "POST", "OPTIONS", "PUT", "DELETE"],
-        "allow_headers": ["Content-Type", "Authorization"],
-        "supports_credentials": True
+        "origins": "*",  # Allows all origins
+        "allow_headers": ["Content-Type", "Authorization"],  # Specify allowed headers
+        "supports_credentials": True  # Optional, for cookies and authorization headers
     }
 })
 app.secret_key = getenv("SECRET_KEY")
