@@ -1,4 +1,8 @@
-from sqlalchemy import Column, DateTime, Index, VARCHAR, NVARCHAR, text, CHAR,Float, Unicode
+from sqlalchemy import (Column, DateTime,
+                        Index, VARCHAR,
+                        NVARCHAR, text, CHAR,
+                        Float, Unicode, ForeignKeyConstraint,
+                        PrimaryKeyConstraint, CheckConstraint,  and_)
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
@@ -214,7 +218,6 @@ class st_casos_url(Base):
     def query(cls):
         return db.session.query(cls)
 
-
 class ArCiudades(Base):
     __tablename__ = 'AR_CIUDADES'
     __table_args__ = {'schema': 'JAHER'}
@@ -277,5 +280,128 @@ class ADcantones(Base):
     def query(cls):
         return db.session.query(cls)
 
+class ar_taller_servicio_tecnico(Base):
+    __tablename__ = 'AR_TALLER_SERVICIO_TECNICO'
+    __table_args__ = (
+        # Primary Key
+        PrimaryKeyConstraint('codigo', 'codigo_empresa', name='PK_AR_TALLER_SERVICIO_TECNICO'),
+        # Foreign Keys
+        ForeignKeyConstraint(
+            ['codigo_ciudad', 'codigo_provincia'],
+            ['JAHER.AR_CIUDADES.CODIGO_CIUDAD', 'JAHER.AR_CIUDADES.CODIGO_PROVINCIA'],
+            name='FK_AR_TAL_SER_TEC_COD_CIU'
+        ),
+        ForeignKeyConstraint(
+            ['codigo_empresa', 'codigo_marca'],
+            ['MARCA.EMPRESA', 'MARCA.COD_MARCA'],
+            name='FK_AR_TAL_SER_TEC_COD_MARCA'
+        ),
+        ForeignKeyConstraint(
+            ['codigo_empresa'],
+            ['JAHER.AD_EMPRESAS.CODIGO_EMPRESA'],
+            name='FK_AR_TAL_SER_TEC_EMPRESA'
+        ),
+        ForeignKeyConstraint(
+            ['codigo_tipo_taller', 'codigo_empresa'],
+            ['JAHER.AR_TIPOS_TECNICO.CODIGO_TIPO_TECNICO', 'JAHER.AR_TIPOS_TECNICO.CODIGO_EMPRESA'],
+            name='FK_AR_TAL_SER_TEC_TIP_TAL'
+        ),
+        # Check Constraint
+        CheckConstraint("anulado IN ('S','N')", name='CK_AR_TAL_SER_TEC_ANULADO'),
+        # Esquema de la tabla
+        {'schema': 'JAHER'}
+    )
 
+    # Columns
+    codigo = Column(VARCHAR(30), nullable=False)
+    codigo_empresa = Column(NUMBER(2), nullable=False)
+    codigo_tipo_taller = Column(VARCHAR(1), nullable=False)
+    descripcion = Column(VARCHAR(200), nullable=False)
+    codigo_provincia = Column(NUMBER(4))
+    codigo_ciudad = Column(NUMBER(4))
+    codigo_marca = Column(NUMBER(3), nullable=False)
+    nombre_contacto = Column(VARCHAR(200))
+    telefono1 = Column(VARCHAR(12))
+    extencion1 = Column(VARCHAR(5))
+    telefono2 = Column(VARCHAR(12))
+    extencion2 = Column(VARCHAR(5))
+    telefono3 = Column(VARCHAR(12))
+    extencion3 = Column(VARCHAR(5))
+    email = Column(VARCHAR(60))
+    email2 = Column(VARCHAR(60))
+    email3 = Column(VARCHAR(60))
+    anulado = Column(VARCHAR(1), nullable=False)
+    adicionado_por = Column(VARCHAR(30), nullable=False, server_default=text("USER"))
+    fecha_adicion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    modificado_por = Column(VARCHAR(30))
+    fecha_modificacion = Column(DateTime)
+    direccion = Column(VARCHAR(300))
+    ruc = Column(VARCHAR(14), nullable=False)
+    tipo_identificacion = Column(VARCHAR(1), nullable=False, server_default=text("'R'"))
+    cod_canton = Column(VARCHAR(4))
+    cod_provincia = Column(VARCHAR(6), nullable=False)
+    cod_nacion = Column(NUMBER(3), nullable=False)
+    es_taller_autorizado = Column(NUMBER(1), nullable=False, server_default=text("0"))
+    tipo_taller = Column(NUMBER(1), nullable=False, server_default=text("0"))
+    fecha_nacimiento = Column(DateTime)
+    cupo_x_hora = Column(NUMBER(4), nullable=False, server_default=text("1"))
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
 
+class ar_duracion_reparacion(Base):
+    __tablename__ = 'AR_DURACION_REPARACION'
+    __table_args__ = (
+        PrimaryKeyConstraint('codigo_duracion', 'codigo_empresa', name='PK_AR_DUR_REP_COD_DUR_COD_EMP'),
+        ForeignKeyConstraint(
+            ['codigo_empresa'],
+            ['JAHER.AD_EMPRESAS.CODIGO_EMPRESA'],
+            name='FK_AR_DUR_REP_COD_EMP'
+        ),
+        CheckConstraint("anulado IN ('S','N')", name='CK_AR_DUR_REP_ANULADO'),
+        CheckConstraint("tipo_duracion IN ('D','H','N')", name='CK_AR_DUR_REP_TIP_DUR'),
+        {'schema': 'JAHER'}
+    )
+
+    codigo_duracion = Column(NUMBER(6), nullable=False)
+    codigo_empresa = Column(NUMBER(2), nullable=False)
+    descripcion = Column(VARCHAR(200), nullable=False)
+    duracion = Column(NUMBER(3), nullable=False)
+    anulado = Column(VARCHAR(1), nullable=False)
+    adicionado_por = Column(VARCHAR(30), nullable=False, server_default=text("USER"))
+    fecha_adicion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    modificado_por = Column(VARCHAR(30))
+    fecha_modificacion = Column(DateTime)
+    tipo_duracion = Column(VARCHAR(1), nullable=False)
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class ar_taller_servicio_usuario(Base):
+    __tablename__ = 'AR_TALLER_SERVICIO_USUARIO'
+    __table_args__ = (
+        PrimaryKeyConstraint('EMPRESA', 'CODIGO_TALLER', 'COD_ROL', 'USUARIO', name='PK_AR_TALLER_SERV_USU'),
+        CheckConstraint("ACTIVO IN (0,1)", name='CK_TALLER_SERV_USU_ACTIVO'),
+
+        # Indica el esquema de la tabla
+        {'schema': 'STOCK'}
+    )
+
+    # ----------------------------------------------------------------------
+    # Definición de columnas
+    # ----------------------------------------------------------------------
+    EMPRESA = Column(NUMBER(2), nullable=False)
+    CODIGO_TALLER = Column(VARCHAR(30), nullable=False)
+    COD_ROL = Column(VARCHAR(9), nullable=False)
+    USUARIO = Column(VARCHAR(20), nullable=False)
+
+    ACTIVO = Column(NUMBER(1), nullable=False, server_default=text("1"))
+    ADICIONADO_POR = Column(VARCHAR(30), nullable=False, server_default=text("USER"))
+    FECHA_ADICION = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    MODIFICADO_POR = Column(VARCHAR(30))
+    FECHA_MODIFICACION = Column(DateTime)
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)

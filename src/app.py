@@ -28,6 +28,7 @@ from src.routes.routes_fin import bpfin
 from src.routes.routes_logis import bplog
 from src.routes.routes_com import bpcom
 from src.routes.module_contabilidad import rmc
+from src.routes.warranty_module import rmwa
 from src.routes.email_alert import aem, execute_send_alert_emails, execute_send_alert_emails_for_role
 
 ###################################################
@@ -73,15 +74,17 @@ app.register_blueprint(bplog, url_prefix="/log")
 app.register_blueprint(bpcom, url_prefix="/com")
 app.register_blueprint(aem, url_prefix="/alert_email")
 app.register_blueprint(rmc, url_prefix="/cont")
+app.register_blueprint(rmwa, url_prefix="/warranty")
 
 #############################################################################
 
 jwt = JWTManager(app)
 CORS(app, resources={
     r"/*": {
-        "origins": "*",  # Allows all origins
-        "allow_headers": ["Content-Type", "Authorization"],  # Specify allowed headers
-        "supports_credentials": True  # Optional, for cookies and authorization headers
+        "origins": "https://app.massline.com.ec",
+        "methods": ["GET", "POST", "OPTIONS", "PUT", "DELETE"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
     }
 })
 app.secret_key = getenv("SECRET_KEY")
