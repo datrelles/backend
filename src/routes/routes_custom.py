@@ -1292,7 +1292,7 @@ def obtener_productos_por_codigo():
 
         query = query.filter(Producto.cod_producto.like(f'%{cod_producto}%'))
         query = query.filter(Producto.activo == 'S')
-        query = query.filter(Producto.cod_item_cat.in_(['Z', 'R', 'J', 'L']))
+        query = query.filter(Producto.cod_item_cat.in_(['Z', 'R', 'J', 'L', 'D']))
 
         productos = query.all()
         serialized_productos = []
