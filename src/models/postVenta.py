@@ -377,3 +377,31 @@ class ar_duracion_reparacion(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
+
+class ar_taller_servicio_usuario(Base):
+    __tablename__ = 'AR_TALLER_SERVICIO_USUARIO'
+    __table_args__ = (
+        PrimaryKeyConstraint('EMPRESA', 'CODIGO_TALLER', 'COD_ROL', 'USUARIO', name='PK_AR_TALLER_SERV_USU'),
+        CheckConstraint("ACTIVO IN (0,1)", name='CK_TALLER_SERV_USU_ACTIVO'),
+
+        # Indica el esquema de la tabla
+        {'schema': 'STOCK'}
+    )
+
+    # ----------------------------------------------------------------------
+    # Definición de columnas
+    # ----------------------------------------------------------------------
+    EMPRESA = Column(NUMBER(2), nullable=False)
+    CODIGO_TALLER = Column(VARCHAR(30), nullable=False)
+    COD_ROL = Column(VARCHAR(9), nullable=False)
+    USUARIO = Column(VARCHAR(20), nullable=False)
+
+    ACTIVO = Column(NUMBER(1), nullable=False, server_default=text("1"))
+    ADICIONADO_POR = Column(VARCHAR(30), nullable=False, server_default=text("USER"))
+    FECHA_ADICION = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    MODIFICADO_POR = Column(VARCHAR(30))
+    FECHA_MODIFICACION = Column(DateTime)
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)

@@ -1,5 +1,5 @@
 # coding: utf-8
-from sqlalchemy import Column, DateTime, ForeignKey, VARCHAR, Date
+from sqlalchemy import Column, DateTime, ForeignKey, VARCHAR, Date, ForeignKeyConstraint
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.orm import relationship,deferred
 from sqlalchemy.ext.declarative import declarative_base
@@ -178,3 +178,31 @@ class tg_rol(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
+
+class tg_rol_usuario(Base):
+        __tablename__ = 'TG_ROL_USUARIO'
+        __table_args__ = (
+            # Constraint para la llave foránea compuesta hacia TG_ROL
+            ForeignKeyConstraint(
+                ['cod_rol', 'empresa'],
+                ['computo.TG_ROL.cod_rol', 'computo.TG_ROL.empresa']
+            ),
+            {'schema': 'computo'}  # Esquema en Oracle
+        )
+
+        empresa = Column(NUMBER(2), primary_key=True, nullable=False)
+        cod_rol = Column(VARCHAR(9), primary_key=True, nullable=False)
+        usuario = Column(VARCHAR(20),
+                         ForeignKey('computo.usuario.usuario_oracle'),
+                         primary_key=True,
+                         nullable=False)
+        activo = Column(NUMBER(1))
+        observacion = Column(VARCHAR(200))
+        usuario_crea = Column(VARCHAR(14))
+        fecha_crea = Column(Date)
+        usuario_modifica = Column(VARCHAR(14))
+        fecha_modifica = Column(Date)
+
+        @classmethod
+        def query(cls):
+            return db.session.query(cls)
