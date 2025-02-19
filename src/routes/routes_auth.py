@@ -48,7 +48,7 @@ sistemas@massline.com.ec
 """
 
     # Replace the placeholder with your actual sender email address
-    sender_email = "sms@massline.com.ec"
+    sender_email = "facturacion@massline.com.ec"
 
     # Replace the placeholder with your actual recipient email address
     recipients = [email_recipient]
@@ -64,12 +64,10 @@ sistemas@massline.com.ec
         return False  # Indicate that an error occurred while sending the email
 
 
-
 @au.route('/get_authorization')
 @jwt_required()
 @cross_origin()
 def get_auth():
-
     usuario = request.args.get('usuario', None)
     query = TiOpenAuthorization.query()
 
@@ -157,12 +155,12 @@ def set_auth(usuario):
         logger.exception(f"Error al insertar registro: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-
 @au.route('/verify_authorization/<usuario>', methods=['PUT'])
 @cross_origin()
 def verify_auth(usuario):
     try:
         data = request.get_json()
+        print(data)
         #if not data.get('mantiene_sesion') or data.get('mantiene_sesion')=='':
          #   return jsonify({'error': 'Informacion de sesion faltante'}), 404
 
@@ -184,7 +182,8 @@ def verify_auth(usuario):
         print(token)
         print(auth.token)
         if token == auth.token:
-            if datetime.now() - auth.fecha_registro < timedelta(minutes=10):
+            if token:
+                print("debug")
                 auth.valida = 1
                 access_token = create_access_token(identity=usuario)
                 print(access_token)
