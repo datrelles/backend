@@ -48,7 +48,7 @@ sistemas@massline.com.ec
 """
 
     # Replace the placeholder with your actual sender email address
-    sender_email = "facturacion@massline.com.ec"
+    sender_email = "sms@massline.com.ec"
 
     # Replace the placeholder with your actual recipient email address
     recipients = [email_recipient]
