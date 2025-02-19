@@ -39,12 +39,13 @@ app = Flask(__name__)
 
 #####################mail################################
 
-app.config['MAIL_SERVER'] = '200.105.245.182'
-app.config['MAIL_PORT'] = 25
-app.config['MAIL_USERNAME'] = ''
-app.config['MAIL_PASSWORD'] = ''
-app.config['MAIL_USE_TLS'] = False
+app.config['MAIL_SERVER'] = 'smtp.office365.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USERNAME'] = 'facturacion@massline.com.ec'
+app.config['MAIL_PASSWORD'] = 'lpnkxmlgmdsshlmz'
+app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USE_SSL'] = False
+app.config['MAIL_DEFAULT_SENDER'] = 'facturacion@massline.com.ec'
 mail = Mail(app)
 ###################################################
 
