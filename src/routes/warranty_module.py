@@ -4,7 +4,7 @@ from src import oracle
 from src.models.postVenta import ar_taller_servicio_tecnico, ADprovincias, ADcantones, ar_duracion_reparacion, st_casos_postventa, ar_taller_servicio_usuario
 from src.models.clientes import Cliente
 from src.models.users import Usuario, tg_rol_usuario
-from sqlalchemy import (and_)
+from sqlalchemy import and_, extract, func
 import cx_Oracle
 from os import getenv
 import json
@@ -191,6 +191,7 @@ def warranty():
     try:
         # 1. Parse request body
         dataCaso = json.loads(request.data)
+
         userShineray = request.args.get('userShineray')
         enterpriseShineray = request.args.get('enterpriseShineray')
 
@@ -235,7 +236,7 @@ def warranty():
         # 8. Save problem types in ST_CASOS_TIPO_PROBLEMA
         save_cod_tipo_problema(dataCaso, c)
 
-        # If everything worked, commit the transaction
+        # If everything worked, commit the transactio
         c.commit()
 
         return jsonify({"casoData": dataCaso}), 200
@@ -272,25 +273,29 @@ def validar_campos(data):
     return True, None
 def set_non_variable_data(data, userShineray, enterpriseShineray):
     """
-    Sets additional fields that are constant or derived.
+    Establece campos adicionales que son constantes o derivados,
+    aplicando conversiones seguras de string a entero cuando corresponda.
     """
     data['EMPRESA'] = enterpriseShineray
     data['TIPO_COMPROBANTE'] = 'CP'
 
-    # Convert 'FECHA' to datetime
-    fecha_formateada = datetime.strptime(data['FECHA'], '%Y/%m/%d %H:%M:%S')
-    data['FECHA'] = fecha_formateada
+    # Convertir 'FECHA' a datetime
+    data['FECHA'] = datetime.strptime(data['FECHA'], '%Y/%m/%d %H:%M:%S')
 
-    data['CODIGO_NACION'] = 1
-    data['CODIGO_RESPONSABLE'] = userShineray
-    data['COD_CANAL'] = 5
-    data['ADICIONADO_POR'] = userShineray
+    # Establecer campos numéricos usando safe_int.
+    # Se usa un valor por defecto en caso de que el dato no se encuentre o no pueda convertirse.
+    data['CODIGO_NACION'] = safe_int(data.get('CODIGO_NACION', 1), 1)
+    # Si userShineray representa un ID numérico, se convierte; de lo contrario se deja como está.
+    data['CODIGO_RESPONSABLE'] = safe_int(userShineray, userShineray)
+    data['COD_CANAL'] = safe_int(data.get('COD_CANAL', 5), 5)
+    data['ADICIONADO_POR'] = safe_int(userShineray, userShineray)
 
-    # Convert 'FECHA_VENTA' to datetime
-    fecha_venta = datetime.strptime(data['FECHA_VENTA'], '%Y/%m')
-    data['FECHA_VENTA'] = fecha_venta
+    # Convertir 'FECHA_VENTA' a datetime
+    data['FECHA_VENTA'] = datetime.strptime(data['FECHA_VENTA'], '%Y/%m')
 
-    data['APLICA_GARANTIA'] = 2
+    data['APLICA_GARANTIA'] = safe_int(data.get('APLICA_GARANTIA', 2), 2)
+    data['KILOMETRAJE'] = safe_int(data.get('KILOMETRAJE', 0))
+    data['COD_TIPO_PROBLEMA'] = safe_int(data.get('COD_TIPO_PROBLEMA', 0))
 def generate_comprobante_code(data, dataCaso, c):
     """
     Calls the PL/SQL procedure to generate 'cod_comprobante'
@@ -435,6 +440,14 @@ def save_cod_tipo_problema(data, c):
     finally:
         if cur:
             cur.close()
+def safe_int(value, default=0):
+    """
+    Intenta convertir value a entero. Si falla, retorna el valor por defecto.
+    """
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
 
 @rmwa.route('/get_caso_postventa', methods=['GET'])
 @jwt_required()
@@ -827,4 +840,64 @@ def get_taller_usuario_relations():
         return jsonify({"error": "The 'empresa' query param must be a valid integer"}), 400
     except Exception as e:
         # Catch any other errors
+        print(e)
         return jsonify({"error": str(e)}), 500
+
+@rmwa.route('/get_incidences_by_motor_year', methods=['GET'])
+@jwt_required()
+def get_incidences_by_motor_year():
+    """
+    Endpoint that groups by year the number of incidences (cases),
+    filtering by 'empresa' (company) and 'cod_motor_' (motor code)
+    in the ST_CASOS_POSTVENTA table.
+    """
+    try:
+        empresa_str = request.args.get('empresa', None)
+        cod_motor_str = request.args.get('cod_motor_', None)
+
+        if not empresa_str or not cod_motor_str:
+            return jsonify({"error": "Missing required parameters (empresa, cod_motor_)."}), 400
+
+        try:
+            empresa_int = int(empresa_str)
+        except ValueError:
+            return jsonify({"error": "Parameter 'empresa' must be a valid integer."}), 400
+
+        # Base query construction
+        query = st_casos_postventa.query()
+
+        # Filter by 'empresa'
+        query = query.filter(st_casos_postventa.empresa == empresa_int)
+
+        # Filter by 'cod_motor'
+        query = query.filter(st_casos_postventa.cod_motor == cod_motor_str)
+
+        # Group by year and count the number of cases
+        # Using extract('YEAR', st_casos_postventa.fecha)
+        # If you are using Oracle without extract('YEAR'), you can do:
+        #    func.to_char(st_casos_postventa.fecha, 'YYYY').label("year")
+        results = (
+            query.with_entities(
+                extract('YEAR', st_casos_postventa.fecha).label("year"),
+                func.count('*').label("incidences")
+            )
+            .group_by(extract('YEAR', st_casos_postventa.fecha))
+            .order_by(extract('YEAR', st_casos_postventa.fecha))
+            .all()
+        )
+
+        # Build the response
+        data = []
+        for row in results:
+            # row.year might be a float (e.g., 2022.0) depending on the DB/ORM
+            year_value = int(row.year) if row.year is not None else None
+            data.append({
+                "year": year_value,
+                "incidences": row.incidences
+            })
+
+        return jsonify(data), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
