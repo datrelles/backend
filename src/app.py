@@ -27,6 +27,7 @@ from src.config.database import db
 from src.routes.routes import bp
 from src.routes.routes_auth import au
 from src.routes.routes_custom import bpcustom
+from src.routes.routes_net import net
 from src.routes.routes_fin import bpfin
 from src.routes.routes_logis import bplog
 from src.routes.routes_com import bpcom
@@ -78,6 +79,8 @@ app.register_blueprint(bpcom, url_prefix="/com")
 app.register_blueprint(aem, url_prefix="/alert_email")
 app.register_blueprint(rmc, url_prefix="/cont")
 app.register_blueprint(rmwa, url_prefix="/warranty")
+app.register_blueprint(net, url_prefix="/net")
+
 
 #############################################################################
 
@@ -341,8 +344,39 @@ def gen_jwt():
 @jwt_required()
 def generate_netsuite_token():
     try:
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur_01 = c.cursor()
+
+        sql_select = """SELECT empresa, token, fecha_inicio, fecha_final 
+                                FROM COMPUTO.TG_TOKEN_API_NETSUITE 
+                                ORDER BY fecha_final DESC 
+                                FETCH FIRST 1 ROWS ONLY"""
+        cur_01.execute(sql_select)
+        last_token = cur_01.fetchone()
+
+        now = datetime.now()
+
+        if last_token:
+            empresa, token, fecha_inicio, fecha_final = last_token
+            if fecha_final > now:
+
+                return jsonify({
+                    "access_token": token,
+                    "empresa": empresa,
+                    "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d %H:%M:%S"),
+                    "fecha_final": fecha_final.strftime("%Y-%m-%d %H:%M:%S"),
+                    "message": "Token aún válido, no se generó uno nuevo."
+                })
+
+
         jwt_response = gen_jwt()
-        jwt_token = jwt_response.json.get("token")  # 🔹 Acceder correctamente al token
+        jwt_token = jwt_response.json.get("token")
+
+        if not jwt_token:
+            return jsonify({"error": "No se pudo generar el JWT"}), 400
+
+        jwt_response = gen_jwt()
+        jwt_token = jwt_response.json.get("token")
 
         if not jwt_token:
             return jsonify({"error": "No se pudo generar el JWT"}), 400
@@ -358,6 +392,26 @@ def generate_netsuite_token():
         }
 
         response = requests.post(TOKEN_URL, data=payload, headers=headers, verify=False)
+
+        data = response.json()
+
+        token = data["access_token"]
+        expires_in = int(data["expires_in"])
+
+        fecha_inicio = datetime.now()
+        fecha_final = fecha_inicio + timedelta(seconds=expires_in)
+
+        sql = """INSERT INTO COMPUTO.TG_TOKEN_API_NETSUITE (empresa, token, fecha_inicio, fecha_final) 
+                     VALUES (:empresa, :token, :fecha_inicio, :fecha_final)"""
+
+        cur_01.execute(sql, {
+            "empresa": 20,
+            "token": token,
+            "fecha_inicio": fecha_inicio,
+            "fecha_final": fecha_final
+        })
+
+        c.commit()
 
         return jsonify(response.json())
 
