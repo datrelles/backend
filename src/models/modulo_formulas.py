@@ -18,7 +18,7 @@ class custom_base(Base):
     """
     __abstract__ = True  # Parámetro para omitir creación de tabla
 
-    def to_dict(self, excluir_none=False):
+    def to_dict(self, excluir_none=False, *args):
         """
         Convierte el modelo en un diccionario serializable.
         """
@@ -27,14 +27,17 @@ class custom_base(Base):
         }
         if excluir_none:
             data = {k: v for k, v in data.items() if v is not None}
+        for arg in args:
+            # Devuelve una lista de diccionarios para cada atributo especificado en *args
+            data[arg] = [item.to_dict() for item in getattr(self, arg, [])]
         return data
 
     @classmethod
-    def to_list(cls, items):
+    def to_list(cls, items, excluir_none=False, *args):
         """
-        Convierte un listado de objetos Query en una lista.
+        Convierte una lista de objetos SQLAlchemy en una lista de diccionarios.
         """
-        return [obj.to_dict() for obj in items]
+        return [item.to_dict(excluir_none, *args) for item in items]
 
 
 class st_proceso(custom_base):
