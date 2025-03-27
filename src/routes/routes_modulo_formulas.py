@@ -1,11 +1,14 @@
+from functools import reduce
+
 from flask import request, Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 import logging
 from src.config.database import db
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
-from src.models.modulo_formulas import st_proceso, st_formula, st_parametro, st_parametros_x_proceso, factores_calculo_parametros
+from sqlalchemy.exc import IntegrityError, StatementError
+from src.models.modulo_formulas import st_proceso, st_formula, st_parametro, st_parametros_x_proceso, \
+    st_factores_calculo_parametros, TIPOS_OPE_VALIDOS, OPERADORES_VALIDOS
 
 formulas_b = Blueprint('routes_formulas', __name__)
 logger = logging.getLogger(__name__)
@@ -15,6 +18,7 @@ logger = logging.getLogger(__name__)
 ENDPOINTS PARA GESTIONAR FÓRMULAS DINÁMICAS
 ###################################################################################
 """
+
 
 @formulas_b.route("/procesos", methods=["GET"])
 @jwt_required()
@@ -62,6 +66,12 @@ def post_procesos():
         mensaje = f'Se registró el proceso {data['cod_proceso']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 201
+    except (TypeError, ValueError, StatementError) as e:
+        db.session.rollback()
+        mensaje = 'Atributos provistos inválidos'
+        logger.exception(f'{mensaje}: {e}')
+        return jsonify(
+            {'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al registrar el proceso: {e}')
@@ -95,6 +105,12 @@ def put_procesos():
         mensaje = f'Se actualizó el proceso {data['cod_proceso']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 204
+    except (TypeError, ValueError, StatementError) as e:
+        db.session.rollback()
+        mensaje = 'Atributos provistos inválidos'
+        logger.exception(f'{mensaje}: {e}')
+        return jsonify(
+            {'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al actualizar el proceso: {e}')
@@ -149,6 +165,12 @@ def post_formulas():
         mensaje = f'Se registró la fórmula {data['cod_formula']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 201
+    except (TypeError, ValueError, StatementError) as e:
+        db.session.rollback()
+        mensaje = 'Atributos provistos inválidos'
+        logger.exception(f'{mensaje}: {e}')
+        return jsonify(
+            {'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al registrar la fórmula: {e}')
@@ -185,6 +207,12 @@ def put_formulas():
         mensaje = f'Se actualizó la fórmula {data['cod_formula']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 204
+    except (TypeError, ValueError, StatementError) as e:
+        db.session.rollback()
+        mensaje = 'Atributos provistos inválidos'
+        logger.exception(f'{mensaje}: {e}')
+        return jsonify(
+            {'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al actualizar la fórmula: {e}')
@@ -238,6 +266,12 @@ def post_parametros():
         mensaje = f'Se registró el parámetro {data['cod_parametro']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 201
+    except (TypeError, ValueError, StatementError) as e:
+        db.session.rollback()
+        mensaje = 'Atributos provistos inválidos'
+        logger.exception(f'{mensaje}: {e}')
+        return jsonify(
+            {'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al registrar el parámetro: {e}')
@@ -264,7 +298,7 @@ def put_parametros():
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
         parametro.nombre = data['nombre']
-        parametro.definicion = data.get('definicion')
+        parametro.descripcion = data.get('descripcion')
         parametro.estado = data['estado']
         parametro.audit_usuario_mod = text('user')
         parametro.audit_fecha_mod = text('sysdate')
@@ -272,6 +306,12 @@ def put_parametros():
         mensaje = f'Se actualizó el parámetro {data['cod_parametro']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 204
+    except (TypeError, ValueError, StatementError) as e:
+        db.session.rollback()
+        mensaje = 'Atributos provistos inválidos'
+        logger.exception(f'{mensaje}: {e}')
+        return jsonify(
+            {'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al actualizar el parámetro: {e}')
@@ -339,6 +379,12 @@ def post_parametros_x_proceso():
         logger.exception(f'Proceso y/o parámetro inexistentes: {e}')
         return jsonify(
             {'mensaje': f'Proceso y/o parámetro inexistentes'}), 400
+    except (TypeError, ValueError, StatementError) as e:
+        db.session.rollback()
+        mensaje = 'Atributos provistos inválidos'
+        logger.exception(f'{mensaje}: {e}')
+        return jsonify(
+            {'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al vincular el parámetro al proceso: {e}')
@@ -386,6 +432,12 @@ def put_parametros_x_proceso():
         mensaje = f'Se actualizó el parámetro {data['cod_parametro']} vinculado al proceso {data['cod_proceso']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 204
+    except (TypeError, ValueError, StatementError) as e:
+        db.session.rollback()
+        mensaje = 'Atributos provistos inválidos'
+        logger.exception(f'{mensaje}: {e}')
+        return jsonify(
+            {'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al vincular el parámetro al proceso: {e}')
@@ -454,15 +506,15 @@ def get_factores_calculo_parametros():
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
         if not db.session.get(st_parametros_x_proceso, (empresa, cod_proceso, cod_parametro)):
-            mensaje = f'Parámetros por proceso inexistente: proceso ({cod_proceso}), parámetro ({cod_parametro})'
+            mensaje = f'Parámetro por proceso inexistente: proceso ({cod_proceso}), parámetro ({cod_parametro})'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        query = factores_calculo_parametros.query()
-        factores_calculo = query.filter(factores_calculo_parametros.empresa == empresa,
-                                        factores_calculo_parametros.cod_proceso == cod_proceso,
-                                        factores_calculo_parametros.cod_parametro == cod_parametro).order_by(
-            factores_calculo_parametros.orden).all()
-        return jsonify(factores_calculo_parametros.to_list(factores_calculo))
+        query = st_factores_calculo_parametros.query()
+        factores_calculo = query.filter(st_factores_calculo_parametros.empresa == empresa,
+                                        st_factores_calculo_parametros.cod_proceso == cod_proceso,
+                                        st_factores_calculo_parametros.cod_parametro == cod_parametro).order_by(
+            st_factores_calculo_parametros.orden).all()
+        return jsonify(st_factores_calculo_parametros.to_list(factores_calculo))
     except Exception as e:
         logger.exception(
             f'Ocurrió una excepción al consultar los factores de cálculo (proceso ({cod_proceso}), parámetro ({cod_parametro})): {e}')
@@ -485,13 +537,13 @@ def post_factores_calculo_parametros():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        factor_calculo = db.session.get(factores_calculo_parametros,
+        factor_calculo = db.session.get(st_factores_calculo_parametros,
                                         (data['empresa'], data['cod_proceso'], data['cod_parametro'], data['orden']))
         if factor_calculo:
             mensaje = f'El factor de cálculo (parámetro: {data['cod_parametro']}, orden: {data['orden']}) ya existe'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
-        factor_calculo = factores_calculo_parametros(**data)
+        factor_calculo = st_factores_calculo_parametros(**data)
         match factor_calculo.tipo_operador:
             case 'PAR':
                 if not data.get('cod_parametro_operador'):
@@ -514,10 +566,14 @@ def post_factores_calculo_parametros():
                     mensaje = 'Falta el operador'
                     logger.error(mensaje)
                     return jsonify({'mensaje': mensaje}), 400
-                if data['operador'] not in ('+', '-', '*', '/'):
-                    mensaje = 'Operador inválido'
+                if data['operador'] not in OPERADORES_VALIDOS:
+                    mensaje = f'Operador inválido, solo se aceptan: {reduce(lambda x, y: x + ', ' + y, OPERADORES_VALIDOS)}'
                     logger.error(mensaje)
                     return jsonify({'mensaje': mensaje}), 400
+            case _:
+                mensaje = f'Tipo de operador inválido, solo se aceptan: {reduce(lambda x, y: x + ', ' + y, TIPOS_OPE_VALIDOS)}'
+                logger.error(mensaje)
+                return jsonify({'mensaje': mensaje}), 400
         db.session.add(factor_calculo)
         db.session.commit()
         mensaje = f'Se registró el factor de cálculo (parámetro: {data['cod_parametro']}, orden: {data['orden']})'
@@ -528,6 +584,12 @@ def post_factores_calculo_parametros():
         logger.exception(f'Proceso y/o parámetro inexistentes: {e}')
         return jsonify(
             {'mensaje': f'Proceso y/o parámetro inexistentes'}), 400
+    except (TypeError, ValueError, StatementError) as e:
+        db.session.rollback()
+        mensaje = 'Atributos provistos inválidos'
+        logger.exception(f'{mensaje}: {e}')
+        return jsonify(
+            {'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al registrar el factor de cálculo: {e}')
@@ -552,7 +614,7 @@ def delete_factores_calculo_parametros():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        factor_calculo = db.session.get(factores_calculo_parametros, (empresa, cod_proceso, cod_parametro, orden))
+        factor_calculo = db.session.get(st_factores_calculo_parametros, (empresa, cod_proceso, cod_parametro, orden))
         if not factor_calculo:
             mensaje = f'Factor de cálculo (proceso: {cod_proceso}, parámetro: {cod_parametro}, orden: {orden}) inexistente'
             logger.error(mensaje)

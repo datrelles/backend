@@ -5,8 +5,12 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from src.config.database import db
 
+TIPOS_OPE_VALIDOS = {'PAR', 'VAL', 'OPE'}  # PAR: parámetro, VAL: valor fijo, OPE: operador
+OPERADORES_VALIDOS = {'+', '-', '*', '/'}
+
 Base = declarative_base(metadata=db.metadata)
 SCHEMA_NAME = 'stock'
+
 
 class custom_base(Base):
     """
@@ -78,7 +82,7 @@ class st_parametro(custom_base):
     empresa = Column(NUMBER(precision=2), primary_key=True)
     cod_parametro = Column(VARCHAR(8), primary_key=True)
     nombre = Column(VARCHAR(60), nullable=False)
-    definicion = Column(VARCHAR(1000))
+    descripcion = Column(VARCHAR(1000))
     estado = Column(NUMBER(precision=2), nullable=False, default=1)
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
@@ -99,17 +103,17 @@ class st_parametros_x_proceso(custom_base):
 
     empresa = Column(NUMBER(precision=2))
     cod_proceso = Column(VARCHAR(8), ForeignKey(f'{SCHEMA_NAME}.st_proceso.cod_proceso'), nullable=False)
-    proceso = relationship('Proceso')
+    proceso = relationship('st_proceso')
     cod_parametro = Column(VARCHAR(8), ForeignKey(f'{SCHEMA_NAME}.st_parametros_formulas.cod_parametro'),
                            nullable=False)
-    parametro = relationship('Parametro')
+    parametro = relationship('st_parametro')
     cod_formula = Column(VARCHAR(8), ForeignKey(f'{SCHEMA_NAME}.st_formulas_procesos.cod_formula'))
-    formula = relationship('Formula')
-    factores_calculo = relationship('FactoresCalculoParametros',
-                                    primaryjoin="and_(FactoresCalculoParametros.empresa == ParametrosXProceso.empresa, "
-                                                "FactoresCalculoParametros.cod_proceso == ParametrosXProceso.cod_proceso, "
-                                                "FactoresCalculoParametros.cod_parametro == ParametrosXProceso.cod_parametro)",
-                                    ) #back_populates='parametros_x_proceso' # no se permite rastreo modificaciones
+    formula = relationship('st_formula')
+    factores_calculo = relationship('st_factores_calculo_parametros',
+                                    primaryjoin="and_(st_parametros_x_proceso.empresa == st_factores_calculo_parametros.empresa, "
+                                                "st_parametros_x_proceso.cod_proceso == st_factores_calculo_parametros.cod_proceso, "
+                                                "st_parametros_x_proceso.cod_parametro == st_factores_calculo_parametros.cod_parametro)",
+                                    )
     orden_calculo = Column(NUMBER(precision=5))
     estado = Column(NUMBER(precision=2), nullable=False, default=1)
     fecha_calculo_inicio = Column(DateTime)
@@ -125,7 +129,7 @@ class st_parametros_x_proceso(custom_base):
         return db.session.query(cls)
 
 
-class factores_calculo_parametros(custom_base):
+class st_factores_calculo_parametros(custom_base):
     __tablename__ = 'st_factores_calc_parametros'
     __table_args__ = (
         PrimaryKeyConstraint('empresa', 'cod_proceso', 'cod_parametro', 'orden'),
@@ -136,14 +140,9 @@ class factores_calculo_parametros(custom_base):
     cod_proceso = Column(VARCHAR(8), ForeignKey(f'{SCHEMA_NAME}.st_parametros_x_proceso.cod_proceso'), nullable=False)
     cod_parametro = Column(VARCHAR(8), ForeignKey(f'{SCHEMA_NAME}.st_parametros_x_proceso.cod_parametro'),
                            nullable=False)
-    parametros_x_proceso = relationship('ParametrosXProceso',
-                                        primaryjoin="and_(FactoresCalculoParametros.empresa == ParametrosXProceso.empresa, "
-                                                    "FactoresCalculoParametros.cod_proceso == ParametrosXProceso.cod_proceso, "
-                                                    "FactoresCalculoParametros.cod_parametro == ParametrosXProceso.cod_parametro)",
-                                        )# back_populates='factores_calculo' # no se permite rastreo modificaciones
     orden = Column(NUMBER(precision=3))
-    tipo_operador = Column(VARCHAR(3), nullable=False) # Puede ser: PAR(parámetro), VAL (valor fijo), OPE (operador)
-    operador = Column(VARCHAR(1))
+    tipo_operador = Column(VARCHAR(3), nullable=False)  # Solo acepta: TIPOS_OPE_VALIDOS
+    operador = Column(VARCHAR(1))  # Solo acepta: OPERADORES_VALIDOS
     valor_fijo = Column(NUMBER(precision=30, scale=8))
     cod_parametro_operador = Column(VARCHAR(8))
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
