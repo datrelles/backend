@@ -38,7 +38,7 @@ def get_costumer_list():
         response = requests.get(API_URL, headers=headers)
 
         if response.status_code == 200:
-            return jsonify(response.json())  # ✅ Devuelve los datos obtenidos
+            return jsonify(response.json())
         else:
             return jsonify({"error": "No se pudo obtener la información"}), response.status_code
 

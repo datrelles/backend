@@ -347,10 +347,13 @@ def generate_netsuite_token():
         c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur_01 = c.cursor()
 
-        sql_select = """SELECT empresa, token, fecha_inicio, fecha_final 
-                                FROM COMPUTO.TG_TOKEN_API_NETSUITE 
-                                ORDER BY fecha_final DESC 
-                                FETCH FIRST 1 ROWS ONLY"""
+        sql_select = """SELECT empresa, token, fecha_inicio, fecha_final  
+                            FROM (
+                            SELECT empresa, token, fecha_inicio, fecha_final  
+                            FROM COMPUTO.TG_TOKEN_API_NETSUITE  
+                            ORDER BY fecha_final DESC
+                                    ) 
+                            WHERE ROWNUM = 1"""
         cur_01.execute(sql_select)
         last_token = cur_01.fetchone()
 
@@ -371,7 +374,6 @@ def generate_netsuite_token():
 
         jwt_response = gen_jwt()
         jwt_token = jwt_response.json.get("token")
-
         if not jwt_token:
             return jsonify({"error": "No se pudo generar el JWT"}), 400
 
@@ -412,7 +414,6 @@ def generate_netsuite_token():
         })
 
         c.commit()
-
         return jsonify(response.json())
 
     except Exception as e:
