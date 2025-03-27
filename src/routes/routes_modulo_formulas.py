@@ -553,7 +553,9 @@ def post_factores_calculo_parametros():
                 if not db.session.get(st_parametro, (data['empresa'], data['cod_parametro_operador'])):
                     mensaje = 'Parámetro inexistente para asignar al operador'
                     logger.error(mensaje)
-                    return jsonify({'mensaje': mensaje}), 400
+                    return jsonify({'mensaje': mensaje}), 404
+                data['operador'] = None
+                data['valor_fijo'] = None
             case 'VAL':
                 try:
                     float(data.get('valor_fijo'))
@@ -561,6 +563,8 @@ def post_factores_calculo_parametros():
                     mensaje = 'El valor fijo para el operador es inválido'
                     logger.error(mensaje)
                     return jsonify({'mensaje': mensaje}), 400
+                data['operador'] = None
+                data['cod_parametro_operador'] = None
             case 'OPE':
                 if not data.get('operador'):
                     mensaje = 'Falta el operador'
@@ -570,6 +574,8 @@ def post_factores_calculo_parametros():
                     mensaje = f'Operador inválido, solo se aceptan: {reduce(lambda x, y: x + ', ' + y, OPERADORES_VALIDOS)}'
                     logger.error(mensaje)
                     return jsonify({'mensaje': mensaje}), 400
+                data['valor_fijo'] = None
+                data['cod_parametro_operador'] = None
             case _:
                 mensaje = f'Tipo de operador inválido, solo se aceptan: {reduce(lambda x, y: x + ', ' + y, TIPOS_OPE_VALIDOS)}'
                 logger.error(mensaje)
