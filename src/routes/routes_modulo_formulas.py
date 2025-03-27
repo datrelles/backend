@@ -4,6 +4,9 @@ from flask import request, Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 import logging
+
+from werkzeug.exceptions import BadRequest
+
 from src.config.database import db
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, StatementError
@@ -25,7 +28,7 @@ ENDPOINTS PARA GESTIONAR FÓRMULAS DINÁMICAS
 @cross_origin()
 def get_procesos():
     """
-    Endpoint para listar los procesos registrados.
+    Endpoint para listar los procesos.
     """
 
     try:
@@ -74,6 +77,10 @@ def post_procesos():
         logger.exception(f'{mensaje}: {e}')
         return jsonify(
             {'mensaje': mensaje}), 400
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al registrar el proceso: {e}')
@@ -114,6 +121,10 @@ def put_procesos():
         logger.exception(f'{mensaje}: {e}')
         return jsonify(
             {'mensaje': mensaje}), 400
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al actualizar el proceso: {e}')
@@ -176,6 +187,10 @@ def post_formulas():
         logger.exception(f'{mensaje}: {e}')
         return jsonify(
             {'mensaje': mensaje}), 400
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al registrar la fórmula: {e}')
@@ -219,6 +234,10 @@ def put_formulas():
         logger.exception(f'{mensaje}: {e}')
         return jsonify(
             {'mensaje': mensaje}), 400
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al actualizar la fórmula: {e}')
@@ -280,6 +299,10 @@ def post_parametros():
         logger.exception(f'{mensaje}: {e}')
         return jsonify(
             {'mensaje': mensaje}), 400
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al registrar el parámetro: {e}')
@@ -321,6 +344,10 @@ def put_parametros():
         logger.exception(f'{mensaje}: {e}')
         return jsonify(
             {'mensaje': mensaje}), 400
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al actualizar el parámetro: {e}')
@@ -396,6 +423,10 @@ def post_parametros_x_proceso():
         logger.exception(f'{mensaje}: {e}')
         return jsonify(
             {'mensaje': mensaje}), 400
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al vincular el parámetro al proceso: {e}')
@@ -450,6 +481,10 @@ def put_parametros_x_proceso():
         logger.exception(f'{mensaje}: {e}')
         return jsonify(
             {'mensaje': mensaje}), 400
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al vincular el parámetro al proceso: {e}')
@@ -610,6 +645,10 @@ def post_factores_calculo_parametros():
         logger.exception(f'{mensaje}: {e}')
         return jsonify(
             {'mensaje': mensaje}), 400
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al registrar el factor de cálculo: {e}')
