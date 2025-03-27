@@ -5,7 +5,7 @@ import logging
 from src.config.database import db
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-from src.models.modulo_formulas import Proceso, Formula, Parametro, ParametrosXProceso, FactoresCalculoParametros
+from src.models.modulo_formulas import st_proceso, st_formula, st_parametro, st_parametros_x_proceso, factores_calculo_parametros
 
 formulas_b = Blueprint('routes_formulas', __name__)
 logger = logging.getLogger(__name__)
@@ -29,9 +29,9 @@ def get_procesos():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        query = Proceso.query()
-        procesos = query.filter(Proceso.empresa == empresa).all()
-        return jsonify(Proceso.to_list(procesos))
+        query = st_proceso.query()
+        procesos = query.filter(st_proceso.empresa == empresa).all()
+        return jsonify(st_proceso.to_list(procesos))
     except Exception as e:
         logger.exception(f'Ocurrió una excepción al consultar los procesos: {e}')
         return jsonify(
@@ -51,12 +51,12 @@ def post_procesos():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        proceso = db.session.get(Proceso, (data['empresa'], data['cod_proceso']))
+        proceso = db.session.get(st_proceso, (data['empresa'], data['cod_proceso']))
         if proceso:
             mensaje = f'Ya existe un proceso con el código {data['cod_proceso']}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        proceso = Proceso(**data)
+        proceso = st_proceso(**data)
         db.session.add(proceso)
         db.session.commit()
         mensaje = f'Se registró el proceso {data['cod_proceso']}'
@@ -82,7 +82,7 @@ def put_procesos():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        proceso = db.session.get(Proceso, (data['empresa'], data['cod_proceso']))
+        proceso = db.session.get(st_proceso, (data['empresa'], data['cod_proceso']))
         if not proceso:
             mensaje = f'No existe un proceso con el código {data['cod_proceso']}'
             logger.error(mensaje)
@@ -115,9 +115,9 @@ def get_formulas():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        query = Formula.query()
-        formulas = query.filter(Formula.empresa == empresa).all()
-        return jsonify(Formula.to_list(formulas))
+        query = st_formula.query()
+        formulas = query.filter(st_formula.empresa == empresa).all()
+        return jsonify(st_formula.to_list(formulas))
     except Exception as e:
         logger.exception(f'Ocurrió una excepción al consultar las fórmulas: {e}')
         return jsonify(
@@ -138,12 +138,12 @@ def post_formulas():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        formula = db.session.get(Formula, (data['empresa'], data['cod_formula']))
+        formula = db.session.get(st_formula, (data['empresa'], data['cod_formula']))
         if formula:
             mensaje = f'Ya existe una fórmula con el código {data['cod_formula']}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        formula = Formula(**data)
+        formula = st_formula(**data)
         db.session.add(formula)
         db.session.commit()
         mensaje = f'Se registró la fórmula {data['cod_formula']}'
@@ -170,7 +170,7 @@ def put_formulas():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        formula = db.session.get(Formula, (data['empresa'], data['cod_formula']))
+        formula = db.session.get(st_formula, (data['empresa'], data['cod_formula']))
         if not formula:
             mensaje = f'No existe una fórmula con el código {data['cod_formula']}'
             logger.error(mensaje)
@@ -205,9 +205,9 @@ def get_parametros():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        query = Parametro.query()
-        parametros = query.filter(Parametro.empresa == empresa).all()
-        return jsonify(Parametro.to_list(parametros))
+        query = st_parametro.query()
+        parametros = query.filter(st_parametro.empresa == empresa).all()
+        return jsonify(st_parametro.to_list(parametros))
     except Exception as e:
         logger.exception(f'Ocurrió una excepción al consultar los parámetros: {e}')
         return jsonify(
@@ -227,12 +227,12 @@ def post_parametros():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        parametro = db.session.get(Parametro, (data['empresa'], data['cod_parametro']))
+        parametro = db.session.get(st_parametro, (data['empresa'], data['cod_parametro']))
         if parametro:
             mensaje = f'Ya existe un parámetro con el código {data['cod_parametro']}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        parametro = Parametro(**data)
+        parametro = st_parametro(**data)
         db.session.add(parametro)
         db.session.commit()
         mensaje = f'Se registró el parámetro {data['cod_parametro']}'
@@ -258,7 +258,7 @@ def put_parametros():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        parametro = db.session.get(Parametro, (data['empresa'], data['cod_parametro']))
+        parametro = db.session.get(st_parametro, (data['empresa'], data['cod_parametro']))
         if not parametro:
             mensaje = f'No existe un parámetro con el código {data['cod_parametro']}'
             logger.error(mensaje)
@@ -293,15 +293,15 @@ def get_parametros_x_proceso():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        if not db.session.get(Proceso, (empresa, cod_proceso)):
+        if not db.session.get(st_proceso, (empresa, cod_proceso)):
             mensaje = f'Proceso {cod_proceso} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        query = ParametrosXProceso.query()
-        parametros = query.filter(ParametrosXProceso.empresa == empresa,
-                                  ParametrosXProceso.cod_proceso == cod_proceso).order_by(
-            ParametrosXProceso.orden_imprime).all()
-        return jsonify(Parametro.to_list(parametros))
+        query = st_parametros_x_proceso.query()
+        parametros = query.filter(st_parametros_x_proceso.empresa == empresa,
+                                  st_parametros_x_proceso.cod_proceso == cod_proceso).order_by(
+            st_parametros_x_proceso.orden_imprime).all()
+        return jsonify(st_parametro.to_list(parametros))
     except Exception as e:
         logger.exception(f'Ocurrió una excepción al consultar los parámetros vinculados al proceso {cod_proceso}: {e}')
         return jsonify(
@@ -322,13 +322,13 @@ def post_parametros_x_proceso():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        parametro_x_proceso = db.session.get(ParametrosXProceso,
+        parametro_x_proceso = db.session.get(st_parametros_x_proceso,
                                              (data['empresa'], data['cod_proceso'], data['cod_parametro']))
         if parametro_x_proceso:
             mensaje = f'El parámetro {data['cod_parametro']} ya está vinculado al proceso {data['cod_proceso']}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
-        parametro_x_proceso = ParametrosXProceso(**data)
+        parametro_x_proceso = st_parametros_x_proceso(**data)
         db.session.add(parametro_x_proceso)
         db.session.commit()
         mensaje = f'Se vinculó el parámetro {data['cod_parametro']} al proceso {data['cod_proceso']}'
@@ -360,15 +360,15 @@ def put_parametros_x_proceso():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        if not db.session.get(Proceso, (data['empresa'], data['cod_proceso'])):
+        if not db.session.get(st_proceso, (data['empresa'], data['cod_proceso'])):
             mensaje = f'Proceso {data['cod_proceso']} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        if not db.session.get(Parametro, (data['empresa'], data['cod_parametro'])):
+        if not db.session.get(st_parametro, (data['empresa'], data['cod_parametro'])):
             mensaje = f'Parámetro {data['cod_parametro']} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        parametro_x_proceso = db.session.get(ParametrosXProceso,
+        parametro_x_proceso = db.session.get(st_parametros_x_proceso,
                                              (data['empresa'], data['cod_proceso'], data['cod_parametro']))
         if not parametro_x_proceso:
             mensaje = f'El parámetro {data['cod_parametro']} no está vinculado al proceso {data['cod_proceso']}'
@@ -409,15 +409,15 @@ def delete_parametros_x_proceso():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        if not db.session.get(Proceso, (empresa, cod_proceso)):
+        if not db.session.get(st_proceso, (empresa, cod_proceso)):
             mensaje = f'Proceso {cod_proceso} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        if not db.session.get(Parametro, (empresa, cod_parametro)):
+        if not db.session.get(st_parametro, (empresa, cod_parametro)):
             mensaje = f'Parámetro {cod_parametro} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        parametro_x_proceso = db.session.get(ParametrosXProceso, (empresa, cod_proceso, cod_parametro))
+        parametro_x_proceso = db.session.get(st_parametros_x_proceso, (empresa, cod_proceso, cod_parametro))
         if not parametro_x_proceso:
             mensaje = f'El parámetro {cod_parametro} no está vinculado al proceso {cod_proceso}'
             logger.error(mensaje)
@@ -453,16 +453,16 @@ def get_factores_calculo_parametros():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        if not db.session.get(ParametrosXProceso, (empresa, cod_proceso, cod_parametro)):
+        if not db.session.get(st_parametros_x_proceso, (empresa, cod_proceso, cod_parametro)):
             mensaje = f'Parámetros por proceso inexistente: proceso ({cod_proceso}), parámetro ({cod_parametro})'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        query = FactoresCalculoParametros.query()
-        factores_calculo = query.filter(FactoresCalculoParametros.empresa == empresa,
-                                        FactoresCalculoParametros.cod_proceso == cod_proceso,
-                                        FactoresCalculoParametros.cod_parametro == cod_parametro).order_by(
-            FactoresCalculoParametros.orden).all()
-        return jsonify(FactoresCalculoParametros.to_list(factores_calculo))
+        query = factores_calculo_parametros.query()
+        factores_calculo = query.filter(factores_calculo_parametros.empresa == empresa,
+                                        factores_calculo_parametros.cod_proceso == cod_proceso,
+                                        factores_calculo_parametros.cod_parametro == cod_parametro).order_by(
+            factores_calculo_parametros.orden).all()
+        return jsonify(factores_calculo_parametros.to_list(factores_calculo))
     except Exception as e:
         logger.exception(
             f'Ocurrió una excepción al consultar los factores de cálculo (proceso ({cod_proceso}), parámetro ({cod_parametro})): {e}')
@@ -485,20 +485,20 @@ def post_factores_calculo_parametros():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        factor_calculo = db.session.get(FactoresCalculoParametros,
+        factor_calculo = db.session.get(factores_calculo_parametros,
                                         (data['empresa'], data['cod_proceso'], data['cod_parametro'], data['orden']))
         if factor_calculo:
             mensaje = f'El factor de cálculo (parámetro: {data['cod_parametro']}, orden: {data['orden']}) ya existe'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
-        factor_calculo = FactoresCalculoParametros(**data)
+        factor_calculo = factores_calculo_parametros(**data)
         match factor_calculo.tipo_operador:
             case 'PAR':
                 if not data.get('cod_parametro_operador'):
                     mensaje = 'Falta el código del parámetro para el operador'
                     logger.error(mensaje)
                     return jsonify({'mensaje': mensaje}), 400
-                if not db.session.get(Parametro, (data['empresa'], data['cod_parametro_operador'])):
+                if not db.session.get(st_parametro, (data['empresa'], data['cod_parametro_operador'])):
                     mensaje = 'Parámetro inexistente para asignar al operador'
                     logger.error(mensaje)
                     return jsonify({'mensaje': mensaje}), 400
@@ -552,7 +552,7 @@ def delete_factores_calculo_parametros():
             mensaje = 'Solicitud incompleta'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        factor_calculo = db.session.get(FactoresCalculoParametros, (empresa, cod_proceso, cod_parametro, orden))
+        factor_calculo = db.session.get(factores_calculo_parametros, (empresa, cod_proceso, cod_parametro, orden))
         if not factor_calculo:
             mensaje = f'Factor de cálculo (proceso: {cod_proceso}, parámetro: {cod_parametro}, orden: {orden}) inexistente'
             logger.error(mensaje)

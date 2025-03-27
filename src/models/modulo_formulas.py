@@ -8,7 +8,7 @@ from src.config.database import db
 Base = declarative_base(metadata=db.metadata)
 SCHEMA_NAME = 'stock'
 
-class CustomBase(Base):
+class custom_base(Base):
     """
     Clase personalizada para que contenga la definición del método que serializa el objeto.
     """
@@ -33,7 +33,7 @@ class CustomBase(Base):
         return [obj.to_dict() for obj in items]
 
 
-class Proceso(CustomBase):
+class st_proceso(custom_base):
     __tablename__ = 'st_proceso'
     __table_args__ = {'schema': SCHEMA_NAME}
 
@@ -51,7 +51,7 @@ class Proceso(CustomBase):
         return db.session.query(cls)
 
 
-class Formula(CustomBase):
+class st_formula(custom_base):
     __tablename__ = 'st_formulas_procesos'
     __table_args__ = {'schema': SCHEMA_NAME}
 
@@ -71,7 +71,7 @@ class Formula(CustomBase):
         return db.session.query(cls)
 
 
-class Parametro(CustomBase):
+class st_parametro(custom_base):
     __tablename__ = 'st_parametros_formulas'
     __table_args__ = {'schema': SCHEMA_NAME}
 
@@ -90,7 +90,7 @@ class Parametro(CustomBase):
         return db.session.query(cls)
 
 
-class ParametrosXProceso(CustomBase):
+class st_parametros_x_proceso(custom_base):
     __tablename__ = 'st_parametros_x_proceso'
     __table_args__ = (
         PrimaryKeyConstraint('empresa', 'cod_proceso', 'cod_parametro'),
@@ -125,7 +125,7 @@ class ParametrosXProceso(CustomBase):
         return db.session.query(cls)
 
 
-class FactoresCalculoParametros(CustomBase):
+class factores_calculo_parametros(custom_base):
     __tablename__ = 'st_factores_calc_parametros'
     __table_args__ = (
         PrimaryKeyConstraint('empresa', 'cod_proceso', 'cod_parametro', 'orden'),
