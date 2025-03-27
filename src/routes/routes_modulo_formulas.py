@@ -25,8 +25,9 @@ ENDPOINTS PARA GESTIONAR FÓRMULAS DINÁMICAS
 @cross_origin()
 def get_procesos():
     """
-    Endpoint para listar los procesos registrados
+    Endpoint para listar los procesos registrados.
     """
+
     try:
         empresa = request.args.get('empresa')
         if not empresa:
@@ -47,8 +48,9 @@ def get_procesos():
 @cross_origin()
 def post_procesos():
     """
-    Endpoint para crear un proceso
+    Endpoint para crear un proceso.
     """
+
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_proceso') or not data.get('nombre'):
@@ -84,8 +86,9 @@ def post_procesos():
 @cross_origin()
 def put_procesos():
     """
-    Endpoint para actualizar un proceso
+    Endpoint para actualizar un proceso.
     """
+
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_proceso') or not data.get('nombre') or not data.get('estado'):
@@ -123,8 +126,9 @@ def put_procesos():
 @cross_origin()
 def get_formulas():
     """
-    Endpoint para listar las fórmulas
+    Endpoint para listar las fórmulas.
     """
+
     try:
         empresa = request.args.get('empresa')
         if not empresa:
@@ -145,8 +149,9 @@ def get_formulas():
 @cross_origin()
 def post_formulas():
     """
-    Endpoint para crear una fórmula
+    Endpoint para crear una fórmula.
     """
+
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_formula') or not data.get('nombre') or not data.get(
@@ -183,8 +188,9 @@ def post_formulas():
 @cross_origin()
 def put_formulas():
     """
-    Endpoint para actualizar una fórmula
+    Endpoint para actualizar una fórmula.
     """
+
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_formula') or not data.get('nombre') or not data.get(
@@ -225,8 +231,9 @@ def put_formulas():
 @cross_origin()
 def get_parametros():
     """
-    Endpoint para listar los parámetros
+    Endpoint para listar los parámetros.
     """
+
     try:
         empresa = request.args.get('empresa')
         if not empresa:
@@ -247,8 +254,9 @@ def get_parametros():
 @cross_origin()
 def post_parametros():
     """
-    Endpoint para crear un parámetro
+    Endpoint para crear un parámetro.
     """
+
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_parametro') or not data.get('nombre'):
@@ -284,8 +292,9 @@ def post_parametros():
 @cross_origin()
 def put_parametros():
     """
-    Endpoint para actualizar un parámetro
+    Endpoint para actualizar un parámetro.
     """
+
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_parametro') or not data.get('nombre') or not data.get('estado'):
@@ -324,8 +333,9 @@ def put_parametros():
 @cross_origin()
 def get_parametros_x_proceso():
     """
-    Endpoint para listar los parámetros por proceso
+    Endpoint para listar los parámetros por proceso.
     """
+
     try:
         empresa = request.args.get('empresa')
         cod_proceso = request.args.get('cod_proceso')
@@ -353,8 +363,9 @@ def get_parametros_x_proceso():
 @cross_origin()
 def post_parametros_x_proceso():
     """
-    Endpoint para crear un parámetro por proceso, es decir, vincular un parámetro a un proceso
+    Endpoint para crear un parámetro por proceso, es decir, vincular un parámetro a un proceso.
     """
+
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_proceso') or not data.get('cod_parametro') or not data.get(
@@ -397,8 +408,9 @@ def post_parametros_x_proceso():
 @cross_origin()
 def put_parametros_x_proceso():
     """
-    Endpoint para actualizar un parámetro por proceso, es decir, cambiar atributos de un parámetro vinculado a un proceso
+    Endpoint para actualizar un parámetro por proceso, es decir, cambiar atributos de un parámetro vinculado a un proceso.
     """
+
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_proceso') or not data.get('cod_parametro') or not data.get(
@@ -450,8 +462,9 @@ def put_parametros_x_proceso():
 @cross_origin()
 def delete_parametros_x_proceso():
     """
-    Endpoint para eliminar un parámetro por proceso, es decir, desvincular un parámetro de un proceso
+    Endpoint para eliminar un parámetro por proceso, es decir, desvincular un parámetro de un proceso.
     """
+
     try:
         args = request.args
         empresa = args.get('empresa')
@@ -495,8 +508,9 @@ def delete_parametros_x_proceso():
 @cross_origin()
 def get_factores_calculo_parametros():
     """
-    Endpoint para listar los factores de cálculo de los parámetros
+    Endpoint para listar los factores de cálculo de los parámetros.
     """
+
     try:
         empresa = request.args.get('empresa')
         cod_proceso = request.args.get('cod_proceso')
@@ -528,8 +542,9 @@ def get_factores_calculo_parametros():
 @cross_origin()
 def post_factores_calculo_parametros():
     """
-    Endpoint para crear un factor de cálculo de un parámetro
+    Endpoint para crear un factor de cálculo de un parámetro.
     """
+
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_proceso') or not data.get('cod_parametro') or not data.get(
@@ -543,8 +558,7 @@ def post_factores_calculo_parametros():
             mensaje = f'El factor de cálculo (parámetro: {data['cod_parametro']}, orden: {data['orden']}) ya existe'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
-        factor_calculo = st_factores_calculo_parametros(**data)
-        match factor_calculo.tipo_operador:
+        match data['tipo_operador']:
             case 'PAR':
                 if not data.get('cod_parametro_operador'):
                     mensaje = 'Falta el código del parámetro para el operador'
@@ -580,7 +594,7 @@ def post_factores_calculo_parametros():
                 mensaje = f'Tipo de operador inválido, solo se aceptan: {reduce(lambda x, y: x + ', ' + y, TIPOS_OPE_VALIDOS)}'
                 logger.error(mensaje)
                 return jsonify({'mensaje': mensaje}), 400
-        db.session.add(factor_calculo)
+        db.session.add(st_factores_calculo_parametros(**data))
         db.session.commit()
         mensaje = f'Se registró el factor de cálculo (parámetro: {data['cod_parametro']}, orden: {data['orden']})'
         logger.info(mensaje)
@@ -608,8 +622,9 @@ def post_factores_calculo_parametros():
 @cross_origin()
 def delete_factores_calculo_parametros():
     """
-    Endpoint para eliminar un factor de cálculo
+    Endpoint para eliminar un factor de cálculo de un parámetro.
     """
+
     try:
         args = request.args
         empresa = args.get('empresa')

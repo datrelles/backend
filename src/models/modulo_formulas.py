@@ -14,14 +14,44 @@ SCHEMA_NAME = 'stock'
 
 class custom_base(Base):
     """
-    Clase personalizada para que contenga la definición del método que serializa el objeto.
+    Clase base personalizada que contiene métodos para convertir objetos SQLAlchemy en diccionarios y listas.
     """
+
     __abstract__ = True  # Parámetro para omitir creación de tabla
 
-    def to_dict(self, excluir_none=False, *args):
+    @classmethod
+    def query(cls):
         """
-        Convierte el modelo en un diccionario serializable.
+        Crea un objeto para realizar consultas en la base de datos.
         """
+        return db.session.query(cls)
+
+    @staticmethod
+    def to_list(items: list['custom_base'], excluir_none=False, *args) -> list[dict]:
+        """
+        Convierte una lista de objetos SQLAlchemy en una lista de diccionarios.
+
+        Args:
+            items (list[custom_base]): Lista de items a convertir en diccionarios y agregar a una lista.
+            excluir_none (bool): Bandera para excluir atributos con valor None.
+            *args (tuple[str, ...]): Tupla de cadenas con atributos que contienen listas de instancias relacionadas.
+        Returns:
+            list[dict]: Lista con diccionarios de los items.
+        """
+
+        return [item.to_dict(excluir_none, *args) for item in items]
+
+    def to_dict(self, excluir_none=False, *args: tuple[str, ...]) -> dict:
+        """
+        Convierte un objeto SQLAlchemy en un diccionario.
+
+        Args:
+            excluir_none (bool): Bandera para excluir atributos con valor None.
+            *args (tuple[str, ...]): Tupla de cadenas con atributos que contienen listas de instancias relacionadas.
+        Returns:
+            dict: Diccionario del objeto.
+        """
+
         data = {
             column.name: getattr(self, column.name) for column in self.__table__.columns
         }
@@ -32,15 +62,12 @@ class custom_base(Base):
             data[arg] = [item.to_dict() for item in getattr(self, arg, [])]
         return data
 
-    @classmethod
-    def to_list(cls, items, excluir_none=False, *args):
-        """
-        Convierte una lista de objetos SQLAlchemy en una lista de diccionarios.
-        """
-        return [item.to_dict(excluir_none, *args) for item in items]
-
 
 class st_proceso(custom_base):
+    """
+    Modelo para representar la tabla 'st_proceso'.
+    """
+
     __tablename__ = 'st_proceso'
     __table_args__ = {'schema': SCHEMA_NAME}
 
@@ -53,12 +80,12 @@ class st_proceso(custom_base):
     audit_usuario_mod = Column(VARCHAR(30))
     audit_fecha_mod = Column(DateTime)
 
-    @classmethod
-    def query(cls):
-        return db.session.query(cls)
-
 
 class st_formula(custom_base):
+    """
+    Modelo para representar la tabla 'st_formulas_procesos'.
+    """
+
     __tablename__ = 'st_formulas_procesos'
     __table_args__ = {'schema': SCHEMA_NAME}
 
@@ -73,12 +100,12 @@ class st_formula(custom_base):
     audit_usuario_mod = Column(VARCHAR(30))
     audit_fecha_mod = Column(DateTime)
 
-    @classmethod
-    def query(cls):
-        return db.session.query(cls)
-
 
 class st_parametro(custom_base):
+    """
+    Modelo para representar la tabla 'st_parametros_formulas'.
+    """
+
     __tablename__ = 'st_parametros_formulas'
     __table_args__ = {'schema': SCHEMA_NAME}
 
@@ -92,12 +119,12 @@ class st_parametro(custom_base):
     audit_usuario_mod = Column(VARCHAR(30))
     audit_fecha_mod = Column(DateTime)
 
-    @classmethod
-    def query(cls):
-        return db.session.query(cls)
-
 
 class st_parametros_x_proceso(custom_base):
+    """
+    Modelo para representar la tabla 'st_parametros_x_proceso'.
+    """
+
     __tablename__ = 'st_parametros_x_proceso'
     __table_args__ = (
         PrimaryKeyConstraint('empresa', 'cod_proceso', 'cod_parametro'),
@@ -127,12 +154,12 @@ class st_parametros_x_proceso(custom_base):
     audit_usuario_mod = Column(VARCHAR(30))
     audit_fecha_mod = Column(DateTime)
 
-    @classmethod
-    def query(cls):
-        return db.session.query(cls)
-
 
 class st_factores_calculo_parametros(custom_base):
+    """
+    Modelo para representar la tabla 'st_factores_calc_parametros'.
+    """
+
     __tablename__ = 'st_factores_calc_parametros'
     __table_args__ = (
         PrimaryKeyConstraint('empresa', 'cod_proceso', 'cod_parametro', 'orden'),
@@ -152,7 +179,3 @@ class st_factores_calculo_parametros(custom_base):
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
     audit_fecha_mod = Column(DateTime)
-
-    @classmethod
-    def query(cls):
-        return db.session.query(cls)
