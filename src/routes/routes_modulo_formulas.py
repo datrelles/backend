@@ -96,7 +96,7 @@ def put_procesos():
         if not proceso:
             mensaje = f'No existe un proceso con el código {data['cod_proceso']}'
             logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+            return jsonify({'mensaje': mensaje}), 404
         proceso.nombre = data['nombre']
         proceso.estado = data['estado']
         proceso.audit_usuario_mod = text('user')
@@ -409,11 +409,11 @@ def put_parametros_x_proceso():
         if not db.session.get(st_proceso, (data['empresa'], data['cod_proceso'])):
             mensaje = f'Proceso {data['cod_proceso']} inexistente'
             logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+            return jsonify({'mensaje': mensaje}), 404
         if not db.session.get(st_parametro, (data['empresa'], data['cod_parametro'])):
             mensaje = f'Parámetro {data['cod_parametro']} inexistente'
             logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+            return jsonify({'mensaje': mensaje}), 404
         parametro_x_proceso = db.session.get(st_parametros_x_proceso,
                                              (data['empresa'], data['cod_proceso'], data['cod_parametro']))
         if not parametro_x_proceso:
@@ -464,11 +464,11 @@ def delete_parametros_x_proceso():
         if not db.session.get(st_proceso, (empresa, cod_proceso)):
             mensaje = f'Proceso {cod_proceso} inexistente'
             logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+            return jsonify({'mensaje': mensaje}), 404
         if not db.session.get(st_parametro, (empresa, cod_parametro)):
             mensaje = f'Parámetro {cod_parametro} inexistente'
             logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+            return jsonify({'mensaje': mensaje}), 404
         parametro_x_proceso = db.session.get(st_parametros_x_proceso, (empresa, cod_proceso, cod_parametro))
         if not parametro_x_proceso:
             mensaje = f'El parámetro {cod_parametro} no está vinculado al proceso {cod_proceso}'
@@ -477,12 +477,12 @@ def delete_parametros_x_proceso():
         if parametro_x_proceso.factores_calculo:
             mensaje = f'Existen factores de cálculo vinculados al proceso {cod_proceso} y parámetro {cod_parametro} '
             logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+            return jsonify({'mensaje': mensaje}), 409
         db.session.delete(parametro_x_proceso)
         db.session.commit()
         mensaje = f'Se desvinculó el parámetro {cod_parametro} del proceso {cod_proceso}'
         logger.info(mensaje)
-        return jsonify({'mensaje': mensaje}), 204
+        return '', 204
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al desvincular el parámetro del proceso: {e}')
@@ -508,7 +508,7 @@ def get_factores_calculo_parametros():
         if not db.session.get(st_parametros_x_proceso, (empresa, cod_proceso, cod_parametro)):
             mensaje = f'Parámetro por proceso inexistente: proceso ({cod_proceso}), parámetro ({cod_parametro})'
             logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+            return jsonify({'mensaje': mensaje}), 404
         query = st_factores_calculo_parametros.query()
         factores_calculo = query.filter(st_factores_calculo_parametros.empresa == empresa,
                                         st_factores_calculo_parametros.cod_proceso == cod_proceso,
@@ -583,7 +583,7 @@ def post_factores_calculo_parametros():
         db.session.rollback()
         logger.exception(f'Proceso y/o parámetro inexistentes: {e}')
         return jsonify(
-            {'mensaje': f'Proceso y/o parámetro inexistentes'}), 400
+            {'mensaje': f'Proceso y/o parámetro inexistentes'}), 404
     except (TypeError, ValueError, StatementError) as e:
         db.session.rollback()
         mensaje = 'Atributos provistos inválidos'
@@ -618,12 +618,12 @@ def delete_factores_calculo_parametros():
         if not factor_calculo:
             mensaje = f'Factor de cálculo (proceso: {cod_proceso}, parámetro: {cod_parametro}, orden: {orden}) inexistente'
             logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+            return jsonify({'mensaje': mensaje}), 404
         db.session.delete(factor_calculo)
         db.session.commit()
         mensaje = f'Se eliminó el factor de cálculo (proceso: {cod_proceso}, parámetro: {cod_parametro}, orden: {orden})'
         logger.info(mensaje)
-        return jsonify({'mensaje': mensaje}), 204
+        return '', 204
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al eliminar el factor de cálculo: {e}')
