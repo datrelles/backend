@@ -2904,16 +2904,23 @@ def url_media(code_cp):
             st_casos_url.cod_comprobante == code_cp,
             st_casos_url.tipo_comprobante == 'CP'
         ).first()
+
+        # Verificamos que se haya encontrado el registro
+        if not url:
+            return jsonify({"error": "No se encontró ningún registro con ese código."}), 404
+
         images = url.url_photos
         videos = url.url_videos
-        dic = {
+
+        return jsonify({
             "images": images,
             "videos": videos
-        }
-        return jsonify(dic)
+        }), 200
 
     except Exception as e:
-        return jsonify(e)
+        # Se puede loguear el error para mayor trazabilidad (si está configurado logging).
+        return jsonify({"error": "Ocurrió un error al intentar obtener los datos."}), 500
+
 
 @bp.route('/view_casos/<code_cp>', methods=['GET'])
 @jwt_required()

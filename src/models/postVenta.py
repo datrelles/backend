@@ -405,3 +405,44 @@ class ar_taller_servicio_usuario(Base):
     @classmethod
     def query(cls):
         return db.session.query(cls)
+
+class st_casos_productos(Base):
+    __tablename__ = 'ST_CASOS_PRODUCTOS'
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            'cod_comprobante',
+            'secuencia',
+            'tipo_comprobante',
+            'empresa',
+            name='PK_CASOS_PRODUCTOS'
+        ),
+    )
+
+    empresa = Column(NUMBER(4), nullable=False)
+    tipo_comprobante = Column(VARCHAR(2), nullable=False)
+    cod_comprobante = Column(VARCHAR(9), nullable=False)
+    secuencia = Column(NUMBER(3), nullable=False)
+
+    cod_producto = Column(VARCHAR(14), nullable=False)
+    cantidad = Column(NUMBER(14, 2), nullable=False)
+    precio = Column(NUMBER(14, 2), nullable=False)
+
+    adicionado_por = Column(
+        VARCHAR(30),
+        nullable=False,
+        server_default=text("USER")  # Matches `default USER`
+    )
+    fecha_adicion = Column(
+        DateTime,
+        nullable=False,
+        server_default=text("SYSDATE")  # Matches `default SYSDATE`
+    )
+
+    cod_pedido = Column(VARCHAR(9))
+    cod_tipo_pedido = Column(VARCHAR(2))
+    tipo_comprobante_lote = Column(VARCHAR(2))
+    cod_comprobante_lote = Column(VARCHAR(9))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)

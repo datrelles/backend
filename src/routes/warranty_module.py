@@ -1,10 +1,14 @@
 from flask_jwt_extended import jwt_required
 from flask import Blueprint, jsonify, request
 from src import oracle
-from src.models.postVenta import ar_taller_servicio_tecnico, ADprovincias, ADcantones, ar_duracion_reparacion, st_casos_postventa, ar_taller_servicio_usuario
-from src.models.clientes import Cliente
-from src.models.users import Usuario, tg_rol_usuario
+from src.models.postVenta import ar_taller_servicio_tecnico, ADprovincias, ADcantones, ar_duracion_reparacion, st_casos_postventa, ar_taller_servicio_usuario, st_casos_postventas_obs,st_casos_productos
+from src.models.clientes import Cliente, st_politica_credito, persona, st_vendedor
+from src.models.users import Usuario, tg_rol_usuario, tg_agencia, Orden
+from src.models.productos import Producto
+from src.models.despiece_repuestos import st_producto_despiece
+from src.models.lote import StLote, st_inventario_lote
 from sqlalchemy import and_, extract, func
+from sqlalchemy.exc import SQLAlchemyError
 import cx_Oracle
 from os import getenv
 import json
@@ -93,7 +97,6 @@ def get_talleres_authorized_warranty():
         })
 
     return jsonify(data), 200
-
 
 @rmwa.route('/get_cliente_data_for_id', methods=['GET'])
 @jwt_required()
@@ -550,14 +553,7 @@ def get_caso_postventa():
 @rmwa.route('/get_usuarios_rol_astgar', methods=['GET'])
 @jwt_required()
 def get_usuarios_rol_astgar():
-    """
-    Endpoint que retorna la información de los usuarios asociados al rol 'ASTGAR'.
 
-    Retorna:
-        - usuario: Código de usuario.
-        - nombre: Nombre del usuario.
-        - apellido1: Primer apellido del usuario.
-    """
     try:
         # Usamos el método de clase query() del mapeo TgRolUsuario
         resultados = (
@@ -901,3 +897,1112 @@ def get_incidences_by_motor_year():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@rmwa.route('/postventas_obs', methods=['POST'])
+@jwt_required()
+def create_postventas_obs():
+    try:
+        data = request.get_json()
+        required_fields = ["empresa", "tipo_comprobante", "cod_comprobante", "usuario", "observacion", "tipo"]
+
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: '{field}'"}), 400
+
+        # Busca la secuencia máxima y calcula la siguiente
+        last_record = (
+            st_casos_postventas_obs.query()
+            .filter(
+                st_casos_postventas_obs.empresa == data["empresa"],
+                st_casos_postventas_obs.tipo_comprobante == data["tipo_comprobante"],
+                st_casos_postventas_obs.cod_comprobante == data["cod_comprobante"]
+            )
+            .order_by(st_casos_postventas_obs.secuencia.desc())
+            .first()
+        )
+
+        next_secuencia = 1 if last_record is None else last_record.secuencia + 1
+
+        # Ignora la fecha que viene del front y usa la del servidor
+        new_record = st_casos_postventas_obs(
+            empresa=data["empresa"],
+            tipo_comprobante=data["tipo_comprobante"],
+            cod_comprobante=data["cod_comprobante"],
+            secuencia=next_secuencia,
+            fecha=datetime.now(),  # Aquí se fuerza la fecha/hora del backend
+            usuario=data["usuario"],
+            observacion=data["observacion"],
+            tipo=data["tipo"]
+        )
+        db.session.add(new_record)
+        db.session.commit()
+
+        return jsonify({"message": "Record successfully inserted", "secuencia": next_secuencia}), 201
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        print(str(e))
+        return jsonify({"error": str(e)}), 500
+
+@rmwa.route('/postventas_obs/<string:cod_comprobante>', methods=['GET'])
+@jwt_required()
+def get_postventas_obs_by_cod(cod_comprobante):
+    try:
+        records = (
+            st_casos_postventas_obs.query()
+            .filter(st_casos_postventas_obs.cod_comprobante == cod_comprobante)
+            .all()
+        )
+        data_list = []
+        for r in records:
+            data_list.append({
+                "empresa": r.empresa,
+                "tipo_comprobante": r.tipo_comprobante,
+                "cod_comprobante": r.cod_comprobante,
+                "secuencia": r.secuencia,
+                "fecha": r.fecha.isoformat() if r.fecha else None,
+                "usuario": r.usuario,
+                "observacion": r.observacion,
+                "tipo": r.tipo
+            })
+        return jsonify(data_list), 200
+    except SQLAlchemyError as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@rmwa.route('/postventas_obs/<string:cod_comprobante>/<int:secuencia>', methods=['PUT'])
+@jwt_required()
+def update_postventas_obs(cod_comprobante, secuencia):
+    try:
+        data = request.get_json()
+
+        # Locate record using filters
+        record = (
+            st_casos_postventas_obs.query()
+            .filter(
+                st_casos_postventas_obs.cod_comprobante == cod_comprobante,
+                st_casos_postventas_obs.secuencia == secuencia
+            )
+            .first()
+        )
+        if not record:
+            return jsonify({"error": "Record not found"}), 404
+
+        if "fecha" in data:
+            record.fecha = data["fecha"]
+        if "usuario" in data:
+            record.usuario = data["usuario"]
+        if "observacion" in data:
+            record.observacion = data["observacion"]
+        if "tipo" in data:
+            record.tipo = data["tipo"]
+
+        db.session.commit()
+        return jsonify({"message": "Record successfully updated"}), 200
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@rmwa.route('/postventas_obs/<string:cod_comprobante>/<int:secuencia>', methods=['DELETE'])
+@jwt_required()
+def delete_postventas_obs(cod_comprobante, secuencia):
+    try:
+        record = (
+            st_casos_postventas_obs.query()
+            .filter(
+                st_casos_postventas_obs.cod_comprobante == cod_comprobante,
+                st_casos_postventas_obs.secuencia == secuencia
+            )
+            .first()
+        )
+        if not record:
+            return jsonify({"error": "Record not found"}), 404
+
+        db.session.delete(record)
+        db.session.commit()
+        return jsonify({"message": "Record successfully deleted"}), 200
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@rmwa.route('/agencia/active', methods=['GET'])
+@jwt_required()
+def get_active_agencies():
+    try:
+        # Parse 'empresa' from query parameters
+        empresa_param = request.args.get('empresa', type=int)
+        if not empresa_param:
+            return jsonify({"error": "Missing or invalid 'empresa' query parameter"}), 400
+
+        # Build the subquery using 'exists'
+        subquery = (
+            db.session.query(Orden)
+            .filter(
+                Orden.tipo_comprobante == 'A0',
+                Orden.empresa == tg_agencia.empresa,
+                Orden.bodega == tg_agencia.cod_agencia
+            )
+            .exists()
+        )
+
+        # Filter 'tg_agencia' by 'empresa', 'activo', and the EXISTS condition
+        agencies = (
+            tg_agencia.query()
+            .filter(
+                tg_agencia.empresa == empresa_param,
+                tg_agencia.activo == 'S',
+                subquery  # EXISTS(...)
+            )
+            .all()
+        )
+
+        # Build the response mimicking "AGENCIA" and "COD_AGENCIA"
+        data_list = []
+        for agency in agencies:
+            data_list.append({
+                "AGENCIA": agency.nombre,
+                "COD_AGENCIA": str(agency.cod_agencia)  # Emulating TO_CHAR
+            })
+
+        return jsonify(data_list), 200
+
+    except SQLAlchemyError as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@rmwa.route('/politica_credito', methods=['GET'])
+@jwt_required()
+def get_politica_credito():
+
+    try:
+        # Extract query parameters
+        empresa_param = request.args.get('empresa', type=int)
+        cod_politica_param = request.args.get('codPolitica', type=int)
+
+        # Check for missing or invalid parameters
+        if not empresa_param or not cod_politica_param:
+            return jsonify({"error": "Missing or invalid query parameters (empresa, codPolitica)"}), 400
+
+        # Query the table
+        politicas = (
+            st_politica_credito.query()
+            .filter(
+                st_politica_credito.empresa == empresa_param,
+                st_politica_credito.cod_politica == cod_politica_param
+            )
+            .all()
+        )
+
+        # Build the response (mimicking NOMBRE and TO_CHAR(COD_POLITICA))
+        result = []
+        for p in politicas:
+            result.append({
+                "NOMBRE": p.nombre,
+                "COD_POLITICA": str(p.cod_politica)  # Emulating TO_CHAR
+            })
+
+        return jsonify(result), 200
+
+    except SQLAlchemyError as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@rmwa.route('/persona/vendors', methods=['GET'])
+@jwt_required()
+def get_vendors_by_empresa_and_activo():
+    """
+    Emulates:
+    SELECT a.cod_persona, a.nombre, a.cod_tipo_persona
+      FROM persona a
+           JOIN st_vendedor b
+             ON a.empresa = b.empresa
+            AND a.cod_tipo_persona = b.cod_tipo_persona
+            AND a.cod_persona = b.cod_vendedor
+     WHERE a.empresa = :empresa
+       AND a.cod_tipo_persona = 'VEN'
+       AND b.activo = :activo;
+
+    Takes 'empresa' and 'activo' from query params, e.g.:
+        GET /persona/vendors?empresa=20&activo=S
+    """
+    try:
+        empresa_param = request.args.get('empresa', type=int)
+        activo_param = request.args.get('activo', type=str)  # 'S' or 'N'
+
+        if not empresa_param or not activo_param:
+            return jsonify({"error": "Missing or invalid query parameters: (empresa, activo)"}), 400
+
+        # Perform the join between persona (a) and st_vendedor (b)
+        results = (
+            db.session.query(
+                persona.cod_persona,
+                persona.nombre,
+                persona.cod_tipo_persona
+            )
+            .join(
+                st_vendedor,
+                and_(
+                    persona.empresa == st_vendedor.empresa,
+                    persona.cod_tipo_persona == st_vendedor.cod_tipo_persona,
+                    persona.cod_persona == st_vendedor.cod_vendedor
+                )
+            )
+            .filter(
+                persona.empresa == empresa_param,
+                persona.cod_tipo_persona == 'VEN',
+                st_vendedor.activo == activo_param
+            )
+            .all()
+        )
+
+        # Build response
+        data_list = []
+        for row in results:
+            data_list.append({
+                "COD_PERSONA": row[0],
+                "NOMBRE": row[1],
+                "COD_TIPO_PERSONA": row[2]
+            })
+
+        return jsonify(data_list), 200
+
+    except SQLAlchemyError as e:
+        return jsonify({"error": str(e)}), 500
+
+@rmwa.route('/producto/despiece', methods=['GET'])
+@jwt_required()
+def get_productos_with_despiece():
+    """
+    Emulates:
+    SELECT A.COD_PRODUCTO, A.NOMBRE
+      FROM producto A
+     WHERE A.EMPRESA = :empresa
+       AND A.ACTIVO = :activo
+       AND EXISTS (
+           SELECT 1
+             FROM st_producto_despiece X
+            WHERE A.EMPRESA = X.EMPRESA
+              AND A.COD_PRODUCTO = X.COD_PRODUCTO
+       );
+
+    Takes 'empresa' and 'activo' from query params, for example:
+        GET /producto/despiece?empresa=20&activo=S
+    """
+    try:
+        # Extract query parameters
+        empresa_param = request.args.get('empresa', type=int)
+        activo_param = request.args.get('activo', type=str)
+
+        # Basic validation of parameters
+        if empresa_param is None or not activo_param:
+            return jsonify({"error": "Missing or invalid 'empresa' or 'activo' query parameters"}), 400
+
+        # Build the subquery using exists(...)
+        subquery = (
+            db.session.query(st_producto_despiece)
+            .filter(
+                st_producto_despiece.empresa == Producto.empresa,
+                st_producto_despiece.cod_producto == Producto.cod_producto
+            )
+            .exists()
+        )
+
+        # Main query
+        productos = (
+            Producto.query()
+            .filter(
+                Producto.empresa == empresa_param,
+                Producto.activo == activo_param,
+                subquery  # This adds the EXISTS condition
+            )
+            .all()
+        )
+
+        # Build the response with COD_PRODUCTO and NOMBRE
+        data_list = []
+        for prod in productos:
+            data_list.append({
+                "COD_PRODUCTO": prod.cod_producto,
+                "NOMBRE": prod.nombre,
+                "modelo": prod.cod_modelo
+            })
+
+        return jsonify(data_list), 200
+
+    except SQLAlchemyError as e:
+        return jsonify({"error": str(e)}), 500
+
+@rmwa.route('/lotes/inventory', methods=['GET'])
+@jwt_required()
+def get_lotes_with_inventory():
+    """
+    Receives query parameters:
+      - empresa (int)
+      - bodega (int)
+      - producto (str)
+    Example request:
+      GET /lotes/inventory?empresa=20&bodega=6&producto=R150-FR0545
+    """
+    try:
+        # Read query parameters
+        empresa_param = request.args.get('empresa', type=int)
+        bodega_param = request.args.get('bodega', type=int)
+        producto_param = request.args.get('producto', type=str)
+
+        # Basic validation
+        if empresa_param is None or bodega_param is None or not producto_param:
+            return jsonify({"error": "Missing or invalid query parameters (empresa, bodega, producto)"}), 400
+
+        # Build the subquery using EXISTS
+        subquery = (
+            db.session.query(st_inventario_lote)
+            .filter(
+                st_inventario_lote.empresa == empresa_param,
+                st_inventario_lote.tipo_comprobante_lote == StLote.tipo_comprobante,
+                st_inventario_lote.cod_comprobante_lote == StLote.cod_comprobante,
+                st_inventario_lote.cod_bodega == bodega_param,
+                st_inventario_lote.cod_producto == producto_param,
+                st_inventario_lote.cod_aamm == 0,       # Hardcoded as per your example
+                st_inventario_lote.cantidad > 0         # Hardcoded condition
+            )
+            .exists()
+        )
+
+        # Main query on st_lote, filtering by empresa and the EXISTS subquery
+        lotes = (
+            StLote.query()
+            .filter(
+                StLote.empresa == empresa_param,
+                subquery
+            )
+            .order_by(StLote.fecha)
+            .all()
+        )
+
+        # Build the response
+        data_list = []
+        for lote in lotes:
+            data_list.append({
+                "cod_comprobante_lote": lote.cod_comprobante,
+                "descripcion": lote.descripcion,
+                "tipo": lote.tipo_comprobante
+            })
+
+        return jsonify(data_list), 200
+
+    except SQLAlchemyError as e:
+        return jsonify({"error": str(e)}), 500
+
+@rmwa.route('/existence_by_agency', methods=['GET'])
+@jwt_required()
+def consulta_existencia():
+    """
+    Endpoint to query product existence from KS_INVENTARIO.consulta_existencia.
+    Example call:
+      GET /consulta_existencia?empresa=20&cod_agencia=6&cod_producto=R150-FR0545
+    """
+    c = None
+    try:
+        # 1. Retrieve required query parameters
+        empresa_str = request.args.get('empresa')
+        cod_agencia_str = request.args.get('cod_agencia')
+        cod_producto = request.args.get('cod_producto')
+
+        # 2. Validate parameters
+        if not empresa_str or not cod_agencia_str or not cod_producto:
+            return jsonify({"error": "Parameters 'empresa', 'cod_agencia', and 'cod_producto' are required"}), 400
+
+        # 3. Convert 'empresa' and 'cod_agencia' to numeric types
+        try:
+            empresa = float(empresa_str)
+            cod_agencia = float(cod_agencia_str)
+        except ValueError:
+            return jsonify({"error": "'empresa' and 'cod_agencia' must be numeric"}), 400
+
+        # 4. Open database connection
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+
+        # 5. Prepare the PL/SQL block to call the package
+        #    and store the result in an output variable.
+        plsql_block = """
+        DECLARE
+          v_existencia_lote NUMBER(14,2);
+        BEGIN
+          v_existencia_lote := KS_INVENTARIO.consulta_existencia(
+                                  :1,   -- empresa
+                                  :2,   -- cod_agencia
+                                  :3,   -- cod_producto
+                                  'U',  -- fixed
+                                  SYSDATE,
+                                  1,    -- fixed
+                                  'Z',  -- fixed
+                                  1     -- fixed
+                               );
+          :4 := v_existencia_lote;
+        END;
+        """
+
+        # 6. Execute PL/SQL block with bind variables
+        cur = c.cursor()
+        out_var = cur.var(cx_Oracle.NUMBER)
+        cur.execute(plsql_block, (empresa, cod_agencia, cod_producto, out_var))
+        existencia_lote = out_var.getvalue()
+
+        # 7. Close cursor, return JSON response
+        cur.close()
+        return jsonify({"existencia_lote": float(existencia_lote)}), 200
+
+    except Exception as e:
+        # Roll back and return error if something fails
+        if c:
+            c.rollback()
+        print(f"Error calling KS_INVENTARIO.consulta_existencia: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        # Close connection
+        if c:
+            c.close()
+
+@rmwa.route('/existencia_lote_by_agency_cod_producto', methods=['GET'])
+@jwt_required()
+def existencia_lote():
+    """
+    GET /existencia_lote?empresa=20&cod_agencia=6&cod_producto=R150-FR0545&tipo_comprobante_lote=LT&cod_comprobante_lote=F1B241126
+
+    Calls ks_inventario_lote.consulta_existencia with the parameters from the query string.
+    """
+    c = None
+    try:
+        # 1. Read required query parameters
+        empresa_str = request.args.get('empresa')  # e.g. 20
+        cod_agencia_str = request.args.get('cod_agencia')  # e.g. 6
+        cod_producto = request.args.get('cod_producto')  # e.g. R150-FR0545
+        tipo_comprobante_lote = request.args.get('tipo_comprobante_lote')  # e.g. LT
+        cod_comprobante_lote = request.args.get('cod_comprobante_lote')  # e.g. F1B241126
+
+
+        if not all([empresa_str, cod_agencia_str, cod_producto, tipo_comprobante_lote, cod_comprobante_lote]):
+            return jsonify({"error": "Missing one or more required query parameters"}), 400
+
+        # 3. Convert empresa and cod_agencia to numeric (if appropriate)
+        try:
+            empresa = float(empresa_str)
+            cod_agencia = float(cod_agencia_str)
+        except ValueError:
+            return jsonify({"error": "'empresa' and 'cod_agencia' must be numeric"}), 400
+
+        # 4. Open a database connection
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = c.cursor()
+
+        # 5. Prepare PL/SQL block
+        #    The 3rd and 8th parameters are NULL, and the 7th param is 'U', 9th is 1
+        plsql_block = """
+        DECLARE
+            v_existencia_lote NUMBER(14,2);
+        BEGIN
+            v_existencia_lote := ks_inventario_lote.consulta_existencia(
+                :1,   -- empresa
+                :2,   -- cod_agencia
+                NULL, -- 3rd parameter, remains NULL
+                :3,   -- cod_producto
+                :4,   -- tipo_comprobante_lote
+                :5,   -- cod_comprobante_lote
+                'U',  -- 7th parameter
+                NULL, -- 8th parameter
+                1     -- 9th parameter
+            );
+            :6 := v_existencia_lote;
+        END;
+        """
+
+        # 6. Execute the PL/SQL block with bind variables
+        out_var = cur.var(cx_Oracle.NUMBER)  # output variable
+        cur.execute(plsql_block, (
+            empresa,  # :1
+            cod_agencia,  # :2
+            cod_producto,  # :3
+            tipo_comprobante_lote,  # :4
+            cod_comprobante_lote,  # :5
+            out_var  # :6 (output)
+        ))
+
+        # 7. Retrieve the result and close cursor
+        existencia_lote = out_var.getvalue()
+        cur.close()
+
+        # 8. Return JSON response
+        return jsonify({"existencia_lote": float(existencia_lote)}), 200
+
+    except Exception as e:
+        # In case of any error, rollback if the connection is open
+        if c:
+            c.rollback()
+        print(f"Error in existencia_lote endpoint: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        # Always close the connection if it was opened
+        if c:
+            c.close()
+
+
+@rmwa.route('/obt_precio_actual', methods=['GET'])
+@jwt_required()
+def get_costo():
+    """
+    Minimal endpoint to retrieve cost directly from ks_producto_lote.obt_costo_lote
+    without using ROWTYPE objects.
+    Example query:
+      GET /get_costo?empresa=20&cod_producto=R150-FR0545&cod_comprobante_lote=F1B241126&tipo_comprobante_lote=LT
+    """
+    c = None
+    try:
+        # 1) Retrieve query parameters
+        empresa_str = request.args.get('empresa')
+        cod_producto = request.args.get('cod_producto')
+        cod_comprobante_lote = request.args.get('cod_comprobante_lote')
+        tipo_comprobante_lote = request.args.get('tipo_comprobante_lote')
+
+        # Validate we have the necessary params
+        if not all([empresa_str, cod_producto, cod_comprobante_lote, tipo_comprobante_lote]):
+            return jsonify({"error": "Missing one or more required query parameters"}), 400
+
+        # Convert 'empresa' to numeric if applicable
+        try:
+            empresa = float(empresa_str)
+        except ValueError:
+            return jsonify({"error": "'empresa' must be numeric"}), 400
+
+        # 2) Open the database connection
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = c.cursor()
+
+        # 3) Minimal PL/SQL block calling ks_producto_lote.obt_costo_lote
+        #    and returning the result in an output variable (out_cost).
+        plsql_block = """
+        DECLARE
+            v_costo NUMBER(14,2);
+        BEGIN
+            v_costo := ks_producto_lote.obt_costo_lote(
+                          :p_empresa,
+                          :p_cod_producto,
+                          :p_cod_comprobante_lote,
+                          :p_tipo_comprobante_lote,
+                          SYSDATE
+                       );
+            :p_out_cost := v_costo;
+        END;
+        """
+
+        # 4) Bind variable for the output (cost)
+        out_cost_var = cur.var(cx_Oracle.NUMBER)
+
+        # 5) Execute the PL/SQL block
+        cur.execute(plsql_block, {
+            "p_empresa": empresa,
+            "p_cod_producto": cod_producto,
+            "p_cod_comprobante_lote": cod_comprobante_lote,
+            "p_tipo_comprobante_lote": tipo_comprobante_lote,
+            "p_out_cost": out_cost_var
+        })
+
+        # 6) Retrieve cost from output variable
+        cost_value = out_cost_var.getvalue()
+
+        # Close the cursor
+        cur.close()
+
+        # 7) Return the cost in JSON
+        return jsonify({"costo": float(cost_value)}), 200
+
+    except Exception as e:
+        # Roll back if there's any exception
+        if c:
+            c.rollback()
+        print(f"Error in get_costo endpoint: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        # Ensure the connection is closed
+        if c:
+            c.close()
+
+@rmwa.route('/generate_order_warranty', methods=['GET'])
+@jwt_required()
+def genera_pedido():
+    """
+    Invokes ks_casos_postventas.p_genera_pedido, returning p_cod_pedido and p_tipo_pedido in JSON.
+    Also updates st_casos_productos and st_casos_postventa with those values for
+    (empresa, tipo_comprobante, cod_comprobante).
+    Now also receives 'cod_agente' to set in st_casos_postventa before calling the PL/SQL.
+    """
+    c = None
+    try:
+        # 1. Read query parameters (IN / IN OUT)
+        p_empresa_str          = request.args.get('empresa')
+        p_tipo_comprobante     = request.args.get('tipo_comprobante')
+        p_cod_comprobante      = request.args.get('cod_comprobante')
+        p_cod_agencia_str      = request.args.get('cod_agencia')
+        p_cod_politica_str     = request.args.get('cod_politica')
+        p_todos_str            = request.args.get('todos')  # Optional
+        p_cod_pedido_in        = request.args.get('cod_pedido')     # IN OUT
+        p_tipo_pedido_in       = request.args.get('tipo_pedido')    # IN OUT
+
+        # NUEVO: leer cod_agente
+        p_cod_agente_str_param = request.args.get('cod_agente')
+
+        # 2. Validate mandatory parameters
+        if not all([
+            p_empresa_str, p_tipo_comprobante, p_cod_comprobante,
+            p_cod_agencia_str, p_cod_politica_str, p_cod_agente_str_param
+        ]):
+            return jsonify({"error": "Missing one or more required query parameters"}), 400
+
+        # 3. Convert numeric params
+        try:
+            p_empresa = int(p_empresa_str)
+            p_cod_agencia = int(p_cod_agencia_str)
+            p_cod_politica = int(p_cod_politica_str)
+            p_cod_agente_int = str(p_cod_agente_str_param)  # Convertimos cod_agente
+        except ValueError:
+            return jsonify({"error": "Some numeric parameters cannot be converted"}), 400
+
+        # 4. p_todos: default to 1 if not provided
+        if p_todos_str is None or p_todos_str.strip() == "":
+            p_todos = 1
+        else:
+            try:
+                p_todos = int(p_todos_str)
+            except ValueError:
+                return jsonify({"error": "'p_todos' must be numeric"}), 400
+
+        # 5. Actualizar st_casos_postventa.cod_agente antes de continuar
+        #    Buscamos por (empresa, cod_comprobante, tipo_comprobante)
+        matching_postventa_pre = (
+            st_casos_postventa.query()
+            .filter(
+                st_casos_postventa.empresa == p_empresa,
+                st_casos_postventa.cod_comprobante == p_cod_comprobante,
+                st_casos_postventa.tipo_comprobante == p_tipo_comprobante
+            )
+            .first()
+        )
+
+        if not matching_postventa_pre:
+            return jsonify({"error": "No se encontró el caso en st_casos_postventa"}), 404
+
+        # Actualizamos cod_agente
+        matching_postventa_pre.cod_agente = p_cod_agente_int
+        db.session.commit()  # Guardamos de inmediato
+
+        # 6. Abrimos conexión con cx_Oracle para invocar p_genera_pedido
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = c.cursor()
+
+        # 7. Definir el bloque PL/SQL
+        plsql_block = """
+        BEGIN
+            ks_casos_postventas.p_genera_pedido(
+                p_empresa          => :p_empresa,
+                p_tipo_comprobante => :p_tipo_comprobante,
+                p_cod_comprobante  => :p_cod_comprobante,
+                p_cod_agencia      => :p_cod_agencia,
+                p_cod_politica     => :p_cod_politica,
+                p_todos            => :p_todos,
+                p_cod_pedido       => :p_cod_pedido,
+                p_tipo_pedido      => :p_tipo_pedido
+            );
+        END;
+        """
+
+        # 8. Prepare bind variables (IN OUT)
+        b_cod_pedido = cur.var(cx_Oracle.STRING)
+        b_cod_pedido.setvalue(0, p_cod_pedido_in if p_cod_pedido_in else "")
+        b_tipo_pedido = cur.var(cx_Oracle.STRING)
+        b_tipo_pedido.setvalue(0, p_tipo_pedido_in if p_tipo_pedido_in else "")
+
+        # 9. Ejecutar la PL/SQL
+        cur.execute(plsql_block, {
+            "p_empresa": p_empresa,
+            "p_tipo_comprobante": p_tipo_comprobante,
+            "p_cod_comprobante": p_cod_comprobante,
+            "p_cod_agencia": p_cod_agencia,
+            "p_cod_politica": p_cod_politica,
+            "p_todos": p_todos,
+            "p_cod_pedido": b_cod_pedido,
+            "p_tipo_pedido": b_tipo_pedido
+        })
+
+        c.commit()
+
+        # 10. Recuperar OUT parameters
+        out_cod_pedido = b_cod_pedido.getvalue()
+        out_tipo_pedido = b_tipo_pedido.getvalue()
+
+        # 11. Update st_casos_productos
+        matching_products = (
+            st_casos_productos.query()
+            .filter(
+                st_casos_productos.empresa == p_empresa,
+                st_casos_productos.tipo_comprobante == p_tipo_comprobante,
+                st_casos_productos.cod_comprobante == p_cod_comprobante
+            )
+            .all()
+        )
+
+        for rec in matching_products:
+            rec.cod_pedido = out_cod_pedido
+            rec.cod_tipo_pedido = out_tipo_pedido
+
+        # 12. Update st_casos_postventa (single record)
+        matching_postventa = (
+            st_casos_postventa.query()
+            .filter(
+                st_casos_postventa.empresa == p_empresa,
+                st_casos_postventa.cod_comprobante == p_cod_comprobante,
+                st_casos_postventa.tipo_comprobante == p_tipo_comprobante
+            )
+            .first()
+        )
+
+        if matching_postventa:
+            matching_postventa.cod_pedido = out_cod_pedido
+            matching_postventa.cod_tipo_pedido = out_tipo_pedido
+
+        db.session.commit()
+
+        # 13. Return
+        return jsonify({
+            "p_cod_pedido": out_cod_pedido,
+            "p_tipo_pedido": out_tipo_pedido,
+            "updated_products": len(matching_products),
+            "updated_postventa": 1 if matching_postventa else 0
+        }), 200
+
+    except Exception as e:
+        # Rollback both cx_Oracle and SQLAlchemy if any error
+        if c:
+            c.rollback()
+        db.session.rollback()
+        print(f"Error in genera_pedido: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        if c:
+            c.close()
+
+#REST API ST_CASOS_PRODUCTOS
+@rmwa.route('/casos_productos', methods=['POST'])
+@jwt_required()
+def create_casos_productos():
+    """
+    Creates a new record in ST_CASOS_PRODUCTOS.
+    - Data comes from JSON body.
+    - Automatically determines the next 'secuencia' if none exists
+      for (empresa, tipo_comprobante, cod_comprobante).
+    """
+    try:
+        data = request.get_json()
+        required_fields = [
+            "empresa",
+            "tipo_comprobante",
+            "cod_comprobante",
+            "cod_producto",
+            "cantidad",
+            "precio",
+            "adicionado_por",
+            "tipo_comprobante_lote",
+            "cod_comprobante_lote"
+
+        ]
+
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: '{field}'"}), 400
+
+        # Get the last record for this (empresa, tipo_comprobante, cod_comprobante)
+        last_record = (
+            st_casos_productos.query()
+            .filter(
+                st_casos_productos.empresa == data["empresa"],
+                st_casos_productos.tipo_comprobante == data["tipo_comprobante"],
+                st_casos_productos.cod_comprobante == data["cod_comprobante"]
+            )
+            .order_by(st_casos_productos.secuencia.desc())
+            .first()
+        )
+        next_secuencia = 1 if last_record is None else last_record.secuencia + 1
+
+        new_record = st_casos_productos(
+            empresa=data["empresa"],
+            tipo_comprobante=data["tipo_comprobante"],
+            cod_comprobante=data["cod_comprobante"],
+            secuencia=next_secuencia,
+            cod_producto=data["cod_producto"],
+            cantidad=data["cantidad"],
+            precio=data["precio"],
+            # Set default or from JSON
+            adicionado_por=data.get("adicionado_por"),
+            fecha_adicion=datetime.now(),  # Force server-side timestamp
+            cod_pedido=data.get("cod_pedido",""),
+            cod_tipo_pedido=data.get("cod_tipo_pedido",""),
+            tipo_comprobante_lote=data.get("tipo_comprobante_lote"),
+            cod_comprobante_lote=data.get("cod_comprobante_lote")
+        )
+
+        db.session.add(new_record)
+        db.session.commit()
+
+        return jsonify({
+            "message": "Record successfully inserted",
+            "secuencia": next_secuencia
+        }), 201
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@rmwa.route('/casos_productos', methods=['GET'])
+@jwt_required()
+def get_casos_productos_by_args():
+    """
+    Retrieves records from ST_CASOS_PRODUCTOS based on query parameters.
+    Example:
+      GET /casos_productos?cod_comprobante=ABC123
+    Optionally, accept args for empresa, tipo_comprobante, etc.
+    """
+    try:
+        cod_comprobante = request.args.get('cod_comprobante', type=str)
+        if not cod_comprobante:
+            return jsonify({"error": "Missing or invalid 'cod_comprobante' query parameter"}), 400
+
+        records = (
+            st_casos_productos.query()
+            .filter(st_casos_productos.cod_comprobante == cod_comprobante)
+            .all()
+        )
+
+        data_list = []
+        for r in records:
+            data_list.append({
+                "empresa": r.empresa,
+                "tipo_comprobante": r.tipo_comprobante,
+                "cod_comprobante": r.cod_comprobante,
+                "secuencia": r.secuencia,
+                "cod_producto": r.cod_producto,
+                "cantidad": float(r.cantidad),
+                "precio": float(r.precio),
+                "adicionado_por": r.adicionado_por,
+                "fecha_adicion": (r.fecha_adicion.isoformat() if r.fecha_adicion else None),
+                "cod_pedido": r.cod_pedido,
+                "cod_tipo_pedido": r.cod_tipo_pedido,
+                "tipo_comprobante_lote": r.tipo_comprobante_lote,
+                "cod_comprobante_lote": r.cod_comprobante_lote
+            })
+
+        return jsonify(data_list), 200
+
+    except SQLAlchemyError as e:
+        return jsonify({"error": str(e)}), 500
+
+@rmwa.route('/casos_productos', methods=['DELETE'])
+@jwt_required()
+def delete_casos_productos():
+    """
+    Deletes a record from ST_CASOS_PRODUCTOS by
+    cod_comprobante (from args) + secuencia (from route).
+    Example:
+      DELETE /casos_productos/1?cod_comprobante=ABC123
+    """
+    try:
+        secuencia = request.args.get('secuencia')
+        cod_comprobante = request.args.get('cod_comprobante', type=str)
+        if not cod_comprobante:
+            return jsonify({"error": "Missing or invalid 'cod_comprobante' query parameter"}), 400
+
+        record = (
+            st_casos_productos.query()
+            .filter(
+                st_casos_productos.cod_comprobante == cod_comprobante,
+                st_casos_productos.secuencia == secuencia
+            )
+            .first()
+        )
+        if not record:
+            return jsonify({"error": "Record not found"}), 404
+
+        db.session.delete(record)
+        db.session.commit()
+        return jsonify({"message": "Record successfully deleted"}), 200
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@rmwa.route('/casos_postventa/cerrar', methods=['POST'])
+@jwt_required()
+def cerrar_caso():
+
+    try:
+        data = request.get_json()
+        required_fields = ["empresa", "cod_comprobante", "aplica_garantia", "observacion_final", "usuario_cierra"]
+
+        # Validar campos obligatorios
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Falta el campo obligatorio '{field}'"}), 400
+
+        # Asegurar que aplica_garantia sea 0 o 1
+        aplica_garantia_val = int(data["aplica_garantia"])
+        if aplica_garantia_val not in (0, 1):
+            return jsonify({"error": "aplica_garantia debe ser 0 o 1"}), 400
+
+        # Buscar el caso
+        caso = (
+            st_casos_postventa.query()
+            .filter(
+                st_casos_postventa.empresa == data["empresa"],
+                st_casos_postventa.cod_comprobante == data["cod_comprobante"]
+            )
+            .first()
+        )
+
+        if not caso:
+            return jsonify({"error": "No se encontró el caso"}), 404
+
+        # Actualizar la información
+        caso.aplica_garantia = aplica_garantia_val
+        caso.estado = 'C'
+        caso.fecha_cierre = datetime.now()  # Se registra la fecha de cierre en el servidor
+
+        # Si se incluye una observación final u otros campos
+        if "observacion_final" in data:
+            caso.observacion_final = data["observacion_final"]
+
+        if "usuario_cierra" in data:
+            caso.usuario_cierra = data["usuario_cierra"]
+
+        # Si hay más campos que quieras actualizar, agrégalos aquí según sea necesario
+
+        # Guardar los cambios en la base de datos
+        db.session.commit()
+
+        # Respuesta con datos básicos
+        return jsonify({
+            "message": (
+                "Caso cerrado con garantía" if aplica_garantia_val == 1
+                else "Caso cerrado sin garantía"
+            ),
+            "empresa": caso.empresa,
+            "cod_comprobante": caso.cod_comprobante,
+            "estado": caso.estado,
+            "aplica_garantia": caso.aplica_garantia,
+            "fecha_cierre": caso.fecha_cierre.isoformat() if caso.fecha_cierre else None
+        }), 200
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@rmwa.route('/close_preliminary', methods=['POST'])
+@jwt_required()
+def cierre_previo():
+    c = None
+    try:
+        # 1. Leer parámetros
+        p_empresa_str      = request.args.get('empresa', type=int)
+        p_tipo_comprobante = request.args.get('tipo_comprobante')
+        p_cod_comprobante  = request.args.get('cod_comprobante')
+        p_observacion      = request.args.get('observacion', default="", type=str)
+        p_usuario_cierra   = request.args.get('usuario_cierra', default="", type=str)
+
+        # Validar que no falte alguno de los parámetros obligatorios
+        if not all([p_empresa_str, p_tipo_comprobante, p_cod_comprobante, p_usuario_cierra]):
+            return jsonify({"error": "Falta uno o más parámetros requeridos (empresa, tipo_comprobante, cod_comprobante, usuario_cierra, observacion)"}), 400
+
+        # Validar longitud de la observación
+        if len(p_observacion.strip()) < 1:
+            return jsonify({"error": "La observación debe tener al menos 10 caracteres"}), 400
+
+        # 2. Convertir empresa a entero
+        try:
+            p_empresa = int(p_empresa_str)
+        except ValueError:
+            return jsonify({"error": "'empresa' debe ser un número entero"}), 400
+
+        # 3. Conexión con cx_Oracle para invocar ps_verifica_cierre
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = c.cursor()
+
+        # 4. Actualizar st_casos_postventa.estado = 'R' y usuario_cierra
+        caso = (
+            st_casos_postventa.query()
+            .filter(
+                st_casos_postventa.empresa == p_empresa,
+                st_casos_postventa.tipo_comprobante == p_tipo_comprobante,
+                st_casos_postventa.cod_comprobante == p_cod_comprobante
+            )
+            .first()
+        )
+
+        if not caso:
+            return jsonify({"error": "No se encontró el caso indicado"}), 404
+
+        # Cambiar estado a 'R' (cierre previo) y registrar quién lo cierra
+        caso.estado = 'R'
+        caso.usuario_cierra = p_usuario_cierra
+
+        # 5. Insertar la observación en st_casos_postventas_obs (similar a 'INGRESAR_OBSERVACION')
+        last_record = (
+            st_casos_postventas_obs.query()
+            .filter(
+                st_casos_postventas_obs.empresa == p_empresa,
+                st_casos_postventas_obs.tipo_comprobante == p_tipo_comprobante,
+                st_casos_postventas_obs.cod_comprobante == p_cod_comprobante
+            )
+            .order_by(st_casos_postventas_obs.secuencia.desc())
+            .first()
+        )
+        next_seq = 1 if last_record is None else last_record.secuencia + 1
+
+        new_obs = st_casos_postventas_obs(
+            empresa=p_empresa,
+            tipo_comprobante=p_tipo_comprobante,
+            cod_comprobante=p_cod_comprobante,
+            secuencia=next_seq,
+            fecha=datetime.now(),
+            usuario=p_usuario_cierra,      # se registra quién está cerrando
+            observacion=p_observacion,
+            tipo="PRE"                   # para distinguir que es cierre previo
+        )
+        db.session.add(new_obs)
+
+        # Guardar cambios en SQLAlchemy
+        db.session.commit()
+
+        # 6. Retornar JSON
+        return jsonify({
+            "message": "Cierre previo realizado con éxito",
+            "empresa": p_empresa,
+            "tipo_comprobante": p_tipo_comprobante,
+            "cod_comprobante": p_cod_comprobante,
+            "estado": caso.estado,
+            "usuario_cierra": caso.usuario_cierra
+        }), 200
+
+    except Exception as e:
+        # Rollback en cx_Oracle y SQLAlchemy si ocurre un error
+        if c:
+            c.rollback()
+        db.session.rollback()
+        print(f"Error in cierre_previo: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        if c:
+            c.close()
