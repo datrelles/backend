@@ -11,7 +11,7 @@ from src.config.database import db
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, StatementError
 from src.models.modulo_formulas import st_proceso, st_formula, st_parametro, st_parametros_x_proceso, \
-    st_factores_calculo_parametros, TIPOS_OPE_VALIDOS, OPERADORES_VALIDOS
+    st_factores_calculo_parametros, tipos_ope_validos, operadores_validos
 from src.exceptions.validation import validation_error
 from src.validations.alfanumericas import validar_varchar
 from src.validations.numericas import validar_number
@@ -19,21 +19,11 @@ from src.validations.numericas import validar_number
 formulas_b = Blueprint('routes_formulas', __name__)
 logger = logging.getLogger(__name__)
 
-"""
-###################################################################################
-ENDPOINTS PARA GESTIONAR FÓRMULAS DINÁMICAS
-###################################################################################
-"""
-
 
 @formulas_b.route("/procesos", methods=["GET"])
 @jwt_required()
 @cross_origin()
 def get_procesos():
-    """
-    Endpoint para listar los procesos.
-    """
-
     try:
         empresa = validar_number('empresa', request.args.get('empresa'), 2)
         query = st_proceso.query()
@@ -52,10 +42,6 @@ def get_procesos():
 @jwt_required()
 @cross_origin()
 def post_procesos():
-    """
-    Endpoint para crear un proceso.
-    """
-
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_proceso') or not data.get('nombre'):
@@ -97,10 +83,6 @@ def post_procesos():
 @jwt_required()
 @cross_origin()
 def put_procesos():
-    """
-    Endpoint para actualizar un proceso.
-    """
-
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_proceso') or not data.get('nombre') or not data.get('estado'):
@@ -144,10 +126,6 @@ def put_procesos():
 @jwt_required()
 @cross_origin()
 def get_formulas():
-    """
-    Endpoint para listar las fórmulas.
-    """
-
     try:
         empresa = validar_number('empresa', request.args.get('empresa'), 2)
         query = st_formula.query()
@@ -166,10 +144,6 @@ def get_formulas():
 @jwt_required()
 @cross_origin()
 def post_formulas():
-    """
-    Endpoint para crear una fórmula.
-    """
-
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_formula') or not data.get('nombre') or not data.get(
@@ -212,10 +186,6 @@ def post_formulas():
 @jwt_required()
 @cross_origin()
 def put_formulas():
-    """
-    Endpoint para actualizar una fórmula.
-    """
-
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_formula') or not data.get('nombre') or not data.get(
@@ -262,10 +232,6 @@ def put_formulas():
 @jwt_required()
 @cross_origin()
 def get_parametros():
-    """
-    Endpoint para listar los parámetros.
-    """
-
     try:
         empresa = validar_number('empresa', request.args.get('empresa'), 2)
         query = st_parametro.query()
@@ -285,10 +251,6 @@ def get_parametros():
 @jwt_required()
 @cross_origin()
 def post_parametros():
-    """
-    Endpoint para crear un parámetro.
-    """
-
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_parametro') or not data.get('nombre'):
@@ -330,10 +292,6 @@ def post_parametros():
 @jwt_required()
 @cross_origin()
 def put_parametros():
-    """
-    Endpoint para actualizar un parámetro.
-    """
-
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_parametro') or not data.get('nombre') or not data.get('estado'):
@@ -378,10 +336,6 @@ def put_parametros():
 @jwt_required()
 @cross_origin()
 def get_parametros_x_proceso():
-    """
-    Endpoint para listar los parámetros por proceso.
-    """
-
     try:
         empresa = validar_number('empresa', request.args.get('empresa'), 2)
         cod_proceso = validar_varchar('cod_proceso', request.args.get('cod_proceso'), 8)
@@ -407,10 +361,6 @@ def get_parametros_x_proceso():
 @jwt_required()
 @cross_origin()
 def post_parametros_x_proceso():
-    """
-    Endpoint para crear un parámetro por proceso, es decir, vincular un parámetro a un proceso.
-    """
-
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_proceso') or not data.get('cod_parametro') or not data.get(
@@ -459,10 +409,6 @@ def post_parametros_x_proceso():
 @jwt_required()
 @cross_origin()
 def put_parametros_x_proceso():
-    """
-    Endpoint para actualizar un parámetro por proceso, es decir, cambiar atributos de un parámetro vinculado a un proceso.
-    """
-
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_proceso') or not data.get('cod_parametro') or not data.get(
@@ -520,10 +466,6 @@ def put_parametros_x_proceso():
 @jwt_required()
 @cross_origin()
 def delete_parametros_x_proceso():
-    """
-    Endpoint para eliminar un parámetro por proceso, es decir, desvincular un parámetro de un proceso.
-    """
-
     try:
         empresa = validar_number('empresa', request.args.get('empresa'), 2)
         cod_proceso = validar_varchar('cod_proceso', request.args.get('cod_proceso'), 8)
@@ -565,10 +507,6 @@ def delete_parametros_x_proceso():
 @jwt_required()
 @cross_origin()
 def get_factores_calculo_parametros():
-    """
-    Endpoint para listar los factores de cálculo de los parámetros.
-    """
-
     try:
         empresa = validar_number('empresa', request.args.get('empresa'), 2)
         cod_proceso = validar_varchar('cod_proceso', request.args.get('cod_proceso'), 8)
@@ -598,10 +536,6 @@ def get_factores_calculo_parametros():
 @jwt_required()
 @cross_origin()
 def post_factores_calculo_parametros():
-    """
-    Endpoint para crear un factor de cálculo de un parámetro.
-    """
-
     try:
         data = request.get_json()
         if not data.get('empresa') or not data.get('cod_proceso') or not data.get('cod_parametro') or not data.get(
@@ -641,14 +575,14 @@ def post_factores_calculo_parametros():
                     mensaje = 'Falta el operador'
                     logger.error(mensaje)
                     return jsonify({'mensaje': mensaje}), 400
-                if data['operador'] not in OPERADORES_VALIDOS:
-                    mensaje = f'Operador inválido, solo se aceptan: {reduce(lambda x, y: x + ', ' + y, OPERADORES_VALIDOS)}'
+                if data['operador'] not in operadores_validos:
+                    mensaje = f'Operador inválido, solo se aceptan: {reduce(lambda x, y: x + ', ' + y, operadores_validos)}'
                     logger.error(mensaje)
                     return jsonify({'mensaje': mensaje}), 400
                 data['valor_fijo'] = None
                 data['cod_parametro_operador'] = None
             case _:
-                mensaje = f'Tipo de operador inválido, solo se aceptan: {reduce(lambda x, y: x + ', ' + y, TIPOS_OPE_VALIDOS)}'
+                mensaje = f'Tipo de operador inválido, solo se aceptan: {reduce(lambda x, y: x + ', ' + y, tipos_ope_validos)}'
                 logger.error(mensaje)
                 return jsonify({'mensaje': mensaje}), 400
         db.session.add(st_factores_calculo_parametros(**data))
@@ -685,10 +619,6 @@ def post_factores_calculo_parametros():
 @jwt_required()
 @cross_origin()
 def delete_factores_calculo_parametros():
-    """
-    Endpoint para eliminar un factor de cálculo de un parámetro.
-    """
-
     try:
         empresa = validar_number('empresa', request.args.get('empresa'), 2)
         cod_proceso = validar_varchar('cod_proceso', request.args.get('cod_proceso'), 8)

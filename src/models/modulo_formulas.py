@@ -9,11 +9,11 @@ from src.models.categoria_excepcion import categoria_excepcion
 from src.validations.alfanumericas import validar_varchar
 from src.validations.numericas import validar_number
 
-TIPOS_OPE_VALIDOS = {'PAR', 'VAL', 'OPE'}  # PAR: parámetro, VAL: valor fijo, OPE: operador
-OPERADORES_VALIDOS = {'+', '-', '*', '/'}
+tipos_ope_validos = {'PAR', 'VAL', 'OPE'}
+operadores_validos = {'+', '-', '*', '/'}
 
-Base = declarative_base(metadata=db.metadata)
-SCHEMA_NAME = 'stock'
+base = declarative_base(metadata=db.metadata)
+schema_name = 'stock'
 
 
 def validar_empresa(clave, valor):
@@ -24,64 +24,31 @@ def validar_cod(clave, valor):
     return validar_varchar(clave, valor, 8)
 
 
-class custom_base(Base):
-    """
-    Clase base personalizada que contiene métodos para convertir objetos SQLAlchemy en diccionarios y listas.
-    """
-
+class custom_base(base):
     __abstract__ = True  # Parámetro para omitir creación de tabla
 
     @classmethod
     def query(cls):
-        """
-        Crea un objeto para realizar consultas en la base de datos.
-        """
         return db.session.query(cls)
 
     @staticmethod
     def to_list(items: list['custom_base'], excluir_none=False, *args) -> list[dict]:
-        """
-        Convierte una lista de objetos SQLAlchemy en una lista de diccionarios.
-
-        Args:
-            items (list[custom_base]): Lista de items a convertir en diccionarios y agregar a una lista.
-            excluir_none (bool): Bandera para excluir atributos con valor None.
-            *args (tuple[str, ...]): Tupla de cadenas con atributos que contienen listas de instancias relacionadas.
-        Returns:
-            list[dict]: Lista con diccionarios de los items.
-        """
-
         return [item.to_dict(excluir_none, *args) for item in items]
 
     def to_dict(self, excluir_none=False, *args: tuple[str, ...]) -> dict:
-        """
-        Convierte un objeto SQLAlchemy en un diccionario.
-
-        Args:
-            excluir_none (bool): Bandera para excluir atributos con valor None.
-            *args (tuple[str, ...]): Tupla de cadenas con atributos que contienen listas de instancias relacionadas.
-        Returns:
-            dict: Diccionario del objeto.
-        """
-
         data = {
             column.name: getattr(self, column.name) for column in self.__table__.columns
         }
         if excluir_none:
             data = {k: v for k, v in data.items() if v is not None}
         for arg in args:
-            # Devuelve una lista de diccionarios para cada atributo especificado en *args
             data[arg] = [item.to_dict() for item in getattr(self, arg, [])]
         return data
 
 
 class st_proceso(custom_base):
-    """
-    Modelo para representar la tabla 'st_proceso'.
-    """
-
     __tablename__ = 'st_proceso'
-    __table_args__ = {'schema': SCHEMA_NAME}
+    __table_args__ = {'schema': schema_name}
 
     empresa = Column(NUMBER(precision=2), primary_key=True)
     cod_proceso = Column(VARCHAR(8), primary_key=True)
@@ -106,12 +73,8 @@ class st_proceso(custom_base):
 
 
 class st_formula(custom_base):
-    """
-    Modelo para representar la tabla 'st_formulas_procesos'.
-    """
-
     __tablename__ = 'st_formulas_procesos'
-    __table_args__ = {'schema': SCHEMA_NAME}
+    __table_args__ = {'schema': schema_name}
 
     empresa = Column(NUMBER(precision=2), primary_key=True)
     cod_formula = Column(VARCHAR(8), primary_key=True)
@@ -148,12 +111,8 @@ class st_formula(custom_base):
 
 
 class st_parametro(custom_base):
-    """
-    Modelo para representar la tabla 'st_parametros_formulas'.
-    """
-
     __tablename__ = 'st_parametros_formulas'
-    __table_args__ = {'schema': SCHEMA_NAME}
+    __table_args__ = {'schema': schema_name}
 
     empresa = Column(NUMBER(precision=2), primary_key=True)
     cod_parametro = Column(VARCHAR(8), primary_key=True)
@@ -185,23 +144,19 @@ class st_parametro(custom_base):
 
 
 class st_parametros_x_proceso(custom_base):
-    """
-    Modelo para representar la tabla 'st_parametros_x_proceso'.
-    """
-
     __tablename__ = 'st_parametros_x_proceso'
     __table_args__ = (
         PrimaryKeyConstraint('empresa', 'cod_proceso', 'cod_parametro'),
-        {'schema': SCHEMA_NAME}
+        {'schema': schema_name}
     )
 
     empresa = Column(NUMBER(precision=2))
-    cod_proceso = Column(VARCHAR(8), ForeignKey(f'{SCHEMA_NAME}.st_proceso.cod_proceso'), nullable=False)
+    cod_proceso = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_proceso.cod_proceso'), nullable=False)
     proceso = relationship('st_proceso')
-    cod_parametro = Column(VARCHAR(8), ForeignKey(f'{SCHEMA_NAME}.st_parametros_formulas.cod_parametro'),
+    cod_parametro = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_parametros_formulas.cod_parametro'),
                            nullable=False)
     parametro = relationship('st_parametro')
-    cod_formula = Column(VARCHAR(8), ForeignKey(f'{SCHEMA_NAME}.st_formulas_procesos.cod_formula'))
+    cod_formula = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_formulas_procesos.cod_formula'))
     formula = relationship('st_formula')
     factores_calculo = relationship('st_factores_calculo_parametros',
                                     primaryjoin="and_(st_parametros_x_proceso.empresa == st_factores_calculo_parametros.empresa, "
@@ -248,23 +203,19 @@ class st_parametros_x_proceso(custom_base):
 
 
 class st_factores_calculo_parametros(custom_base):
-    """
-    Modelo para representar la tabla 'st_factores_calc_parametros'.
-    """
-
     __tablename__ = 'st_factores_calc_parametros'
     __table_args__ = (
         PrimaryKeyConstraint('empresa', 'cod_proceso', 'cod_parametro', 'orden'),
-        {'schema': SCHEMA_NAME}
+        {'schema': schema_name}
     )
 
-    empresa = Column(NUMBER(precision=2), ForeignKey(f'{SCHEMA_NAME}.st_parametros_x_proceso.empresa'), nullable=False)
-    cod_proceso = Column(VARCHAR(8), ForeignKey(f'{SCHEMA_NAME}.st_parametros_x_proceso.cod_proceso'), nullable=False)
-    cod_parametro = Column(VARCHAR(8), ForeignKey(f'{SCHEMA_NAME}.st_parametros_x_proceso.cod_parametro'),
+    empresa = Column(NUMBER(precision=2), ForeignKey(f'{schema_name}.st_parametros_x_proceso.empresa'), nullable=False)
+    cod_proceso = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_parametros_x_proceso.cod_proceso'), nullable=False)
+    cod_parametro = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_parametros_x_proceso.cod_parametro'),
                            nullable=False)
     orden = Column(NUMBER(precision=3))
-    tipo_operador = Column(VARCHAR(3), nullable=False)  # Solo acepta: TIPOS_OPE_VALIDOS
-    operador = Column(VARCHAR(1))  # Solo acepta: OPERADORES_VALIDOS
+    tipo_operador = Column(VARCHAR(3), nullable=False)
+    operador = Column(VARCHAR(1))
     valor_fijo = Column(NUMBER(precision=30, scale=8))
     cod_parametro_operador = Column(VARCHAR(8))
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
