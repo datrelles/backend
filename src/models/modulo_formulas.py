@@ -2,14 +2,26 @@ from sqlalchemy import Column, DateTime, Index, VARCHAR, text, Integer, PrimaryK
     ForeignKeyConstraint, column
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, validates
 from src.config.database import db
+from src.exceptions.validation import validation_error
+from src.models.categoria_excepcion import categoria_excepcion
+from src.validations.alfanumericas import validar_varchar
+from src.validations.numericas import validar_number
 
 TIPOS_OPE_VALIDOS = {'PAR', 'VAL', 'OPE'}  # PAR: parámetro, VAL: valor fijo, OPE: operador
 OPERADORES_VALIDOS = {'+', '-', '*', '/'}
 
 Base = declarative_base(metadata=db.metadata)
 SCHEMA_NAME = 'stock'
+
+
+def validar_empresa(clave, valor):
+    return validar_number(clave, valor, 2)
+
+
+def validar_cod(clave, valor):
+    return validar_varchar(clave, valor, 8)
 
 
 class custom_base(Base):
@@ -80,6 +92,18 @@ class st_proceso(custom_base):
     audit_usuario_mod = Column(VARCHAR(30))
     audit_fecha_mod = Column(DateTime)
 
+    @validates('empresa')
+    def validar_empresa(self, key, value):
+        return validar_empresa(key, value)
+
+    @validates('cod_proceso')
+    def validar_cod_proceso(self, key, value):
+        return validar_cod(key, value)
+
+    @validates('nombre')
+    def validar_nombre(self, key, value):
+        return validar_varchar(key, value, 30)
+
 
 class st_formula(custom_base):
     """
@@ -100,6 +124,28 @@ class st_formula(custom_base):
     audit_usuario_mod = Column(VARCHAR(30))
     audit_fecha_mod = Column(DateTime)
 
+    @validates('empresa')
+    def validar_empresa(self, key, value):
+        return validar_empresa(key, value)
+
+    @validates('cod_formula')
+    def validar_cod_formula(self, key, value):
+        return validar_cod(key, value)
+
+    @validates('nombre')
+    def validar_nombre(self, key, value):
+        return validar_varchar(key, value, 100)
+
+    @validates('observaciones')
+    def validar_observaciones(self, key, value):
+        if value is not None:
+            return validar_varchar(key, value, 800)
+        return value
+
+    @validates('definicion')
+    def validar_definicion(self, key, value):
+        return validar_varchar(key, value, 2000)
+
 
 class st_parametro(custom_base):
     """
@@ -118,6 +164,24 @@ class st_parametro(custom_base):
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
     audit_fecha_mod = Column(DateTime)
+
+    @validates('empresa')
+    def validar_empresa(self, key, value):
+        return validar_empresa(key, value)
+
+    @validates('cod_parametro')
+    def validar_cod_parametro(self, key, value):
+        return validar_cod(key, value)
+
+    @validates('nombre')
+    def validar_nombre(self, key, value):
+        return validar_varchar(key, value, 60)
+
+    @validates('descripcion')
+    def validar_descripcion(self, key, value):
+        if value is not None:
+            return validar_varchar(key, value, 1000)
+        return value
 
 
 class st_parametros_x_proceso(custom_base):
@@ -154,6 +218,34 @@ class st_parametros_x_proceso(custom_base):
     audit_usuario_mod = Column(VARCHAR(30))
     audit_fecha_mod = Column(DateTime)
 
+    @validates('empresa')
+    def validar_empresa(self, key, value):
+        return validar_empresa(key, value)
+
+    @validates('cod_proceso')
+    def validar_cod_proceso(self, key, value):
+        return validar_cod(key, value)
+
+    @validates('cod_parametro')
+    def validar_cod_parametro(self, key, value):
+        return validar_cod(key, value)
+
+    @validates('cod_formula')
+    def validar_cod_formula(self, key, value):
+        if value is not None:
+            return validar_cod(key, value)
+        return value
+
+    @validates('orden_calculo')
+    def validar_orden_calculo(self, key, value):
+        if value is not None:
+            return validar_number(key, value, 5)
+        return value
+
+    @validates('orden_imprime')
+    def validar_orden_imprime(self, key, value):
+        return validar_number(key, value, 5)
+
 
 class st_factores_calculo_parametros(custom_base):
     """
@@ -179,3 +271,21 @@ class st_factores_calculo_parametros(custom_base):
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
     audit_fecha_mod = Column(DateTime)
+
+    @validates('empresa')
+    def validar_empresa(self, key, value):
+        return validar_empresa(key, value)
+
+    @validates('cod_proceso')
+    def validar_cod_proceso(self, key, value):
+        return validar_cod(key, value)
+
+    @validates('cod_parametro')
+    def validar_cod_parametro(self, key, value):
+        return validar_cod(key, value)
+
+    @validates('orden')
+    def validar_orden(self, key, value):
+        if value is not None:
+            return validar_number(key, value, 3)
+        return value

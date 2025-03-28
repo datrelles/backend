@@ -12,6 +12,9 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, StatementError
 from src.models.modulo_formulas import st_proceso, st_formula, st_parametro, st_parametros_x_proceso, \
     st_factores_calculo_parametros, TIPOS_OPE_VALIDOS, OPERADORES_VALIDOS
+from src.exceptions.validation import validation_error
+from src.validations.alfanumericas import validar_varchar
+from src.validations.numericas import validar_number
 
 formulas_b = Blueprint('routes_formulas', __name__)
 logger = logging.getLogger(__name__)
@@ -32,14 +35,13 @@ def get_procesos():
     """
 
     try:
-        empresa = request.args.get('empresa')
-        if not empresa:
-            mensaje = 'Solicitud incompleta'
-            logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+        empresa = validar_number('empresa', request.args.get('empresa'), 2)
         query = st_proceso.query()
         procesos = query.filter(st_proceso.empresa == empresa).all()
         return jsonify(st_proceso.to_list(procesos))
+    except validation_error as e:
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
     except Exception as e:
         logger.exception(f'Ocurrió una excepción al consultar los procesos: {e}')
         return jsonify(
@@ -71,15 +73,18 @@ def post_procesos():
         mensaje = f'Se registró el proceso {data['cod_proceso']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 201
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
     except (TypeError, ValueError, StatementError) as e:
         db.session.rollback()
         mensaje = 'Atributos provistos inválidos'
         logger.exception(f'{mensaje}: {e}')
-        return jsonify(
-            {'mensaje': mensaje}), 400
-    except BadRequest as e:
-        mensaje = 'Solicitud malformada'
-        logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
@@ -115,15 +120,18 @@ def put_procesos():
         mensaje = f'Se actualizó el proceso {data['cod_proceso']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 204
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
     except (TypeError, ValueError, StatementError) as e:
         db.session.rollback()
         mensaje = 'Atributos provistos inválidos'
         logger.exception(f'{mensaje}: {e}')
-        return jsonify(
-            {'mensaje': mensaje}), 400
-    except BadRequest as e:
-        mensaje = 'Solicitud malformada'
-        logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
@@ -141,14 +149,13 @@ def get_formulas():
     """
 
     try:
-        empresa = request.args.get('empresa')
-        if not empresa:
-            mensaje = 'Solicitud incompleta'
-            logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+        empresa = validar_number('empresa', request.args.get('empresa'), 2)
         query = st_formula.query()
         formulas = query.filter(st_formula.empresa == empresa).all()
         return jsonify(st_formula.to_list(formulas))
+    except validation_error as e:
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
     except Exception as e:
         logger.exception(f'Ocurrió una excepción al consultar las fórmulas: {e}')
         return jsonify(
@@ -181,15 +188,18 @@ def post_formulas():
         mensaje = f'Se registró la fórmula {data['cod_formula']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 201
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
     except (TypeError, ValueError, StatementError) as e:
         db.session.rollback()
         mensaje = 'Atributos provistos inválidos'
         logger.exception(f'{mensaje}: {e}')
-        return jsonify(
-            {'mensaje': mensaje}), 400
-    except BadRequest as e:
-        mensaje = 'Solicitud malformada'
-        logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
@@ -228,15 +238,18 @@ def put_formulas():
         mensaje = f'Se actualizó la fórmula {data['cod_formula']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 204
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
     except (TypeError, ValueError, StatementError) as e:
         db.session.rollback()
         mensaje = 'Atributos provistos inválidos'
         logger.exception(f'{mensaje}: {e}')
-        return jsonify(
-            {'mensaje': mensaje}), 400
-    except BadRequest as e:
-        mensaje = 'Solicitud malformada'
-        logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
@@ -254,14 +267,14 @@ def get_parametros():
     """
 
     try:
-        empresa = request.args.get('empresa')
-        if not empresa:
-            mensaje = 'Solicitud incompleta'
-            logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+        empresa = validar_number('empresa', request.args.get('empresa'), 2)
         query = st_parametro.query()
         parametros = query.filter(st_parametro.empresa == empresa).all()
         return jsonify(st_parametro.to_list(parametros))
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
     except Exception as e:
         logger.exception(f'Ocurrió una excepción al consultar los parámetros: {e}')
         return jsonify(
@@ -293,15 +306,18 @@ def post_parametros():
         mensaje = f'Se registró el parámetro {data['cod_parametro']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 201
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
     except (TypeError, ValueError, StatementError) as e:
         db.session.rollback()
         mensaje = 'Atributos provistos inválidos'
         logger.exception(f'{mensaje}: {e}')
-        return jsonify(
-            {'mensaje': mensaje}), 400
-    except BadRequest as e:
-        mensaje = 'Solicitud malformada'
-        logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
@@ -338,15 +354,18 @@ def put_parametros():
         mensaje = f'Se actualizó el parámetro {data['cod_parametro']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 204
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
     except (TypeError, ValueError, StatementError) as e:
         db.session.rollback()
         mensaje = 'Atributos provistos inválidos'
         logger.exception(f'{mensaje}: {e}')
-        return jsonify(
-            {'mensaje': mensaje}), 400
-    except BadRequest as e:
-        mensaje = 'Solicitud malformada'
-        logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
@@ -364,12 +383,8 @@ def get_parametros_x_proceso():
     """
 
     try:
-        empresa = request.args.get('empresa')
-        cod_proceso = request.args.get('cod_proceso')
-        if not empresa or not cod_proceso:
-            mensaje = 'Solicitud incompleta'
-            logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+        empresa = validar_number('empresa', request.args.get('empresa'), 2)
+        cod_proceso = validar_varchar('cod_proceso', request.args.get('cod_proceso'), 8)
         if not db.session.get(st_proceso, (empresa, cod_proceso)):
             mensaje = f'Proceso {cod_proceso} inexistente'
             logger.error(mensaje)
@@ -379,6 +394,9 @@ def get_parametros_x_proceso():
                                   st_parametros_x_proceso.cod_proceso == cod_proceso).order_by(
             st_parametros_x_proceso.orden_imprime).all()
         return jsonify(st_parametro.to_list(parametros))
+    except validation_error as e:
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
     except Exception as e:
         logger.exception(f'Ocurrió una excepción al consultar los parámetros vinculados al proceso {cod_proceso}: {e}')
         return jsonify(
@@ -412,21 +430,24 @@ def post_parametros_x_proceso():
         mensaje = f'Se vinculó el parámetro {data['cod_parametro']} al proceso {data['cod_proceso']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 201
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
+    except (TypeError, ValueError, StatementError) as e:
+        db.session.rollback()
+        mensaje = 'Atributos provistos inválidos'
+        logger.exception(f'{mensaje}: {e}')
+        return jsonify({'mensaje': mensaje}), 400
     except IntegrityError as e:
         db.session.rollback()
         logger.exception(f'Proceso y/o parámetro inexistentes: {e}')
         return jsonify(
             {'mensaje': f'Proceso y/o parámetro inexistentes'}), 400
-    except (TypeError, ValueError, StatementError) as e:
-        db.session.rollback()
-        mensaje = 'Atributos provistos inválidos'
-        logger.exception(f'{mensaje}: {e}')
-        return jsonify(
-            {'mensaje': mensaje}), 400
-    except BadRequest as e:
-        mensaje = 'Solicitud malformada'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al vincular el parámetro al proceso: {e}')
@@ -475,15 +496,18 @@ def put_parametros_x_proceso():
         mensaje = f'Se actualizó el parámetro {data['cod_parametro']} vinculado al proceso {data['cod_proceso']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 204
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
     except (TypeError, ValueError, StatementError) as e:
         db.session.rollback()
         mensaje = 'Atributos provistos inválidos'
         logger.exception(f'{mensaje}: {e}')
-        return jsonify(
-            {'mensaje': mensaje}), 400
-    except BadRequest as e:
-        mensaje = 'Solicitud malformada'
-        logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
@@ -501,14 +525,9 @@ def delete_parametros_x_proceso():
     """
 
     try:
-        args = request.args
-        empresa = args.get('empresa')
-        cod_proceso = args.get('cod_proceso')
-        cod_parametro = args.get('cod_parametro')
-        if not empresa or not cod_proceso or not cod_parametro:
-            mensaje = 'Solicitud incompleta'
-            logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+        empresa = validar_number('empresa', request.args.get('empresa'), 2)
+        cod_proceso = validar_varchar('cod_proceso', request.args.get('cod_proceso'), 8)
+        cod_parametro = validar_varchar('cod_parametro', request.args.get('cod_parametro'), 8)
         if not db.session.get(st_proceso, (empresa, cod_proceso)):
             mensaje = f'Proceso {cod_proceso} inexistente'
             logger.error(mensaje)
@@ -531,6 +550,10 @@ def delete_parametros_x_proceso():
         mensaje = f'Se desvinculó el parámetro {cod_parametro} del proceso {cod_proceso}'
         logger.info(mensaje)
         return '', 204
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al desvincular el parámetro del proceso: {e}')
@@ -547,13 +570,9 @@ def get_factores_calculo_parametros():
     """
 
     try:
-        empresa = request.args.get('empresa')
-        cod_proceso = request.args.get('cod_proceso')
-        cod_parametro = request.args.get('cod_parametro')
-        if not empresa or not cod_proceso or not cod_parametro:
-            mensaje = 'Solicitud incompleta'
-            logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+        empresa = validar_number('empresa', request.args.get('empresa'), 2)
+        cod_proceso = validar_varchar('cod_proceso', request.args.get('cod_proceso'), 8)
+        cod_parametro = validar_varchar('cod_parametro', request.args.get('cod_parametro'), 8)
         if not db.session.get(st_parametros_x_proceso, (empresa, cod_proceso, cod_parametro)):
             mensaje = f'Parámetro por proceso inexistente: proceso ({cod_proceso}), parámetro ({cod_parametro})'
             logger.error(mensaje)
@@ -564,6 +583,9 @@ def get_factores_calculo_parametros():
                                         st_factores_calculo_parametros.cod_parametro == cod_parametro).order_by(
             st_factores_calculo_parametros.orden).all()
         return jsonify(st_factores_calculo_parametros.to_list(factores_calculo))
+    except validation_error as e:
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
     except Exception as e:
         logger.exception(
             f'Ocurrió una excepción al consultar los factores de cálculo (proceso ({cod_proceso}), parámetro ({cod_parametro})): {e}')
@@ -634,21 +656,24 @@ def post_factores_calculo_parametros():
         mensaje = f'Se registró el factor de cálculo (parámetro: {data['cod_parametro']}, orden: {data['orden']})'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 201
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
+    except (TypeError, ValueError, StatementError) as e:
+        db.session.rollback()
+        mensaje = 'Atributos provistos inválidos'
+        logger.exception(f'{mensaje}: {e}')
+        return jsonify({'mensaje': mensaje}), 400
     except IntegrityError as e:
         db.session.rollback()
         logger.exception(f'Proceso y/o parámetro inexistentes: {e}')
         return jsonify(
             {'mensaje': f'Proceso y/o parámetro inexistentes'}), 404
-    except (TypeError, ValueError, StatementError) as e:
-        db.session.rollback()
-        mensaje = 'Atributos provistos inválidos'
-        logger.exception(f'{mensaje}: {e}')
-        return jsonify(
-            {'mensaje': mensaje}), 400
-    except BadRequest as e:
-        mensaje = 'Solicitud malformada'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al registrar el factor de cálculo: {e}')
@@ -665,15 +690,10 @@ def delete_factores_calculo_parametros():
     """
 
     try:
-        args = request.args
-        empresa = args.get('empresa')
-        cod_proceso = args.get('cod_proceso')
-        cod_parametro = args.get('cod_parametro')
-        orden = args.get('orden')
-        if not empresa or not cod_proceso or not cod_parametro or not orden:
-            mensaje = 'Solicitud incompleta'
-            logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+        empresa = validar_number('empresa', request.args.get('empresa'), 2)
+        cod_proceso = validar_varchar('cod_proceso', request.args.get('cod_proceso'), 8)
+        cod_parametro = validar_varchar('cod_parametro', request.args.get('cod_parametro'), 8)
+        orden = validar_varchar('orden', request.args.get('orden'), 8)
         factor_calculo = db.session.get(st_factores_calculo_parametros, (empresa, cod_proceso, cod_parametro, orden))
         if not factor_calculo:
             mensaje = f'Factor de cálculo (proceso: {cod_proceso}, parámetro: {cod_parametro}, orden: {orden}) inexistente'
@@ -684,6 +704,10 @@ def delete_factores_calculo_parametros():
         mensaje = f'Se eliminó el factor de cálculo (proceso: {cod_proceso}, parámetro: {cod_parametro}, orden: {orden})'
         logger.info(mensaje)
         return '', 204
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al eliminar el factor de cálculo: {e}')
