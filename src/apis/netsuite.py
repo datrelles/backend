@@ -1,0 +1,1 @@
+rest_services = "https://9305497-sb1.suitetalk.api.netsuite.com/services/rest"

@@ -2,6 +2,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, request, jsonify
 from numpy.core.defchararray import upper
 from flask_mail import Mail, Message
+import requests
 
 import oracle
 from routes.web_services import web_services
@@ -16,14 +17,17 @@ from flask_cors import CORS, cross_origin
 import json
 import os
 from datetime import datetime, timedelta, timezone
+import jwt
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager
-
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 ###################################################
 
 from src.config.database import db
 from src.routes.routes import bp
 from src.routes.routes_auth import au
 from src.routes.routes_custom import bpcustom
+from src.routes.routes_net import net
 from src.routes.routes_fin import bpfin
 from src.routes.routes_logis import bplog
 from src.routes.routes_com import bpcom
@@ -36,8 +40,7 @@ from src.routes.email_alert import aem, execute_send_alert_emails, execute_send_
 dotenv.load_dotenv()
 
 app = Flask(__name__)
-
-#####################mail################################
+####################mail################################
 
 app.config['MAIL_SERVER'] = 'smtp.office365.com'
 app.config['MAIL_PORT'] = 587
@@ -76,10 +79,12 @@ app.register_blueprint(bpcom, url_prefix="/com")
 app.register_blueprint(aem, url_prefix="/alert_email")
 app.register_blueprint(rmc, url_prefix="/cont")
 app.register_blueprint(rmwa, url_prefix="/warranty")
+app.register_blueprint(net, url_prefix="/net")
+
 
 #############################################################################
 
-jwt = JWTManager(app)
+jwt_manager = JWTManager(app)
 CORS(app, resources={
     r"/*": {
         "origins": "*",  # Allows all origins
@@ -92,6 +97,14 @@ login_manager = LoginManager(app)
 
 app.register_blueprint(auth, url_prefix="/")
 app.register_blueprint(web_services, url_prefix="/api")
+
+
+CLIENT_ID = getenv("CLIENT_ID")
+KID = getenv("KID")
+PRIVATE_KEY_PATH = os.path.join(os.path.dirname(__file__), "private.pem")
+SCOPE = getenv("SCOPE")
+AUD = getenv("AUD")
+TOKEN_URL = getenv("TOKEN_URL")
 
 
 @app.route('/token', methods=["POST"])
@@ -294,6 +307,117 @@ def logout():
     unset_jwt_cookies(response)
     return response
 
+@app.route("/gen_jwt", methods=["POST"])
+@cross_origin()
+@jwt_required()
+def gen_jwt():
+    try:
+        iat = datetime.utcnow()
+        exp = iat + timedelta(hours=1)
+
+        payload = {
+            "iss": CLIENT_ID,
+            "scope": SCOPE,
+            "aud": TOKEN_URL,
+            "iat": int(iat.timestamp()),
+            "exp": int(exp.timestamp()),
+        }
+
+        headers = {
+            "typ": "JWT",
+            "alg": "PS256",
+            "kid": KID,
+        }
+
+        with open(PRIVATE_KEY_PATH, "r") as key_file:
+            private_key = key_file.read()
+
+        token = jwt.encode(payload, private_key, algorithm="PS256", headers=headers)
+
+        return jsonify({"token": token})  # 🔹 Retornamos un JSON con el token
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/generate_netsuite_token", methods=["GET"])
+@cross_origin()
+@jwt_required()
+def generate_netsuite_token():
+    try:
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur_01 = c.cursor()
+
+        sql_select = """SELECT empresa, token, fecha_inicio, fecha_final  
+                            FROM (
+                            SELECT empresa, token, fecha_inicio, fecha_final  
+                            FROM COMPUTO.TG_TOKEN_API_NETSUITE  
+                            ORDER BY fecha_final DESC
+                                    ) 
+                            WHERE ROWNUM = 1"""
+        cur_01.execute(sql_select)
+        last_token = cur_01.fetchone()
+
+        now = datetime.now()
+
+        if last_token:
+            empresa, token, fecha_inicio, fecha_final = last_token
+            if fecha_final > now:
+
+                return jsonify({
+                    "access_token": token,
+                    "empresa": empresa,
+                    "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d %H:%M:%S"),
+                    "fecha_final": fecha_final.strftime("%Y-%m-%d %H:%M:%S"),
+                    "message": "Token aún válido, no se generó uno nuevo."
+                })
+
+
+        jwt_response = gen_jwt()
+        jwt_token = jwt_response.json.get("token")
+        if not jwt_token:
+            return jsonify({"error": "No se pudo generar el JWT"}), 400
+
+        jwt_response = gen_jwt()
+        jwt_token = jwt_response.json.get("token")
+
+        if not jwt_token:
+            return jsonify({"error": "No se pudo generar el JWT"}), 400
+
+        payload = {
+            "grant_type": "client_credentials",
+            "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+            "client_assertion": jwt_token
+        }
+
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+
+        response = requests.post(TOKEN_URL, data=payload, headers=headers, verify=False)
+
+        data = response.json()
+
+        token = data["access_token"]
+        expires_in = int(data["expires_in"])
+
+        fecha_inicio = datetime.now()
+        fecha_final = fecha_inicio + timedelta(seconds=expires_in)
+
+        sql = """INSERT INTO COMPUTO.TG_TOKEN_API_NETSUITE (empresa, token, fecha_inicio, fecha_final) 
+                     VALUES (:empresa, :token, :fecha_inicio, :fecha_final)"""
+
+        cur_01.execute(sql, {
+            "empresa": 20,
+            "token": token,
+            "fecha_inicio": fecha_inicio,
+            "fecha_final": fecha_final
+        })
+
+        c.commit()
+        return jsonify(response.json())
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 def scheduled_task():
     with app.app_context():
