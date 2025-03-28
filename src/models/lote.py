@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Index, VARCHAR, text, ForeignKeyConstraint
+from sqlalchemy import Column, DateTime, Index, VARCHAR, text, ForeignKeyConstraint,  PrimaryKeyConstraint
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
@@ -110,6 +110,60 @@ class Sta_Movimiento(Base):
     cod_comprobante_lote = Column(VARCHAR(9))
     cod_estado_producto_ing = Column(VARCHAR(2))
     cantidad_pedida = Column(NUMBER(14, 2))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class st_inventario_lote(Base):
+    __tablename__ = 'ST_INVENTARIO_LOTE'
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            'cod_producto',
+            'cod_unidad',
+            'empresa',
+            'cod_aamm',
+            'cod_bodega',
+            'cod_estado_producto',
+            'cod_tipo_inventario',
+            'tipo_comprobante_lote',
+            'cod_comprobante_lote',
+            name='PK_ST_INVENTARIO_LOTE'
+        ),
+        ForeignKeyConstraint(
+            ['empresa', 'cod_bodega'],
+            ['BODEGA.EMPRESA', 'BODEGA.BODEGA'],
+            name='FK_ST_INV_LT_BODEGA'
+        ),
+        ForeignKeyConstraint(
+            ['empresa', 'cod_producto'],
+            ['PRODUCTO.EMPRESA', 'PRODUCTO.COD_PRODUCTO'],
+            name='FK_ST_INV_LT_PRODUCTO'
+        ),
+        # If the table is in a specific schema, e.g. 'stock':
+        # {'schema': 'stock'}
+    )
+
+    cod_producto = Column(VARCHAR(14), nullable=False)
+    cod_aamm = Column(NUMBER(6), nullable=False)
+    tipo_comprobante_lote = Column(VARCHAR(2), nullable=False)
+    cod_comprobante_lote = Column(VARCHAR(9), nullable=False)
+    cod_bodega = Column(NUMBER(4), nullable=False)
+    cod_unidad = Column(VARCHAR(8), nullable=False)
+    empresa = Column(NUMBER(2), nullable=False)
+    aa = Column(NUMBER(4), nullable=False)
+    mm = Column(NUMBER(2), nullable=False)
+    cantidad_ingreso = Column(NUMBER(14, 2), nullable=False)
+    cantidad_egreso = Column(NUMBER(14, 2), nullable=False)
+    cantidad = Column(NUMBER(14, 2), nullable=False)
+    cantidad_ventas = Column(NUMBER(14, 2))
+    cantidad_compras = Column(NUMBER(14, 2))
+    valor_ventas = Column(NUMBER(14, 2))
+    valor_compras = Column(NUMBER(14, 2))
+    valor = Column(NUMBER(14, 2))
+    valor_costo_ventas = Column(NUMBER(14, 2))
+    cod_estado_producto = Column(VARCHAR(2), nullable=False, server_default=text("'A'"))
+    cod_tipo_inventario = Column(NUMBER(2), nullable=False, server_default=text("1"))
 
     @classmethod
     def query(cls):
