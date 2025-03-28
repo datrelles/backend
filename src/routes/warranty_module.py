@@ -1538,6 +1538,7 @@ def genera_pedido():
     Invokes ks_casos_postventas.p_genera_pedido, returning p_cod_pedido and p_tipo_pedido in JSON.
     Also updates st_casos_productos and st_casos_postventa with those values for
     (empresa, tipo_comprobante, cod_comprobante).
+    Now also receives 'cod_agente' to set in st_casos_postventa before calling the PL/SQL.
     """
     c = None
     try:
@@ -1551,10 +1552,13 @@ def genera_pedido():
         p_cod_pedido_in        = request.args.get('cod_pedido')     # IN OUT
         p_tipo_pedido_in       = request.args.get('tipo_pedido')    # IN OUT
 
+        # NUEVO: leer cod_agente
+        p_cod_agente_str_param = request.args.get('cod_agente')
+
         # 2. Validate mandatory parameters
         if not all([
             p_empresa_str, p_tipo_comprobante, p_cod_comprobante,
-            p_cod_agencia_str, p_cod_politica_str
+            p_cod_agencia_str, p_cod_politica_str, p_cod_agente_str_param
         ]):
             return jsonify({"error": "Missing one or more required query parameters"}), 400
 
@@ -1563,6 +1567,7 @@ def genera_pedido():
             p_empresa = int(p_empresa_str)
             p_cod_agencia = int(p_cod_agencia_str)
             p_cod_politica = int(p_cod_politica_str)
+            p_cod_agente_int = str(p_cod_agente_str_param)  # Convertimos cod_agente
         except ValueError:
             return jsonify({"error": "Some numeric parameters cannot be converted"}), 400
 
@@ -1575,11 +1580,30 @@ def genera_pedido():
             except ValueError:
                 return jsonify({"error": "'p_todos' must be numeric"}), 400
 
-        # 5. Open DB connection (cx_Oracle) to call the stored procedure
+        # 5. Actualizar st_casos_postventa.cod_agente antes de continuar
+        #    Buscamos por (empresa, cod_comprobante, tipo_comprobante)
+        matching_postventa_pre = (
+            st_casos_postventa.query()
+            .filter(
+                st_casos_postventa.empresa == p_empresa,
+                st_casos_postventa.cod_comprobante == p_cod_comprobante,
+                st_casos_postventa.tipo_comprobante == p_tipo_comprobante
+            )
+            .first()
+        )
+
+        if not matching_postventa_pre:
+            return jsonify({"error": "No se encontró el caso en st_casos_postventa"}), 404
+
+        # Actualizamos cod_agente
+        matching_postventa_pre.cod_agente = p_cod_agente_int
+        db.session.commit()  # Guardamos de inmediato
+
+        # 6. Abrimos conexión con cx_Oracle para invocar p_genera_pedido
         c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur = c.cursor()
 
-        # 6. Define PL/SQL block
+        # 7. Definir el bloque PL/SQL
         plsql_block = """
         BEGIN
             ks_casos_postventas.p_genera_pedido(
@@ -1595,13 +1619,13 @@ def genera_pedido():
         END;
         """
 
-        # 7. Prepare bind variables (IN OUT)
+        # 8. Prepare bind variables (IN OUT)
         b_cod_pedido = cur.var(cx_Oracle.STRING)
         b_cod_pedido.setvalue(0, p_cod_pedido_in if p_cod_pedido_in else "")
         b_tipo_pedido = cur.var(cx_Oracle.STRING)
         b_tipo_pedido.setvalue(0, p_tipo_pedido_in if p_tipo_pedido_in else "")
 
-        # 8. Execute PL/SQL block
+        # 9. Ejecutar la PL/SQL
         cur.execute(plsql_block, {
             "p_empresa": p_empresa,
             "p_tipo_comprobante": p_tipo_comprobante,
@@ -1613,15 +1637,13 @@ def genera_pedido():
             "p_tipo_pedido": b_tipo_pedido
         })
 
-        # Commit changes made by the procedure (if any)
         c.commit()
 
-        # 9. Retrieve OUT parameters
+        # 10. Recuperar OUT parameters
         out_cod_pedido = b_cod_pedido.getvalue()
         out_tipo_pedido = b_tipo_pedido.getvalue()
 
-        # 10. Update st_casos_productos
-        #     matching the same (empresa, tipo_comprobante, cod_comprobante).
+        # 11. Update st_casos_productos
         matching_products = (
             st_casos_productos.query()
             .filter(
@@ -1636,12 +1658,13 @@ def genera_pedido():
             rec.cod_pedido = out_cod_pedido
             rec.cod_tipo_pedido = out_tipo_pedido
 
-        # 11. Update st_casos_postventa (a single record)
+        # 12. Update st_casos_postventa (single record)
         matching_postventa = (
             st_casos_postventa.query()
             .filter(
                 st_casos_postventa.empresa == p_empresa,
-                st_casos_postventa.cod_comprobante == p_cod_comprobante
+                st_casos_postventa.cod_comprobante == p_cod_comprobante,
+                st_casos_postventa.tipo_comprobante == p_tipo_comprobante
             )
             .first()
         )
@@ -1650,10 +1673,9 @@ def genera_pedido():
             matching_postventa.cod_pedido = out_cod_pedido
             matching_postventa.cod_tipo_pedido = out_tipo_pedido
 
-        # Commit all changes in SQLAlchemy
         db.session.commit()
 
-        # 12. Return the final values
+        # 13. Return
         return jsonify({
             "p_cod_pedido": out_cod_pedido,
             "p_tipo_pedido": out_tipo_pedido,
@@ -1662,7 +1684,7 @@ def genera_pedido():
         }), 200
 
     except Exception as e:
-        # Rollback both cx_Oracle and SQLAlchemy sessions if any error
+        # Rollback both cx_Oracle and SQLAlchemy if any error
         if c:
             c.rollback()
         db.session.rollback()
@@ -1672,7 +1694,6 @@ def genera_pedido():
     finally:
         if c:
             c.close()
-
 
 #REST API ST_CASOS_PRODUCTOS
 @rmwa.route('/casos_productos', methods=['POST'])
