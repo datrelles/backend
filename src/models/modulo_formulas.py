@@ -8,6 +8,7 @@ from src.exceptions.validation import validation_error
 from src.models.categoria_excepcion import categoria_excepcion
 from src.validations.alfanumericas import validar_varchar
 from src.validations.numericas import validar_number
+from src.models.custom_base import custom_base
 
 tipos_ope_validos = {'PAR', 'VAL', 'OPE'}
 operadores_validos = {'+', '-', '*', '/'}
@@ -22,28 +23,6 @@ def validar_empresa(clave, valor):
 
 def validar_cod(clave, valor):
     return validar_varchar(clave, valor, 8)
-
-
-class custom_base(base):
-    __abstract__ = True  # Parámetro para omitir creación de tabla
-
-    @classmethod
-    def query(cls):
-        return db.session.query(cls)
-
-    @staticmethod
-    def to_list(items: list['custom_base'], excluir_none=False, *args) -> list[dict]:
-        return [item.to_dict(excluir_none, *args) for item in items]
-
-    def to_dict(self, excluir_none=False, *args: tuple[str, ...]) -> dict:
-        data = {
-            column.name: getattr(self, column.name) for column in self.__table__.columns
-        }
-        if excluir_none:
-            data = {k: v for k, v in data.items() if v is not None}
-        for arg in args:
-            data[arg] = [item.to_dict() for item in getattr(self, arg, [])]
-        return data
 
 
 class st_proceso(custom_base):
