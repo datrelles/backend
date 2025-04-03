@@ -14,6 +14,10 @@ from os import getenv
 import json
 from datetime import datetime, date
 from src.config.database import db
+from src.routes.warranty_module.task import send_mail_postventa
+
+
+
 #here modules
 
 import logging
@@ -341,13 +345,13 @@ def generate_comprobante_code(data, dataCaso, c):
         INSERT INTO ST_CASOS_POSTVENTA (
             nombre_caso, descripcion, nombre_cliente, cod_tipo_identificacion, identificacion_cliente,
             cod_motor, kilometraje, codigo_taller, cod_tipo_problema, fecha_venta, manual_garantia,
-            telefono_contacto1, telefono_contacto2, e_mail1, empresa, tipo_comprobante, fecha,
+            telefono_contacto1, telefono_contacto2, e_mail1, e_mail2, empresa, tipo_comprobante, fecha,
             codigo_nacion, codigo_responsable, cod_canal, adicionado_por, codigo_provincia,
             codigo_canton, cod_producto, cod_distribuidor_cli, cod_comprobante, aplica_garantia
         ) VALUES (
             :NOMBRE_CASO, :DESCRIPCION, :NOMBRE_CLIENTE, :COD_TIPO_IDENTIFICACION, :IDENTIFICACION_CLIENTE,
             :COD_MOTOR, :KILOMETRAJE, :CODIGO_TALLER, :COD_TIPO_PROBLEMA, :FECHA_VENTA, :MANUAL_GARANTIA,
-            :TELEFONO_CONTACTO1, :TELEFONO_CONTACTO2, :E_MAIL, :EMPRESA, :TIPO_COMPROBANTE, :FECHA,
+            :TELEFONO_CONTACTO1, :TELEFONO_CONTACTO2, :E_MAIL,:E_MAIL2, :EMPRESA, :TIPO_COMPROBANTE, :FECHA,
             :CODIGO_NACION, :CODIGO_RESPONSABLE, :COD_CANAL, :ADICIONADO_POR, :CODIGO_PROVINCIA,
             :CODIGO_CANTON, :COD_PRODUCTO, :COD_DISTRIBUIDOR_CLI, :COD_COMPROBANTE, :APLICA_GARANTIA
         )
@@ -1674,6 +1678,14 @@ def genera_pedido():
             matching_postventa.cod_tipo_pedido = out_tipo_pedido
 
         db.session.commit()
+        update_status_st_casos_postventa = st_casos_postventa.query().filter(
+            st_casos_postventa.empresa == 20,
+            st_casos_postventa.cod_comprobante == p_cod_comprobante
+        ).first()
+
+        if int(update_status_st_casos_postventa.aplica_garantia) == 1 and update_status_st_casos_postventa.cod_pedido not in (
+                None, ''):
+            send_mail_postventa(update_status_st_casos_postventa.cod_comprobante, 'PP')
 
         # 13. Return
         return jsonify({
@@ -1891,6 +1903,14 @@ def cerrar_caso():
 
         # Guardar los cambios en la base de datos
         db.session.commit()
+        update_status_st_casos_postventa = st_casos_postventa.query().filter(
+            st_casos_postventa.empresa == 20,
+            st_casos_postventa.cod_comprobante == data["cod_comprobante"]
+        ).first()
+
+        if int(update_status_st_casos_postventa.aplica_garantia) == 1 and update_status_st_casos_postventa.cod_pedido not in (
+                None, ''):
+            send_mail_postventa(update_status_st_casos_postventa.cod_comprobante, 'C')
 
         # Respuesta con datos básicos
         return jsonify({
