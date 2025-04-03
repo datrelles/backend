@@ -14,6 +14,8 @@ class validation_error(Exception):
     def __generar_mensaje(self):
         mensaje = f'El campo {self.campo}'
         match self.categoria:
+            case categoria_excepcion.faltante.value:
+                mensaje = f'{mensaje} no fue provisto'
             case categoria_excepcion.tipo.value:
                 mensaje = f'{mensaje} no es del tipo requerido'
             case categoria_excepcion.longitud.value:
