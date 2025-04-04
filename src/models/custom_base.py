@@ -1,11 +1,22 @@
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
+from src.exceptions.validation import validation_error
 
 base = declarative_base(metadata=db.metadata)
 
 
 class custom_base(base):
     __abstract__ = True
+
+    def __init__(self, **kwargs):
+        requeridos = {
+            col.name for col in self.__table__.columns if
+            not col.nullable and col.default is None and col.server_default is None
+        }
+        faltantes = requeridos - kwargs.keys()
+        if faltantes:
+            raise validation_error(campos=faltantes)
+        super().__init__(**kwargs)
 
     @classmethod
     def query(cls):

@@ -45,16 +45,11 @@ def get_cabecera_consignacion():
 def post_cabecera_consignacion():
     try:
         data = request.get_json()
-        if not data.get('empresa') or not data.get('cod_cliente'):
-            mensaje = 'Solicitud incompleta'
-            logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
-        cabecera = db.session.get(st_cabecera_consignacion, (data['empresa'], data['cod_cliente']))
-        if cabecera:
+        cabecera = st_cabecera_consignacion(**data)
+        if db.session.get(st_cabecera_consignacion, (data['empresa'], data['cod_cliente'])):
             mensaje = f'Ya existe una cabecera de consignación para el cliente {data['cod_cliente']}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        cabecera = st_cabecera_consignacion(**data)
         db.session.add(cabecera)
         db.session.commit()
         mensaje = f'Se registró la cabecera de consignación para el cliente {data['cod_cliente']}'
