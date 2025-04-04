@@ -1,6 +1,6 @@
 from sqlalchemy import (Column, DateTime,
                         Index, VARCHAR,
-                        NVARCHAR, text, CHAR,
+                        NVARCHAR, text, CHAR,CLOB,
                         Float, Unicode, ForeignKeyConstraint,
                         PrimaryKeyConstraint, CheckConstraint,  and_)
 from sqlalchemy.dialects.oracle import NUMBER
@@ -442,6 +442,23 @@ class st_casos_productos(Base):
     cod_tipo_pedido = Column(VARCHAR(2))
     tipo_comprobante_lote = Column(VARCHAR(2))
     cod_comprobante_lote = Column(VARCHAR(9))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class st_types_mail_warranty(Base):
+    __tablename__ = 'ST_TYPES_MAIL_WARRANTY'
+    __table_args__ = (
+        {'schema': 'stock'},
+    )
+
+    empresa = Column(NUMBER(4), primary_key=True, nullable=False)
+    type_modulo = Column(VARCHAR(30), primary_key=True, nullable=False)  # Ej: 'WARRANTY'
+    estado_caso = Column(VARCHAR(30), primary_key=True, nullable=False)  # Ej: 'APROBADO'
+    asunto = Column(VARCHAR(200), nullable=False)
+    cuerpo_html = Column(CLOB, nullable=False)
+    activo = Column(NUMBER(1), default=1)
 
     @classmethod
     def query(cls):
