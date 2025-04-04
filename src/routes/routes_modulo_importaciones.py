@@ -4,10 +4,12 @@ from flask_cors import cross_origin
 import logging
 from werkzeug.exceptions import BadRequest
 from src.config.database import db
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 from src.exceptions.validation import validation_error
 from src.validations.numericas import validar_number
 from src.validations.alfanumericas import validar_varchar
+from src.models.users import Empresa
+from src.models.clientes import Cliente
 from src.models.modulo_importaciones import st_cabecera_consignacion, st_detalle_consignacion
 
 importaciones_b = Blueprint('routes_importaciones', __name__)
@@ -24,6 +26,14 @@ def get_cabecera_consignacion():
         query = st_cabecera_consignacion.query()
         cabecera = query.filter(st_cabecera_consignacion.empresa == empresa,
                                 st_cabecera_consignacion.cod_cliente == cod_cliente).first()
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        if not db.session.get(Cliente, (empresa, cod_cliente)):
+            mensaje = f'Cliente {cod_cliente} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
         if cabecera:
             return jsonify(cabecera.to_dict())
         else:
@@ -49,17 +59,20 @@ def post_cabecera_consignacion():
         if db.session.get(st_cabecera_consignacion, (data['empresa'], data['cod_cliente'])):
             mensaje = f'Ya existe una cabecera de consignación para el cliente {data['cod_cliente']}'
             logger.error(mensaje)
-            return jsonify({'mensaje': mensaje}), 400
+            return jsonify({'mensaje': mensaje}), 409
+        if not db.session.get(Empresa, data['empresa']):
+            mensaje = f'Empresa {data['empresa']} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        if not db.session.get(Cliente, (data['empresa'], data['cod_cliente'])):
+            mensaje = f'Cliente {data['cod_cliente']} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
         db.session.add(cabecera)
         db.session.commit()
         mensaje = f'Se registró la cabecera de consignación para el cliente {data['cod_cliente']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 201
-    except IntegrityError as e:
-        db.session.rollback()
-        logger.exception(f'Empresa y/o cliente inexistentes: {e}')
-        return jsonify(
-            {'mensaje': f'Empresa y/o cliente inexistentes'}), 404
     except BadRequest as e:
         mensaje = 'Solicitud malformada'
         logger.error(mensaje)

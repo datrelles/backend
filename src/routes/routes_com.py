@@ -67,7 +67,7 @@ def obtener_asignacion():
             "cantidad_minima": result.cantidad_minima,
             "porcentaje_maximo": result.porcentaje_maximo,
             "producto": result.producto,
-            "cliente": result.cliente,
+            "cliente": result.st_cliente,
         }
         for result in asignaciones
     ]
