@@ -1,5 +1,9 @@
 # coding: utf-8
-from sqlalchemy import Column, DateTime, ForeignKey, VARCHAR, Date, ForeignKeyConstraint
+from sqlalchemy import (Column, DateTime,
+                        Index, VARCHAR,
+                        NVARCHAR, text, CHAR,
+                        Float, Unicode, ForeignKeyConstraint,
+                        PrimaryKeyConstraint, CheckConstraint,  and_, ForeignKey, Date )
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.orm import relationship,deferred
 from sqlalchemy.ext.declarative import declarative_base
@@ -206,3 +210,83 @@ class tg_rol_usuario(Base):
         @classmethod
         def query(cls):
             return db.session.query(cls)
+
+class tg_agencia(Base):
+    __tablename__ = 'TG_AGENCIA'
+    __table_args__ = (
+        PrimaryKeyConstraint('empresa', 'cod_agencia', name='XPKTG_AGENCIA'),
+        # Llaves foráneas (se definen si las tablas referenciadas están mapeadas y se usará relationship)
+        ForeignKeyConstraint(['empresa'], ['COMPUTO.EMPRESA.EMPRESA'], name='FK_AGENCIA_EMPRESA', use_alter=True, deferrable=True, initially='DEFERRED'),
+        ForeignKeyConstraint(['empresa', 'cod_grupo_agencia'], ['COMPUTO.TG_GRUPO_AGENCIA.EMPRESA', 'COMPUTO.TG_GRUPO_AGENCIA.COD_GRUPO'], name='FK_AGENCIA_GRUPO_AGENCIA', use_alter=True, deferrable=True, initially='DEFERRED'),
+        ForeignKeyConstraint(['cod_categoria_zona', 'empresa_zona', 'secuencia_zona', 'cod_nivel_zona', 'codigo_zona'],
+                             ['COMPUTO.TG_CLASIFICACIONES.NIV_CAT_COD_CATEGORIA',
+                              'COMPUTO.TG_CLASIFICACIONES.NIV_CAT_EMP_EMPRESA',
+                              'COMPUTO.TG_CLASIFICACIONES.NIV_SECUENCIA',
+                              'COMPUTO.TG_CLASIFICACIONES.NIV_COD_NIVEL',
+                              'COMPUTO.TG_CLASIFICACIONES.CODIGO'],
+                             name='FK_AGENCIA_CLASIFICACIONES', use_alter=True, deferrable=True, initially='DEFERRED'),
+        CheckConstraint("activo in ('S','N')", name='CK_AGENCIA_ACTIVO'),
+        CheckConstraint("TIPO_RELACION_POLCRE IN ('T','E','I','N')", name='CK_AGENCIA_TIPO_RELACION_POLCR'),
+        {'schema': 'COMPUTO'}
+    )
+
+    empresa = Column(NUMBER(2), nullable=False)
+    cod_agencia = Column(NUMBER(4), nullable=False)
+    nombre = Column(VARCHAR(50), nullable=False)
+    cod_categoria_zona = Column(VARCHAR(2))
+    empresa_zona = Column(NUMBER(2))
+    secuencia_zona = Column(NUMBER(6))
+    cod_nivel_zona = Column(VARCHAR(8))
+    codigo_zona = Column(VARCHAR(14))
+    direccion = Column(VARCHAR(200))
+    observaciones = Column(VARCHAR(200))
+    telefono1 = Column(VARCHAR(15))
+    telefono2 = Column(VARCHAR(15))
+    ruc = Column(VARCHAR(20))
+    activo = Column(VARCHAR(1))
+    cod_grupo_agencia = Column(VARCHAR(3))
+    cod_sitio = Column(VARCHAR(3), nullable=False)
+    es_autorizado_sri = Column(NUMBER(1), nullable=False, server_default=text("0"))
+    tipo_relacion_polcre = Column(VARCHAR(1), nullable=False, server_default=text("'N'"))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class Orden(Base):
+    __tablename__ = 'ORDEN'
+    __table_args__ = (
+        # Primary Key Constraint
+        PrimaryKeyConstraint('empresa', 'bodega', 'tipo_comprobante', name='PK_ORDEN'),
+        # Foreign Key Constraints
+        ForeignKeyConstraint(
+            ['empresa', 'bodega'],
+            ['COMPUTO.TG_AGENCIA.EMPRESA', 'COMPUTO.TG_AGENCIA.COD_AGENCIA'],
+            name='FK_ORDEN_AGENCIA'
+        ),
+        ForeignKeyConstraint(
+            ['empresa'],
+            ['COMPUTO.EMPRESA.EMPRESA'],
+            name='FK_ORDEN_EMPRESA'
+        ),
+        ForeignKeyConstraint(
+            ['empresa', 'cod_agencia'],
+            ['COMPUTO.TG_AGENCIA.EMPRESA', 'COMPUTO.TG_AGENCIA.COD_AGENCIA'],
+            name='FK_ORDEN_TG_AGENCIA'
+        ),
+        # Schema for the table
+        {'schema': 'CONTABILIDAD'}
+    )
+
+    empresa = Column(NUMBER(2), nullable=False)
+    bodega = Column(NUMBER(4), nullable=False)
+    tipo_comprobante = Column(VARCHAR(2), nullable=False)
+    sigla_comprobante = Column(VARCHAR(3), nullable=False)
+    numero_comprobante = Column(NUMBER(6), nullable=False)
+    useridc = Column(VARCHAR(3), nullable=False)
+    cod_agencia = Column(NUMBER(4))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
