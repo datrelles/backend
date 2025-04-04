@@ -4,7 +4,7 @@ from flask_cors import cross_origin
 import logging
 from werkzeug.exceptions import BadRequest
 from src.config.database import db
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from src.exceptions.validation import validation_error
 from src.validations.numericas import validar_number
 from src.validations.alfanumericas import validar_varchar
@@ -55,6 +55,11 @@ def post_cabecera_consignacion():
         mensaje = f'Se registró la cabecera de consignación para el cliente {data['cod_cliente']}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 201
+    except IntegrityError as e:
+        db.session.rollback()
+        logger.exception(f'Empresa y/o cliente inexistentes: {e}')
+        return jsonify(
+            {'mensaje': f'Empresa y/o cliente inexistentes'}), 404
     except BadRequest as e:
         mensaje = 'Solicitud malformada'
         logger.error(mensaje)

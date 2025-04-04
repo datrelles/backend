@@ -31,5 +31,6 @@ def validar_number(clave, valor, digitos_enteros, digitos_decimales=0):
     except Exception as e:
         raise validation_error(campo=clave, categoria=categoria_excepcion.tipo.value)
     if not validar_longitud(valor, digitos_enteros, digitos_decimales):
-        raise validation_error(campo=clave, categoria=categoria_excepcion.longitud.value)
+        raise validation_error(campo=clave, categoria=categoria_excepcion.longitud.value,
+                               longitud=digitos_enteros + digitos_decimales)
     return valor

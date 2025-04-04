@@ -7,5 +7,5 @@ def validar_varchar(clave, valor, longitud):
     if not isinstance(valor, str):
         raise validation_error(campo=clave, categoria=categoria_excepcion.tipo.value)
     if len(valor) > longitud:
-        raise validation_error(campo=clave, categoria=categoria_excepcion.longitud.value)
+        raise validation_error(campo=clave, categoria=categoria_excepcion.longitud.value, longitud=longitud)
     return valor
