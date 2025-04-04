@@ -7,7 +7,7 @@ from src.models.users import Usuario, tg_rol_usuario, tg_agencia, Orden
 from src.models.productos import Producto
 from src.models.despiece_repuestos import st_producto_despiece
 from src.models.lote import StLote, st_inventario_lote
-from sqlalchemy import and_, extract, func
+from sqlalchemy import and_, extract, func, or_
 from sqlalchemy.exc import SQLAlchemyError
 import cx_Oracle
 from os import getenv
@@ -1647,20 +1647,22 @@ def genera_pedido():
         out_cod_pedido = b_cod_pedido.getvalue()
         out_tipo_pedido = b_tipo_pedido.getvalue()
 
-        # 11. Update st_casos_productos
+        # 11. Actualizar st_casos_productos
         matching_products = (
             st_casos_productos.query()
             .filter(
                 st_casos_productos.empresa == p_empresa,
                 st_casos_productos.tipo_comprobante == p_tipo_comprobante,
-                st_casos_productos.cod_comprobante == p_cod_comprobante
+                st_casos_productos.cod_comprobante == p_cod_comprobante,
+                or_(st_casos_productos.cod_pedido.is_(None), st_casos_productos.cod_pedido == '')
             )
             .all()
         )
 
-        for rec in matching_products:
-            rec.cod_pedido = out_cod_pedido
-            rec.cod_tipo_pedido = out_tipo_pedido
+        if matching_products:
+            for rec in matching_products:
+                rec.cod_pedido = out_cod_pedido
+                rec.cod_tipo_pedido = out_tipo_pedido
 
         # 12. Update st_casos_postventa (single record)
         matching_postventa = (
@@ -1859,7 +1861,6 @@ def delete_casos_productos():
 @rmwa.route('/casos_postventa/cerrar', methods=['POST'])
 @jwt_required()
 def cerrar_caso():
-
     try:
         data = request.get_json()
         required_fields = ["empresa", "cod_comprobante", "aplica_garantia", "observacion_final", "usuario_cierra"]
