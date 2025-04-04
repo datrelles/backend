@@ -1,15 +1,12 @@
 from functools import reduce
-
 from flask import request, Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 import logging
-
 from werkzeug.exceptions import BadRequest
-
 from src.config.database import db
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError, StatementError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from src.models.modulo_formulas import st_proceso, st_formula, st_parametro, st_parametros_x_proceso, \
     st_factores_calculo_parametros, tipos_ope_validos, operadores_validos
 from src.exceptions.validation import validation_error
@@ -67,11 +64,11 @@ def post_procesos():
         db.session.rollback()
         logger.exception(e)
         return jsonify({'mensaje': str(e)}), 400
-    except (TypeError, ValueError, StatementError) as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
-        mensaje = 'Atributos provistos inválidos'
-        logger.exception(f'{mensaje}: {e}')
-        return jsonify({'mensaje': mensaje}), 400
+        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al registrar el proceso: {e}')
@@ -110,11 +107,11 @@ def put_procesos():
         db.session.rollback()
         logger.exception(e)
         return jsonify({'mensaje': str(e)}), 400
-    except (TypeError, ValueError, StatementError) as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
-        mensaje = 'Atributos provistos inválidos'
-        logger.exception(f'{mensaje}: {e}')
-        return jsonify({'mensaje': mensaje}), 400
+        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al actualizar el proceso: {e}')
@@ -170,11 +167,11 @@ def post_formulas():
         db.session.rollback()
         logger.exception(e)
         return jsonify({'mensaje': str(e)}), 400
-    except (TypeError, ValueError, StatementError) as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
-        mensaje = 'Atributos provistos inválidos'
-        logger.exception(f'{mensaje}: {e}')
-        return jsonify({'mensaje': mensaje}), 400
+        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al registrar la fórmula: {e}')
@@ -216,11 +213,11 @@ def put_formulas():
         db.session.rollback()
         logger.exception(e)
         return jsonify({'mensaje': str(e)}), 400
-    except (TypeError, ValueError, StatementError) as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
-        mensaje = 'Atributos provistos inválidos'
-        logger.exception(f'{mensaje}: {e}')
-        return jsonify({'mensaje': mensaje}), 400
+        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al actualizar la fórmula: {e}')
@@ -276,11 +273,11 @@ def post_parametros():
         db.session.rollback()
         logger.exception(e)
         return jsonify({'mensaje': str(e)}), 400
-    except (TypeError, ValueError, StatementError) as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
-        mensaje = 'Atributos provistos inválidos'
-        logger.exception(f'{mensaje}: {e}')
-        return jsonify({'mensaje': mensaje}), 400
+        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al registrar el parámetro: {e}')
@@ -320,11 +317,11 @@ def put_parametros():
         db.session.rollback()
         logger.exception(e)
         return jsonify({'mensaje': str(e)}), 400
-    except (TypeError, ValueError, StatementError) as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
-        mensaje = 'Atributos provistos inválidos'
-        logger.exception(f'{mensaje}: {e}')
-        return jsonify({'mensaje': mensaje}), 400
+        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al actualizar el parámetro: {e}')
@@ -388,16 +385,16 @@ def post_parametros_x_proceso():
         db.session.rollback()
         logger.exception(e)
         return jsonify({'mensaje': str(e)}), 400
-    except (TypeError, ValueError, StatementError) as e:
-        db.session.rollback()
-        mensaje = 'Atributos provistos inválidos'
-        logger.exception(f'{mensaje}: {e}')
-        return jsonify({'mensaje': mensaje}), 400
     except IntegrityError as e:
         db.session.rollback()
         logger.exception(f'Proceso y/o parámetro inexistentes: {e}')
         return jsonify(
             {'mensaje': f'Proceso y/o parámetro inexistentes'}), 400
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al vincular el parámetro al proceso: {e}')
@@ -450,11 +447,11 @@ def put_parametros_x_proceso():
         db.session.rollback()
         logger.exception(e)
         return jsonify({'mensaje': str(e)}), 400
-    except (TypeError, ValueError, StatementError) as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
-        mensaje = 'Atributos provistos inválidos'
-        logger.exception(f'{mensaje}: {e}')
-        return jsonify({'mensaje': mensaje}), 400
+        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al vincular el parámetro al proceso: {e}')
@@ -598,16 +595,16 @@ def post_factores_calculo_parametros():
         db.session.rollback()
         logger.exception(e)
         return jsonify({'mensaje': str(e)}), 400
-    except (TypeError, ValueError, StatementError) as e:
-        db.session.rollback()
-        mensaje = 'Atributos provistos inválidos'
-        logger.exception(f'{mensaje}: {e}')
-        return jsonify({'mensaje': mensaje}), 400
     except IntegrityError as e:
         db.session.rollback()
         logger.exception(f'Proceso y/o parámetro inexistentes: {e}')
         return jsonify(
             {'mensaje': f'Proceso y/o parámetro inexistentes'}), 404
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al registrar el factor de cálculo: {e}')

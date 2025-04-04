@@ -4,7 +4,7 @@ from flask_cors import cross_origin
 import logging
 from werkzeug.exceptions import BadRequest
 from src.config.database import db
-from sqlalchemy.exc import IntegrityError, StatementError
+from sqlalchemy.exc import SQLAlchemyError
 from src.exceptions.validation import validation_error
 from src.validations.numericas import validar_number
 from src.validations.alfanumericas import validar_varchar
@@ -63,11 +63,11 @@ def post_cabecera_consignacion():
         db.session.rollback()
         logger.exception(e)
         return jsonify({'mensaje': str(e)}), 400
-    except (TypeError, ValueError, StatementError) as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
-        mensaje = 'Atributos provistos inválidos'
-        logger.exception(f'{mensaje}: {e}')
-        return jsonify({'mensaje': mensaje}), 400
+        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
     except Exception as e:
         db.session.rollback()
         logger.exception(f'Ocurrió una excepción al registrar la cabecera de consignación: {e}')
