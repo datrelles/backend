@@ -125,6 +125,49 @@ def put_procesos():
         return jsonify(
             {'mensaje': f'Ocurrió un error al actualizar el proceso'}), 500
 
+@formulas_b.route("/procesos", methods=["DELETE"])
+@jwt_required()
+@cross_origin()
+def delete_procesos():
+    try:
+        empresa = validar_number('empresa', request.args.get('empresa'), 2)
+        cod_proceso = validar_varchar('cod_proceso', request.args.get('cod_proceso'), 8)
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        proceso = db.session.get(st_proceso, (empresa, cod_proceso))
+        if not proceso:
+            mensaje = f'No existe un proceso con el código {cod_proceso}'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        if db.session.query(st_parametros_x_proceso).filter_by(empresa=empresa, cod_proceso=cod_proceso).first():
+            mensaje = f'Existen parámetros vinculados al proceso {cod_proceso}'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 409
+        db.session.delete(proceso)
+        db.session.commit()
+        mensaje = f'Se eliminó el proceso {cod_proceso}'
+        logger.info(mensaje)
+        return '', 204
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
+    except Exception as e:
+        db.session.rollback()
+        logger.exception(f'Ocurrió una excepción al eliminar el proceso: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error al eliminar el proceso'}), 500
 
 @formulas_b.route("/formulas", methods=["GET"])
 @jwt_required()
@@ -505,7 +548,7 @@ def delete_parametros_x_proceso():
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
         if parametro_x_proceso.factores_calculo:
-            mensaje = f'Existen factores de cálculo vinculados al proceso {cod_proceso} y parámetro {cod_parametro} '
+            mensaje = f'Existen factores de cálculo vinculados al proceso {cod_proceso} y parámetro {cod_parametro}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
         db.session.delete(parametro_x_proceso)
