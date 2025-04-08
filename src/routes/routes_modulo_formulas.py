@@ -115,7 +115,7 @@ def put_procesos(empresa, cod_proceso):
     try:
         empresa = validar_number('empresa', empresa, 2)
         cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
-        data = request.get_json()
+        data = {'empresa': empresa, 'cod_proceso': cod_proceso, **request.get_json()}
         st_proceso(**data)
         if not db.session.get(Empresa, empresa):
             mensaje = f'Empresa {empresa} inexistente'
