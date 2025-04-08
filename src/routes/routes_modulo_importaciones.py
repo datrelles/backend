@@ -16,13 +16,13 @@ importaciones_b = Blueprint('routes_importaciones', __name__)
 logger = logging.getLogger(__name__)
 
 
-@importaciones_b.route("/cabecera-consignacion", methods=["GET"])
+@importaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/cabecera-consignacion", methods=["GET"])
 @jwt_required()
 @cross_origin()
-def get_cabecera_consignacion():
+def get_cabecera_consignacion(empresa, cod_cliente):
     try:
-        empresa = validar_number('empresa', request.args.get('empresa'), 2)
-        cod_cliente = validar_varchar('cod_cliente', request.args.get('cod_cliente'), 14)
+        empresa = validar_number('empresa', empresa, 2)
+        cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
         query = st_cabecera_consignacion.query()
         cabecera = query.filter(st_cabecera_consignacion.empresa == empresa,
                                 st_cabecera_consignacion.cod_cliente == cod_cliente).first()
@@ -49,28 +49,30 @@ def get_cabecera_consignacion():
             {'mensaje': f'Ocurrió un error al consultar la cabecera de la consignación'}), 500
 
 
-@importaciones_b.route("/cabecera-consignacion", methods=["POST"])
+@importaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/cabecera-consignacion", methods=["POST"])
 @jwt_required()
 @cross_origin()
-def post_cabecera_consignacion():
+def post_cabecera_consignacion(empresa, cod_cliente):
     try:
-        data = request.get_json()
+        empresa = validar_number('empresa', empresa, 2)
+        cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+        data = {'empresa': empresa, 'cod_cliente': cod_cliente, **request.get_json()}
         cabecera = st_cabecera_consignacion(**data)
-        if db.session.get(st_cabecera_consignacion, (data['empresa'], data['cod_cliente'])):
-            mensaje = f'Ya existe una cabecera de consignación para el cliente {data['cod_cliente']}'
+        if db.session.get(st_cabecera_consignacion, (empresa, cod_cliente)):
+            mensaje = f'Ya existe una cabecera de consignación para el cliente {cod_cliente}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
-        if not db.session.get(Empresa, data['empresa']):
-            mensaje = f'Empresa {data['empresa']} inexistente'
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        if not db.session.get(Cliente, (data['empresa'], data['cod_cliente'])):
-            mensaje = f'Cliente {data['cod_cliente']} inexistente'
+        if not db.session.get(Cliente, (empresa, cod_cliente)):
+            mensaje = f'Cliente {cod_cliente} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
         db.session.add(cabecera)
         db.session.commit()
-        mensaje = f'Se registró la cabecera de consignación para el cliente {data['cod_cliente']}'
+        mensaje = f'Se registró la cabecera de consignación para el cliente {cod_cliente}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 201
     except BadRequest as e:

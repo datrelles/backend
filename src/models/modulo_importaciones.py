@@ -30,7 +30,7 @@ class st_cabecera_consignacion(custom_base):
     cod_cliente = Column(VARCHAR(14), primary_key=True)
     max_unidades = Column(NUMBER(precision=6), nullable=False)
     tiempo_repo = Column(NUMBER(precision=6), nullable=False)
-    estado = Column(NUMBER(precision=1), nullable=False, default=1)
+    estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))

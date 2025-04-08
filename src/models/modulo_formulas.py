@@ -32,7 +32,7 @@ class st_proceso(custom_base):
     empresa = Column(NUMBER(precision=2), primary_key=True)
     cod_proceso = Column(VARCHAR(8), primary_key=True)
     nombre = Column(VARCHAR(30), nullable=False)
-    estado = Column(NUMBER(precision=2), nullable=False, server_default="1")
+    estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
@@ -50,6 +50,10 @@ class st_proceso(custom_base):
     def validar_nombre(self, key, value):
         return validar_varchar(key, value, 30)
 
+    @validates('estado')
+    def validar_estado(self, key, value):
+        return validar_number(key, value, 1)
+
 
 class st_formula(custom_base):
     __tablename__ = 'st_formulas_procesos'
@@ -59,7 +63,7 @@ class st_formula(custom_base):
     cod_formula = Column(VARCHAR(8), primary_key=True)
     nombre = Column(VARCHAR(100), nullable=False)
     observaciones = Column(VARCHAR(800))
-    estado = Column(NUMBER(precision=2), nullable=False, server_default="1")
+    estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
     definicion = Column(VARCHAR(2000), nullable=False)
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
@@ -84,6 +88,10 @@ class st_formula(custom_base):
             return validar_varchar(key, value, 800)
         return value
 
+    @validates('estado')
+    def validar_estado(self, key, value):
+        return validar_number(key, value, 1)
+
     @validates('definicion')
     def validar_definicion(self, key, value):
         return validar_varchar(key, value, 2000)
@@ -97,7 +105,7 @@ class st_parametro(custom_base):
     cod_parametro = Column(VARCHAR(8), primary_key=True)
     nombre = Column(VARCHAR(60), nullable=False)
     descripcion = Column(VARCHAR(1000))
-    estado = Column(NUMBER(precision=2), nullable=False, server_default="1")
+    estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
@@ -121,6 +129,10 @@ class st_parametro(custom_base):
             return validar_varchar(key, value, 1000)
         return value
 
+    @validates('estado')
+    def validar_estado(self, key, value):
+        return validar_number(key, value, 1)
+
 
 class st_parametros_x_proceso(custom_base):
     __tablename__ = 'st_parametros_x_proceso'
@@ -143,7 +155,7 @@ class st_parametros_x_proceso(custom_base):
                                                 "st_parametros_x_proceso.cod_parametro == st_factores_calculo_parametros.cod_parametro)",
                                     )
     orden_calculo = Column(NUMBER(precision=5))
-    estado = Column(NUMBER(precision=2), nullable=False, server_default="1")
+    estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
     fecha_calculo_inicio = Column(DateTime)
     fecha_calculo_fin = Column(DateTime)
     orden_imprime = Column(NUMBER(precision=5), nullable=False)
@@ -175,6 +187,10 @@ class st_parametros_x_proceso(custom_base):
         if value is not None:
             return validar_number(key, value, 5)
         return value
+
+    @validates('estado')
+    def validar_estado(self, key, value):
+        return validar_number(key, value, 1)
 
     @validates('orden_imprime')
     def validar_orden_imprime(self, key, value):

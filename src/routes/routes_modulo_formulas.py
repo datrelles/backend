@@ -19,12 +19,38 @@ formulas_b = Blueprint('routes_formulas', __name__)
 logger = logging.getLogger(__name__)
 
 
-@formulas_b.route("/procesos", methods=["GET"])
+@formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>", methods=["GET"])
 @jwt_required()
 @cross_origin()
-def get_procesos():
+def get_proceso(empresa, cod_proceso):
     try:
-        empresa = validar_number('empresa', request.args.get('empresa'), 2)
+        empresa = validar_number('empresa', empresa, 2)
+        cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        proceso = db.session.get(st_proceso, (empresa, cod_proceso))
+        if not proceso:
+            mensaje = f'Proceso {cod_proceso} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        return jsonify(proceso.to_dict())
+    except validation_error as e:
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
+    except Exception as e:
+        logger.exception(f'Ocurrió una excepción al consultar el proceso: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error al consultar el proceso'}), 500
+
+
+@formulas_b.route("/empresas/<empresa>/procesos", methods=["GET"])
+@jwt_required()
+@cross_origin()
+def get_procesos(empresa):
+    try:
+        empresa = validar_number('empresa', empresa, 2)
         if not db.session.get(Empresa, empresa):
             mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
@@ -41,12 +67,13 @@ def get_procesos():
             {'mensaje': f'Ocurrió un error al consultar los procesos'}), 500
 
 
-@formulas_b.route("/procesos", methods=["POST"])
+@formulas_b.route("/empresas/<empresa>/procesos", methods=["POST"])
 @jwt_required()
 @cross_origin()
-def post_procesos():
+def post_procesos(empresa):
     try:
-        data = request.get_json()
+        empresa = validar_number('empresa', empresa, 2)
+        data = {'empresa': empresa, **request.get_json()}
         proceso = st_proceso(**data)
         if not db.session.get(Empresa, data['empresa']):
             mensaje = f'Empresa {data['empresa']} inexistente'
@@ -81,20 +108,22 @@ def post_procesos():
             {'mensaje': f'Ocurrió un error al registrar el proceso'}), 500
 
 
-@formulas_b.route("/procesos", methods=["PUT"])
+@formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>", methods=["PUT"])
 @jwt_required()
 @cross_origin()
-def put_procesos():
+def put_procesos(empresa, cod_proceso):
     try:
+        empresa = validar_number('empresa', empresa, 2)
+        cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
         data = request.get_json()
         st_proceso(**data)
-        if not db.session.get(Empresa, data['empresa']):
-            mensaje = f'Empresa {data['empresa']} inexistente'
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        proceso = db.session.get(st_proceso, (data['empresa'], data['cod_proceso']))
+        proceso = db.session.get(st_proceso, (empresa, cod_proceso))
         if not proceso:
-            mensaje = f'No existe un proceso con el código {data['cod_proceso']}'
+            mensaje = f'No existe un proceso con el código {cod_proceso}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
         proceso.nombre = data['nombre']
@@ -103,9 +132,9 @@ def put_procesos():
         proceso.audit_usuario_mod = text('user')
         proceso.audit_fecha_mod = text('sysdate')
         db.session.commit()
-        mensaje = f'Se actualizó el proceso {data['cod_proceso']}'
+        mensaje = f'Se actualizó el proceso {cod_proceso}'
         logger.info(mensaje)
-        return jsonify({'mensaje': mensaje}), 204
+        return '', 204
     except BadRequest as e:
         mensaje = 'Solicitud malformada'
         logger.error(mensaje)
@@ -125,13 +154,14 @@ def put_procesos():
         return jsonify(
             {'mensaje': f'Ocurrió un error al actualizar el proceso'}), 500
 
-@formulas_b.route("/procesos", methods=["DELETE"])
+
+@formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>", methods=["DELETE"])
 @jwt_required()
 @cross_origin()
-def delete_procesos():
+def delete_procesos(empresa, cod_proceso):
     try:
-        empresa = validar_number('empresa', request.args.get('empresa'), 2)
-        cod_proceso = validar_varchar('cod_proceso', request.args.get('cod_proceso'), 8)
+        empresa = validar_number('empresa', empresa, 2)
+        cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
         if not db.session.get(Empresa, empresa):
             mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
@@ -169,12 +199,39 @@ def delete_procesos():
         return jsonify(
             {'mensaje': f'Ocurrió un error al eliminar el proceso'}), 500
 
-@formulas_b.route("/formulas", methods=["GET"])
+
+@formulas_b.route("/empresas/<empresa>/formulas/<cod_formula>", methods=["GET"])
 @jwt_required()
 @cross_origin()
-def get_formulas():
+def get_formula(empresa, cod_formula):
     try:
-        empresa = validar_number('empresa', request.args.get('empresa'), 2)
+        empresa = validar_number('empresa', empresa, 2)
+        cod_formula = validar_varchar('cod_formula', cod_formula, 8)
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        formula = db.session.get(st_formula, (empresa, cod_formula))
+        if not formula:
+            mensaje = f'Fórmula {cod_formula} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        return jsonify(formula.to_dict())
+    except validation_error as e:
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
+    except Exception as e:
+        logger.exception(f'Ocurrió una excepción al consultar las fórmulas: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error al consultar las fórmulas'}), 500
+
+
+@formulas_b.route("/empresas/<empresa>/formulas", methods=["GET"])
+@jwt_required()
+@cross_origin()
+def get_formulas(empresa):
+    try:
+        empresa = validar_number('empresa', empresa, 2)
         if not db.session.get(Empresa, empresa):
             mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
@@ -191,18 +248,19 @@ def get_formulas():
             {'mensaje': f'Ocurrió un error al consultar las fórmulas'}), 500
 
 
-@formulas_b.route("/formulas", methods=["POST"])
+@formulas_b.route("/empresas/<empresa>/formulas", methods=["POST"])
 @jwt_required()
 @cross_origin()
-def post_formulas():
+def post_formulas(empresa):
     try:
-        data = request.get_json()
+        empresa = validar_number('empresa', empresa, 2)
+        data = {'empresa': empresa, **request.get_json()}
         formula = st_formula(**data)
-        if not db.session.get(Empresa, data['empresa']):
-            mensaje = f'Empresa {data['empresa']} inexistente'
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        if db.session.get(st_formula, (data['empresa'], data['cod_formula'])):
+        if db.session.get(st_formula, (empresa, data['cod_formula'])):
             mensaje = f'Ya existe una fórmula con el código {data['cod_formula']}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
@@ -231,20 +289,22 @@ def post_formulas():
             {'mensaje': f'Ocurrió un error al registrar la fórmula'}), 500
 
 
-@formulas_b.route("/formulas", methods=["PUT"])
+@formulas_b.route("/empresas/<empresa>/formulas/<cod_formula>", methods=["PUT"])
 @jwt_required()
 @cross_origin()
-def put_formulas():
+def put_formulas(empresa, cod_formula):
     try:
-        data = request.get_json()
+        empresa = validar_number('empresa', empresa, 2)
+        cod_formula = validar_varchar('cod_formula', cod_formula, 8)
+        data = {'empresa': empresa, 'cod_formula': cod_formula, **request.get_json()}
         st_formula(**data)
-        if not db.session.get(Empresa, data['empresa']):
-            mensaje = f'Empresa {data['empresa']} inexistente'
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        formula = db.session.get(st_formula, (data['empresa'], data['cod_formula']))
+        formula = db.session.get(st_formula, (empresa, cod_formula))
         if not formula:
-            mensaje = f'Fórmula {data['cod_formula']} inexistente'
+            mensaje = f'Fórmula {cod_formula} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
         formula.nombre = data['nombre']
@@ -255,9 +315,9 @@ def put_formulas():
         formula.audit_usuario_mod = text('user')
         formula.audit_fecha_mod = text('sysdate')
         db.session.commit()
-        mensaje = f'Se actualizó la fórmula {data['cod_formula']}'
+        mensaje = f'Se actualizó la fórmula {cod_formula}'
         logger.info(mensaje)
-        return jsonify({'mensaje': mensaje}), 204
+        return '', 204
     except BadRequest as e:
         mensaje = 'Solicitud malformada'
         logger.error(mensaje)
@@ -278,12 +338,41 @@ def put_formulas():
             {'mensaje': f'Ocurrió un error al actualizar la fórmula'}), 500
 
 
-@formulas_b.route("/parametros", methods=["GET"])
+@formulas_b.route("/empresas/<empresa>/parametros/<cod_parametro>", methods=["GET"])
 @jwt_required()
 @cross_origin()
-def get_parametros():
+def get_parametro(empresa, cod_parametro):
     try:
-        empresa = validar_number('empresa', request.args.get('empresa'), 2)
+        empresa = validar_number('empresa', empresa, 2)
+        cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        parametro = db.session.get(st_parametro, (empresa, cod_parametro))
+        if not parametro:
+            mensaje = f'Parámetro {cod_parametro} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        return jsonify(parametro.to_dict())
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
+    except Exception as e:
+        logger.exception(f'Ocurrió una excepción al consultar los parámetros: {e}')
+        return (jsonify(
+            {'mensaje': f'Ocurrió un error al consultar los parámetros'}), 500
+
+                @ formulas_b.route("/parametros", methods=["GET"]))
+
+
+@formulas_b.route("/empresas/<empresa>/parametros", methods=["GET"])
+@jwt_required()
+@cross_origin()
+def get_parametros(empresa):
+    try:
+        empresa = validar_number('empresa', empresa, 2)
         if not db.session.get(Empresa, empresa):
             mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
@@ -301,18 +390,19 @@ def get_parametros():
             {'mensaje': f'Ocurrió un error al consultar los parámetros'}), 500
 
 
-@formulas_b.route("/parametros", methods=["POST"])
+@formulas_b.route("/empresas/<empresa>/parametros", methods=["POST"])
 @jwt_required()
 @cross_origin()
-def post_parametros():
+def post_parametros(empresa):
     try:
-        data = request.get_json()
+        empresa = validar_number('empresa', empresa, 2)
+        data = {'empresa': empresa, **request.get_json()}
         parametro = st_parametro(**data)
-        if not db.session.get(Empresa, data['empresa']):
-            mensaje = f'Empresa {data['empresa']} inexistente'
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        if db.session.get(st_parametro, (data['empresa'], data['cod_parametro'])):
+        if db.session.get(st_parametro, (empresa, data['cod_parametro'])):
             mensaje = f'Ya existe un parámetro con el código {data['cod_parametro']}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
@@ -341,20 +431,22 @@ def post_parametros():
             {'mensaje': f'Ocurrió un error al registrar el parámetro'}), 500
 
 
-@formulas_b.route("/parametros", methods=["PUT"])
+@formulas_b.route("/empresas/<empresa>/parametros/<cod_parametro>", methods=["PUT"])
 @jwt_required()
 @cross_origin()
-def put_parametros():
+def put_parametros(empresa, cod_parametro):
     try:
-        data = request.get_json()
+        empresa = validar_number('empresa', empresa, 2)
+        cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
+        data = {'empresa': empresa, 'cod_parametro': cod_parametro, **request.get_json()}
         st_parametro(**data)
-        if not db.session.get(Empresa, data['empresa']):
-            mensaje = f'Empresa {data['empresa']} inexistente'
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        parametro = db.session.get(st_parametro, (data['empresa'], data['cod_parametro']))
+        parametro = db.session.get(st_parametro, (empresa, cod_parametro))
         if not parametro:
-            mensaje = f'No existe un parámetro con el código {data['cod_parametro']}'
+            mensaje = f'No existe un parámetro con el código {cod_parametro}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
         parametro.nombre = data['nombre']
@@ -364,9 +456,9 @@ def put_parametros():
         parametro.audit_usuario_mod = text('user')
         parametro.audit_fecha_mod = text('sysdate')
         db.session.commit()
-        mensaje = f'Se actualizó el parámetro {data['cod_parametro']}'
+        mensaje = f'Se actualizó el parámetro {cod_parametro}'
         logger.info(mensaje)
-        return jsonify({'mensaje': mensaje}), 204
+        return '', 204
     except BadRequest as e:
         mensaje = 'Solicitud malformada'
         logger.error(mensaje)
@@ -387,13 +479,13 @@ def put_parametros():
             {'mensaje': f'Ocurrió un error al actualizar el parámetro'}), 500
 
 
-@formulas_b.route("/parametros-x-proceso", methods=["GET"])
+@formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>/parametros", methods=["GET"])
 @jwt_required()
 @cross_origin()
-def get_parametros_x_proceso():
+def get_parametros_x_proceso(empresa, cod_proceso):
     try:
-        empresa = validar_number('empresa', request.args.get('empresa'), 2)
-        cod_proceso = validar_varchar('cod_proceso', request.args.get('cod_proceso'), 8)
+        empresa = validar_number('empresa', empresa, 2)
+        cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
         if not db.session.get(Empresa, empresa):
             mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
@@ -416,32 +508,35 @@ def get_parametros_x_proceso():
             {'mensaje': f'Ocurrió un error al consultar los parámetros vinculados al proceso {cod_proceso}'}), 500
 
 
-@formulas_b.route("/parametros-x-proceso", methods=["POST"])
+@formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>/parametros/<cod_parametro>", methods=["POST"])
 @jwt_required()
 @cross_origin()
-def post_parametros_x_proceso():
+def post_parametros_x_proceso(empresa, cod_proceso, cod_parametro):
     try:
-        data = request.get_json()
+        empresa = validar_number('empresa', empresa, 2)
+        cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+        cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
+        data = {'empresa': empresa, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro, **request.get_json()}
         parametro_x_proceso = st_parametros_x_proceso(**data)
-        if not db.session.get(Empresa, data['empresa']):
-            mensaje = f'Empresa {data['empresa']} inexistente'
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        if not db.session.get(st_proceso, (data['empresa'], data['cod_proceso'])):
-            mensaje = f'Proceso {data['cod_proceso']} inexistente'
+        if not db.session.get(st_proceso, (empresa, cod_proceso)):
+            mensaje = f'Proceso {cod_proceso} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        if not db.session.get(st_parametro, (data['empresa'], data['cod_parametro'])):
-            mensaje = f'Parámetro {data['cod_parametro']} inexistente'
+        if not db.session.get(st_parametro, (empresa, cod_parametro)):
+            mensaje = f'Parámetro {cod_parametro} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        if db.session.get(st_parametros_x_proceso, (data['empresa'], data['cod_proceso'], data['cod_parametro'])):
-            mensaje = f'El parámetro {data['cod_parametro']} ya está vinculado al proceso {data['cod_proceso']}'
+        if db.session.get(st_parametros_x_proceso, (empresa, cod_proceso, cod_parametro)):
+            mensaje = f'El parámetro {cod_parametro} ya está vinculado al proceso {cod_proceso}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
         db.session.add(parametro_x_proceso)
         db.session.commit()
-        mensaje = f'Se vinculó el parámetro {data['cod_parametro']} al proceso {data['cod_proceso']}'
+        mensaje = f'Se vinculó el parámetro {cod_parametro} al proceso {cod_proceso}'
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 201
     except BadRequest as e:
@@ -464,29 +559,32 @@ def post_parametros_x_proceso():
             {'mensaje': f'Ocurrió un error al vincular el parámetro al proceso'}), 500
 
 
-@formulas_b.route("/parametros-x-proceso", methods=["PUT"])
+@formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>/parametros/<cod_parametro>", methods=["PUT"])
 @jwt_required()
 @cross_origin()
-def put_parametros_x_proceso():
+def put_parametros_x_proceso(empresa, cod_proceso, cod_parametro):
     try:
-        data = request.get_json()
+        empresa = validar_number('empresa', empresa, 2)
+        cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+        cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
+        data = {'empresa': empresa, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro, **request.get_json()}
         st_parametros_x_proceso(**data)
-        if not db.session.get(Empresa, data['empresa']):
-            mensaje = f'Empresa {data['empresa']} inexistente'
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        if not db.session.get(st_proceso, (data['empresa'], data['cod_proceso'])):
-            mensaje = f'Proceso {data['cod_proceso']} inexistente'
+        if not db.session.get(st_proceso, (empresa, cod_proceso)):
+            mensaje = f'Proceso {cod_proceso} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        if not db.session.get(st_parametro, (data['empresa'], data['cod_parametro'])):
-            mensaje = f'Parámetro {data['cod_parametro']} inexistente'
+        if not db.session.get(st_parametro, (empresa, cod_parametro)):
+            mensaje = f'Parámetro {cod_parametro} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
         parametro_x_proceso = db.session.get(st_parametros_x_proceso,
-                                             (data['empresa'], data['cod_proceso'], data['cod_parametro']))
+                                             (empresa, cod_proceso, cod_parametro))
         if not parametro_x_proceso:
-            mensaje = f'El parámetro {data['cod_parametro']} no está vinculado al proceso {data['cod_proceso']}'
+            mensaje = f'El parámetro {cod_parametro} no está vinculado al proceso {cod_proceso}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
         parametro_x_proceso.cod_formula = data.get('cod_formula')
@@ -499,9 +597,9 @@ def put_parametros_x_proceso():
         parametro_x_proceso.audit_usuario_mod = text('user')
         parametro_x_proceso.audit_fecha_mod = text('sysdate')
         db.session.commit()
-        mensaje = f'Se actualizó el parámetro {data['cod_parametro']} vinculado al proceso {data['cod_proceso']}'
+        mensaje = f'Se actualizó el parámetro {cod_parametro} vinculado al proceso {cod_proceso}'
         logger.info(mensaje)
-        return jsonify({'mensaje': mensaje}), 204
+        return '', 204
     except BadRequest as e:
         mensaje = 'Solicitud malformada'
         logger.error(mensaje)
@@ -522,14 +620,14 @@ def put_parametros_x_proceso():
             {'mensaje': f'Ocurrió un error al vincular el parámetro al proceso'}), 500
 
 
-@formulas_b.route("/parametros-x-proceso", methods=["DELETE"])
+@formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>/parametros/<cod_parametro>", methods=["DELETE"])
 @jwt_required()
 @cross_origin()
-def delete_parametros_x_proceso():
+def delete_parametros_x_proceso(empresa, cod_proceso, cod_parametro):
     try:
-        empresa = validar_number('empresa', request.args.get('empresa'), 2)
-        cod_proceso = validar_varchar('cod_proceso', request.args.get('cod_proceso'), 8)
-        cod_parametro = validar_varchar('cod_parametro', request.args.get('cod_parametro'), 8)
+        empresa = validar_number('empresa', empresa, 2)
+        cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+        cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
         if not db.session.get(Empresa, empresa):
             mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
@@ -567,14 +665,14 @@ def delete_parametros_x_proceso():
             {'mensaje': f'Ocurrió un error al desvincular el parámetro del proceso'}), 500
 
 
-@formulas_b.route("/factores-calculo-parametros", methods=["GET"])
+@formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>/parametros/<cod_parametro>/factores", methods=["GET"])
 @jwt_required()
 @cross_origin()
-def get_factores_calculo_parametros():
+def get_factores_calculo_parametros(empresa, cod_proceso, cod_parametro):
     try:
-        empresa = validar_number('empresa', request.args.get('empresa'), 2)
-        cod_proceso = validar_varchar('cod_proceso', request.args.get('cod_proceso'), 8)
-        cod_parametro = validar_varchar('cod_parametro', request.args.get('cod_parametro'), 8)
+        empresa = validar_number('empresa', empresa, 2)
+        cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+        cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
         if not db.session.get(Empresa, empresa):
             mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
@@ -608,12 +706,15 @@ def get_factores_calculo_parametros():
                 'mensaje': f'Ocurrió un error al consultar los factores de cálculo: proceso ({cod_proceso}), parámetro ({cod_parametro})'}), 500
 
 
-@formulas_b.route("/factores-calculo-parametros", methods=["POST"])
+@formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>/parametros/<cod_parametro>/factores", methods=["POST"])
 @jwt_required()
 @cross_origin()
-def post_factores_calculo_parametros():
+def post_factores_calculo_parametros(empresa, cod_proceso, cod_parametro):
     try:
-        data = request.get_json()
+        empresa = validar_number('empresa', empresa, 2)
+        cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+        cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
+        data = {'empresa': empresa, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro, **request.get_json()}
         st_factores_calculo_parametros(**data)
         if not db.session.get(Empresa, data['empresa']):
             mensaje = f'Empresa {data['empresa']} inexistente'
@@ -697,15 +798,16 @@ def post_factores_calculo_parametros():
             {'mensaje': f'Ocurrió un error al registrar el factor de cálculo'}), 500
 
 
-@formulas_b.route("/factores-calculo-parametros", methods=["DELETE"])
+@formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>/parametros/<cod_parametro>/factores/<orden>",
+                  methods=["DELETE"])
 @jwt_required()
 @cross_origin()
-def delete_factores_calculo_parametros():
+def delete_factores_calculo_parametros(empresa, cod_proceso, cod_parametro, orden):
     try:
-        empresa = validar_number('empresa', request.args.get('empresa'), 2)
-        cod_proceso = validar_varchar('cod_proceso', request.args.get('cod_proceso'), 8)
-        cod_parametro = validar_varchar('cod_parametro', request.args.get('cod_parametro'), 8)
-        orden = validar_number('orden', request.args.get('orden'), 3)
+        empresa = validar_number('empresa', empresa, 2)
+        cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+        cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
+        orden = validar_number('orden', orden, 3)
         if not db.session.get(Empresa, empresa):
             mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
