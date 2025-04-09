@@ -1,4 +1,5 @@
-from sqlalchemy import Column, DateTime, Index, VARCHAR, text, PrimaryKeyConstraint, ForeignKeyConstraint, UniqueConstraint
+from sqlalchemy import (Column, DateTime, Index, VARCHAR, text,
+                        PrimaryKeyConstraint, ForeignKeyConstraint, UniqueConstraint, Date, String, Numeric,)
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship,deferred
@@ -137,6 +138,97 @@ class st_vendedor(Base):
     cod_persona_rh = Column(NUMBER(8))
     costo = Column(NUMBER(14, 2))
 
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+
+class cliente_hor(Base):
+    __tablename__ = 'CLIENTE_HOR'
+    __table_args__ = (
+        # Clave primaria compuesta
+        PrimaryKeyConstraint('empresah', 'cod_clienteh', name='PK_CLIENTE_HOR'),
+        # ForeignKey deshabilitado en la DB, pero si quisieras reflejarlo:
+      {'schema': 'STOCK'}
+    )
+
+    # Columns
+    empresah                   = Column(Numeric(2, 0), nullable=False)
+    cod_clienteh               = Column(String(14),    nullable=False)
+    fecha_nacimientoh          = Column(Date)
+    zona_geograficah           = Column(String(15))
+    direccion_calleh           = Column(String(200))
+    telefono1h                 = Column(String(15))
+    telefono2h                 = Column(String(15))
+    tipo_vivienda              = Column(String(1))
+    nombre_dueno_casa          = Column(String(30))
+    estado_civilh              = Column(String(1))
+    cedula_conyugeh            = Column(String(14))
+    nombre_conyugeh            = Column(String(100))
+    empresa_conyugeh           = Column(String(60))
+    cargo_conyugueh            = Column(String(50))
+    fecha_ingreso_conyugeh     = Column(Date)
+    direccion_conyugeh         = Column(String(50))
+    ciudad_conyugeh            = Column(String(15))
+    telefono_conyugeh          = Column(String(15))
+    neto_conyugeh              = Column(Numeric(15, 2))
+    otros_conyugeh             = Column(Numeric(15, 2))
+    activoh                    = Column(String(1))
+    e_mailh                    = Column(String(30))
+    cod_divisa_netoh           = Column(String(20))
+    cod_divisa_otrosh          = Column(String(20))
+    observacionesh             = Column(String(255))
+    fecha_creacionh            = Column(Date)
+    agenciah                   = Column(Numeric(4, 0))
+    cod_tipo_clienteh          = Column(String(3))
+    tiene_cargosh              = Column(String(1))
+    es_clienteh                = Column(String(1))
+    es_garanteh                = Column(String(1))
+    aplica_modeloh             = Column(String(1))
+    empresa_trabajoh           = Column(String(50))
+    telefono_empresah          = Column(String(15))
+    direccion_empresah         = Column(String(200))
+    cargo_empresah             = Column(String(50))
+    neto_empresah              = Column(Numeric(14, 2))
+    otros_empresah             = Column(Numeric(14, 2))
+    direccion_refh             = Column(String(100))
+    ruch                       = Column(String(13))
+    instruccion                = Column(String(3))
+    profesion                  = Column(String(6))
+    fono_dueno_casa            = Column(String(15))
+    aa_vivienda                = Column(Numeric(4, 0))
+    fecha_empresa              = Column(Date)
+    numero_casa                = Column(String(20))
+    calle_transversal          = Column(String(100))
+    fecha_modificacion         = Column(Date)
+    gps_zona                   = Column(Numeric(10, 0))  # Ajusta si conoces la precisión real
+    gps_x                      = Column(Numeric(10, 0))
+    gps_y                      = Column(Numeric(10, 0))
+    gps_z                      = Column(Numeric(10, 0))
+    es_analfabeto              = Column(Numeric(1, 0), default=0)
+    es_venta_cartera           = Column(Numeric(1, 0), default=1)
+    numero_dependientes        = Column(Numeric(3, 0), default=0)
+    es_sueldo_fijo             = Column(Numeric(1, 0), default=1)
+    ocupacion_laboral          = Column(String(6))
+    ubicacion_vivienda         = Column(String(6))
+    aa_labora                  = Column(Numeric(4, 2))
+    valor_adeuda               = Column(Numeric(14, 2))
+    valor_gastos               = Column(Numeric(14, 2))
+    pagare                     = Column(Numeric(14, 2))
+    sexo                       = Column(String(1))
+    celular                    = Column(String(15))
+    ultimoproducto_comprado    = Column(String(50))
+    tipo_tiempo_referencia     = Column(String(1))
+    valor_arriendo_casa        = Column(Numeric(14, 2))
+    bono_solidario             = Column(Numeric(1, 0))
+    giros_exterior             = Column(Numeric(14, 2))
+    direccion_cobro            = Column(String(200))
+    email_factura              = Column(String(150))
+    es_parte_rel_vta           = Column(String(2),  default='NO', nullable=False)
+    ci_representante_legal     = Column(String(14))
+    nombre_representante_legal = Column(String(100))
+
+    # Clase helper: si usas un objeto de sesión
     @classmethod
     def query(cls):
         return db.session.query(cls)

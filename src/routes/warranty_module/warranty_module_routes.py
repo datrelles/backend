@@ -2,17 +2,18 @@ from flask_jwt_extended import jwt_required
 from flask import Blueprint, jsonify, request
 from src import oracle
 from src.models.postVenta import ar_taller_servicio_tecnico, ADprovincias, ADcantones, ar_duracion_reparacion, st_casos_postventa, ar_taller_servicio_usuario, st_casos_postventas_obs,st_casos_productos
-from src.models.clientes import Cliente, st_politica_credito, persona, st_vendedor
+from src.models.clientes import Cliente, st_politica_credito, persona, st_vendedor, cliente_hor
 from src.models.users import Usuario, tg_rol_usuario, tg_agencia, Orden
 from src.models.productos import Producto
 from src.models.despiece_repuestos import st_producto_despiece
 from src.models.lote import StLote, st_inventario_lote
+from src.models.comprobante_electronico import vc_opago, tc_doc_elec_recibidos
 from sqlalchemy import and_, extract, func, or_
 from sqlalchemy.exc import SQLAlchemyError
 import cx_Oracle
 from os import getenv
 import json
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from src.config.database import db
 from src.routes.warranty_module.task import send_mail_postventa
 
@@ -2027,3 +2028,330 @@ def cierre_previo():
     finally:
         if c:
             c.close()
+
+
+@rmwa.route('/opago', methods=['GET'])
+@jwt_required()
+def get_opago_records():
+    """
+    GET /opago
+    Parámetros:
+      - empresa (str)           [OBLIGATORIO]
+      - fecha_factura_ini (str) [OPCIONAL: YYYY-MM-DD]
+      - fecha_factura_fin (str) [OPCIONAL: YYYY-MM-DD]
+      - ruc (str)               [OPCIONAL]
+
+    Realiza un INNER JOIN con JAHER.AR_TALLER_SERVICIO_TECNICO
+    usando ruc (sin guiones) como condición de enlace.
+    Solo devuelve registros que existen en AMBAS tablas.
+    """
+    try:
+        # ----- 1. Leer parámetros obligatorios y opcionales
+        empresa = request.args.get('empresa', type=str)
+        if not empresa:
+            return jsonify({"error": "Falta parámetro requerido: empresa"}), 400
+
+        fecha_factura_ini_str = request.args.get('fecha_factura_ini', type=str)
+        fecha_factura_fin_str = request.args.get('fecha_factura_fin', type=str)
+        ruc_param             = request.args.get('ruc', type=str)
+
+        # Helper para parsear fechas (formato YYYY-MM-DD)
+        def parse_date_or_none(date_str):
+            if date_str:
+                try:
+                    return datetime.strptime(date_str, '%Y-%m-%d')
+                except ValueError:
+                    raise ValueError(f"El formato de fecha '{date_str}' debe ser YYYY-MM-DD.")
+            return None
+
+        try:
+            fecha_factura_ini = parse_date_or_none(fecha_factura_ini_str)
+            fecha_factura_fin = parse_date_or_none(fecha_factura_fin_str)
+        except ValueError as ve:
+            return jsonify({"error": str(ve)}), 400
+
+        # ----- 2. Construir la query base con INNER JOIN
+        query = (
+            db.session.query(vc_opago, ar_taller_servicio_tecnico)
+            .join(
+                ar_taller_servicio_tecnico,
+                func.replace(vc_opago.ruc, '-', '') == func.replace(ar_taller_servicio_tecnico.ruc, '-', '')
+            )
+        )
+
+        # ----- 3. Filtro obligatorio por empresa
+        query = query.filter(vc_opago.empresa == empresa)
+
+        # ----- 4. Excluir ruc = 0992594926001
+        query = query.filter(
+            func.replace(vc_opago.ruc, '-', '') != '0992594926001'
+        )
+
+        # ----- 5. Filtro por rango de fecha_factura (opcional)
+        if fecha_factura_ini:
+            query = query.filter(vc_opago.fecha_factura >= fecha_factura_ini)
+        if fecha_factura_fin:
+            query = query.filter(vc_opago.fecha_factura <= fecha_factura_fin)
+
+        # ----- 6. Filtro opcional por RUC (salvo el anterior que ya excluye 0992594926001)
+        if ruc_param:
+            query = query.filter(
+                func.replace(vc_opago.ruc, '-', '') == func.replace(ruc_param, '-', '')
+            )
+
+        # (Se han quitado por completo los filtros de fecha de pago)
+
+        # ----- 7. Ejecutar la consulta
+        records = query.all()
+
+        # ----- 8. Construir la respuesta
+        data_list = []
+        for (vco, tal) in records:
+            data_list.append({
+                # vc_opago
+                "es_pagado": float(vco.es_pagado) if vco.es_pagado is not None else 0,
+                "empresa": vco.empresa,
+                "cod_opago": vco.cod_opago,
+                "secuencia": int(vco.secuencia) if vco.secuencia is not None else None,
+                "saldo": float(vco.saldo) if vco.saldo is not None else 0,
+                "cod_categoria_gas": vco.cod_categoria_gas,
+                "ruc": vco.ruc,
+                "beneficiario": vco.beneficiario,
+                "es_anulado": vco.es_anulado,
+                "factura_manual": vco.factura_manual,
+                "fecha_factura": (vco.fecha_factura.isoformat() if vco.fecha_factura else None),
+                "vencimiento": (vco.vencimiento.isoformat() if vco.vencimiento else None),
+                "fecha_apr": (vco.fecha_apr.isoformat() if vco.fecha_apr else None),
+                "fecha_reg": (vco.fecha_reg.isoformat() if vco.fecha_reg else None),
+                "fecha_pag": (vco.fecha_pag.isoformat() if vco.fecha_pag else None),
+                "cod_tipo_comprobante_co": vco.cod_tipo_comprobante_co,
+                "cod_comprobante_co": vco.cod_comprobante_co,
+                "cod_agencia": vco.cod_agencia,
+                "cod_tipo_comprobante_pa": vco.cod_tipo_comprobante_pa,
+                "cod_comprobante_pa": vco.cod_comprobante_pa,
+                "concepto": vco.concepto,
+                "es_sugerido": int(vco.es_sugerido) if vco.es_sugerido is not None else 0,
+                "razon_sugerido": vco.razon_sugerido,
+                "es_aprobado": int(vco.es_aprobado) if vco.es_aprobado is not None else 0,
+                "fecha_aprueba_pago": (
+                    vco.fecha_aprueba_pago.isoformat() if vco.fecha_aprueba_pago else None
+                ),
+                "usuario_aprueba_pago": vco.usuario_aprueba_pago,
+                "fecha_revision": (vco.fecha_revision.isoformat() if vco.fecha_revision else None),
+                "useridc_revisado": vco.useridc_revisado,
+                "cod_comprobante_ret": vco.cod_comprobante_ret,
+                "valor_pago": float(vco.valor_pago) if vco.valor_pago is not None else 0,
+                "cod_comprobantes_pago": vco.cod_comprobantes_pago,
+                "useridc_reg": vco.useridc_reg,
+                "useridc_apr": vco.useridc_apr,
+                "useridc_pag": vco.useridc_pag,
+                "es_revisado": int(vco.es_revisado) if vco.es_revisado is not None else 0,
+                "es_registrado": int(vco.es_registrado) if vco.es_registrado is not None else 0,
+                "comprobante_cabecera": vco.comprobante_cabecera,
+                "tipo_comprobante": int(vco.tipo_comprobante) if vco.tipo_comprobante is not None else 0,
+
+                # ar_taller_servicio_tecnico
+                "taller_codigo": tal.codigo,
+                "taller_descripcion": tal.descripcion,
+                "taller_telefono1": tal.telefono1,
+                "taller_telefono2": tal.telefono2,
+                "taller_email": tal.email,
+                "taller_direccion": tal.direccion,
+            })
+
+        return jsonify(data_list), 200
+
+    except SQLAlchemyError as e:
+        return jsonify({"error": str(e)}), 500
+
+@rmwa.route('/doc_electronicos', methods=['GET'])
+@jwt_required()
+def get_doc_electronicos():
+    """
+    Retorna únicamente registros con tc_doc_elec_recibidos.comprobante = 'FACTURA'
+    """
+    try:
+        # ----- 1. Leer parámetros opcionales
+        fecha_emision_ini_str = request.args.get('fecha_emision_ini', type=str)
+        fecha_emision_fin_str = request.args.get('fecha_emision_fin', type=str)
+        ruc_param             = request.args.get('ruc', type=str)
+
+        def parse_date_or_none(date_str):
+            if date_str:
+                try:
+                    return datetime.strptime(date_str, '%Y-%m-%d')
+                except ValueError:
+                    raise ValueError(f"El formato de fecha '{date_str}' debe ser YYYY-MM-DD.")
+            return None
+
+        try:
+            fecha_emision_ini = parse_date_or_none(fecha_emision_ini_str)
+            fecha_emision_fin = parse_date_or_none(fecha_emision_fin_str)
+        except ValueError as ve:
+            return jsonify({"error": str(ve)}), 400
+
+        # ----- 2. Construir la query base con INNER JOIN
+        query = (
+            db.session.query(tc_doc_elec_recibidos, ar_taller_servicio_tecnico)
+            .join(
+                ar_taller_servicio_tecnico,
+                func.replace(tc_doc_elec_recibidos.ruc_emisor, '-', '') == func.replace(ar_taller_servicio_tecnico.ruc, '-', '')
+            )
+        )
+
+        # ----- 3. Excluir ruc_emisor = 0992594926001
+        query = query.filter(
+            func.replace(tc_doc_elec_recibidos.ruc_emisor, '-', '') != '0992594926001'
+        )
+
+        # ----- 4. Filtro fijo: comprobante debe ser 'FACTURA'
+        query = query.filter(tc_doc_elec_recibidos.comprobante == "FACTURA")
+
+        # ----- 5. Filtro opcional por rango de fecha_emision
+        if fecha_emision_ini:
+            query = query.filter(tc_doc_elec_recibidos.fecha_emision >= fecha_emision_ini)
+        if fecha_emision_fin:
+            query = query.filter(tc_doc_elec_recibidos.fecha_emision <= fecha_emision_fin)
+
+        # ----- 6. Filtro opcional por ruc (ruc_emisor)
+        if ruc_param:
+            query = query.filter(
+                func.replace(tc_doc_elec_recibidos.ruc_emisor, '-', '') == func.replace(ruc_param, '-', '')
+            )
+
+        # ----- 7. Ejecutar la consulta
+        records = query.all()
+
+        # ----- 8. Construir la respuesta
+        data_list = []
+        for (doc, tal) in records:
+            data_list.append({
+                "ruc_emisor": doc.ruc_emisor,
+                "serie_comprobante": doc.serie_comprobante,
+                "comprobante": doc.comprobante,
+                "razon_social_emisor": doc.razon_social_emisor,
+                "fecha_emision": (doc.fecha_emision.isoformat() if doc.fecha_emision else None),
+                "fecha_autorizacion": (doc.fecha_autorizacion.isoformat() if doc.fecha_autorizacion else None),
+                "tipo_emision": doc.tipo_emision,
+                "numero_documento_modificado": doc.numero_documento_modificado,
+                "identificacion_receptor": doc.identificacion_receptor,
+                "clave_acceso": doc.clave_acceso,
+                "numero_autorizacion": doc.numero_autorizacion,
+                "importe_total": float(doc.importe_total) if doc.importe_total is not None else 0.0,
+                "iva": float(doc.iva) if doc.iva is not None else 0.0,
+                "valor_sin_impuestos": float(doc.valor_sin_impuestos) if doc.valor_sin_impuestos is not None else 0.0,
+
+                # Datos de ar_taller_servicio_tecnico
+                "taller_codigo": tal.codigo,
+                "taller_descripcion": tal.descripcion,
+                "taller_telefono1": tal.telefono1,
+                "taller_telefono2": tal.telefono2,
+                "taller_email": tal.email,
+                "taller_direccion": tal.direccion,
+            })
+
+        return jsonify(data_list), 200
+
+    except SQLAlchemyError as e:
+        return jsonify({"error": str(e)}), 500
+
+
+def checkJsonData_json(json_data):
+    """
+    Valida que todos los campos menos 'type_id' sean string
+    y que 'type_id' sea int.
+    """
+    for key, value in json_data.items():
+        if key != 'type_id' and not isinstance(value, str):
+            return False
+    if isinstance(json_data.get('type_id'), int):
+        return True
+    return False
+
+
+
+@rmwa.route('/save_new_data_client', methods=['POST'])
+@jwt_required()
+def save_new_data_client():
+    """
+
+    """
+    try:
+        data_client = request.get_json()
+        if not data_client:
+            return jsonify({"error": "No se recibió JSON en el cuerpo"}), 400
+        type_client = 'CF'
+
+        # Agregar guion solo si type_id == 1
+        if data_client['type_id'] == 1:
+            cod_client = data_client['id'][:-1] + "-" + data_client['id'][-1]
+        else:
+            cod_client = data_client['id']
+
+        # Validar el JSON
+        if not checkJsonData_json(data_client):
+            return jsonify({'error': 'El JSON contiene valores no válidos'}), 400
+
+        try:
+            # --- PRIMER INSERT: cliente ---
+            nuevo_cliente = Cliente(
+                empresa=data_client['empresa'],
+                cod_cliente=cod_client,
+                nombre=data_client['nombre'].upper(),
+                apellido1=data_client['apellidos'].upper(),
+                cod_tipo_identificacion=data_client['type_id']
+            )
+            db.session.add(nuevo_cliente)
+            db.session.commit()  # Commit #1
+
+            # --- Opcionales ---
+            # Si vienen en el JSON, conviértelos a uppercase; si no, deja None
+            direccion_input = data_client.get('direccion')
+            email_input = data_client.get('email')
+
+            if direccion_input and isinstance(direccion_input, str):
+                direccion_input = direccion_input.upper()
+            else:
+                direccion_input = None
+
+            if email_input and isinstance(email_input, str):
+                email_input = email_input.upper()
+            else:
+                email_input = None
+
+            # --- SEGUNDO INSERT: cliente_hor ---
+            nuevo_cliente_hor = cliente_hor(
+                empresah=data_client['empresa'],
+                cod_clienteh=cod_client,
+                direccion_calleh=direccion_input,
+                celular=data_client['celular'],
+                email_factura=email_input,
+                cod_tipo_clienteh=type_client
+            )
+            db.session.add(nuevo_cliente_hor)
+            db.session.commit()  # Commit #2
+
+            return jsonify({"Registro exitoso": "1"}), 201
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 500
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 500
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+def checkJsonData_json(json_data):
+    """
+    Valida que todos los campos menos 'type_id' sean string
+    y que 'type_id' sea int.
+    Permite que 'direccion' y 'email' no estén o sean vacíos.
+    """
+    for key, value in json_data.items():
+        # 'type_id' debe ser int; 'direccion' y 'email' pueden ser omitidos o strings vacíos
+        if key not in ('type_id', 'direccion', 'email') and not isinstance(value, str):
+            return False
+    return isinstance(json_data.get('type_id'), int)
