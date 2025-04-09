@@ -338,6 +338,52 @@ def put_formulas(empresa, cod_formula):
             {'mensaje': f'Ocurrió un error al actualizar la fórmula'}), 500
 
 
+@formulas_b.route("/empresas/<empresa>/formulas/<cod_formula>", methods=["DELETE"])
+@jwt_required()
+@cross_origin()
+def delete_formula(empresa, cod_formula):
+    try:
+        empresa = validar_number('empresa', empresa, 2)
+        cod_formula = validar_varchar('cod_formula', cod_formula, 8)
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        formula = db.session.get(st_formula, (empresa, cod_formula))
+        if not formula:
+            mensaje = f'No existe una fórmula con el código {cod_formula}'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        parametro_x_proceso = db.session.query(st_parametros_x_proceso).filter_by(empresa=empresa, cod_formula=cod_formula).first()
+        if parametro_x_proceso:
+            mensaje = f'La fórmula {cod_formula} está vinculada al parámetro {parametro_x_proceso.cod_parametro} del proceso {parametro_x_proceso.cod_proceso}'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 409
+        db.session.delete(formula)
+        db.session.commit()
+        mensaje = f'Se eliminó la fórmula {cod_formula}'
+        logger.info(mensaje)
+        return '', 204
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
+    except Exception as e:
+        db.session.rollback()
+        logger.exception(f'Ocurrió una excepción al eliminar la fórmula: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error al eliminar la fórmula'}), 500
+
+
 @formulas_b.route("/empresas/<empresa>/parametros/<cod_parametro>", methods=["GET"])
 @jwt_required()
 @cross_origin()
