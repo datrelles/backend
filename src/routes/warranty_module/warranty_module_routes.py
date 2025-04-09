@@ -2,7 +2,7 @@ from flask_jwt_extended import jwt_required
 from flask import Blueprint, jsonify, request
 from src import oracle
 from src.models.postVenta import ar_taller_servicio_tecnico, ADprovincias, ADcantones, ar_duracion_reparacion, st_casos_postventa, ar_taller_servicio_usuario, st_casos_postventas_obs,st_casos_productos
-from src.models.clientes import Cliente, st_politica_credito, persona, st_vendedor
+from src.models.clientes import Cliente, st_politica_credito, persona, st_vendedor, cliente_hor
 from src.models.users import Usuario, tg_rol_usuario, tg_agencia, Orden
 from src.models.productos import Producto
 from src.models.despiece_repuestos import st_producto_despiece
@@ -2254,3 +2254,104 @@ def get_doc_electronicos():
 
     except SQLAlchemyError as e:
         return jsonify({"error": str(e)}), 500
+
+
+def checkJsonData_json(json_data):
+    """
+    Valida que todos los campos menos 'type_id' sean string
+    y que 'type_id' sea int.
+    """
+    for key, value in json_data.items():
+        if key != 'type_id' and not isinstance(value, str):
+            return False
+    if isinstance(json_data.get('type_id'), int):
+        return True
+    return False
+
+
+
+@rmwa.route('/save_new_data_client', methods=['POST'])
+@jwt_required()
+def save_new_data_client():
+    """
+
+    """
+    try:
+        data_client = request.get_json()
+        if not data_client:
+            return jsonify({"error": "No se recibió JSON en el cuerpo"}), 400
+        type_client = 'CF'
+
+        # Agregar guion solo si type_id == 1
+        if data_client['type_id'] == 1:
+            cod_client = data_client['id'][:-1] + "-" + data_client['id'][-1]
+        else:
+            cod_client = data_client['id']
+
+        # Validar el JSON
+        if not checkJsonData_json(data_client):
+            return jsonify({'error': 'El JSON contiene valores no válidos'}), 400
+
+        try:
+            # --- PRIMER INSERT: cliente ---
+            nuevo_cliente = Cliente(
+                empresa=data_client['empresa'],
+                cod_cliente=cod_client,
+                nombre=data_client['nombre'].upper(),
+                apellido1=data_client['apellidos'].upper(),
+                cod_tipo_identificacion=data_client['type_id']
+            )
+            db.session.add(nuevo_cliente)
+            db.session.commit()  # Commit #1
+
+            # --- Opcionales ---
+            # Si vienen en el JSON, conviértelos a uppercase; si no, deja None
+            direccion_input = data_client.get('direccion')
+            email_input = data_client.get('email')
+
+            if direccion_input and isinstance(direccion_input, str):
+                direccion_input = direccion_input.upper()
+            else:
+                direccion_input = None
+
+            if email_input and isinstance(email_input, str):
+                email_input = email_input.upper()
+            else:
+                email_input = None
+
+            # --- SEGUNDO INSERT: cliente_hor ---
+            nuevo_cliente_hor = cliente_hor(
+                empresah=data_client['empresa'],
+                cod_clienteh=cod_client,
+                direccion_calleh=direccion_input,
+                celular=data_client['celular'],
+                email_factura=email_input,
+                cod_tipo_clienteh=type_client
+            )
+            db.session.add(nuevo_cliente_hor)
+            db.session.commit()  # Commit #2
+
+            return jsonify({"Registro exitoso": "1"}), 201
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 500
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 500
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+def checkJsonData_json(json_data):
+    """
+    Valida que todos los campos menos 'type_id' sean string
+    y que 'type_id' sea int.
+    Permite que 'direccion' y 'email' no estén o sean vacíos.
+    """
+    for key, value in json_data.items():
+        # 'type_id' debe ser int; 'direccion' y 'email' pueden ser omitidos o strings vacíos
+        if key not in ('type_id', 'direccion', 'email') and not isinstance(value, str):
+            return False
+    return isinstance(json_data.get('type_id'), int)
