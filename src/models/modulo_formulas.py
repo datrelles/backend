@@ -21,8 +21,8 @@ def validar_empresa(clave, valor):
     return validar_number(clave, valor, 2)
 
 
-def validar_cod(clave, valor):
-    return validar_varchar(clave, valor, 8)
+def validar_cod(clave, valor, es_requerido=True):
+    return validar_varchar(clave, valor, 8, es_requerido=es_requerido)
 
 
 class st_proceso(custom_base):
@@ -84,9 +84,7 @@ class st_formula(custom_base):
 
     @validates('observaciones')
     def validar_observaciones(self, key, value):
-        if value is not None:
-            return validar_varchar(key, value, 800)
-        return value
+        return validar_varchar(key, value, 800, es_requerido=False)
 
     @validates('estado')
     def validar_estado(self, key, value):
@@ -125,9 +123,7 @@ class st_parametro(custom_base):
 
     @validates('descripcion')
     def validar_descripcion(self, key, value):
-        if value is not None:
-            return validar_varchar(key, value, 1000)
-        return value
+        return validar_varchar(key, value, 1000, es_requerido=False)
 
     @validates('estado')
     def validar_estado(self, key, value):
@@ -178,15 +174,11 @@ class st_parametros_x_proceso(custom_base):
 
     @validates('cod_formula')
     def validar_cod_formula(self, key, value):
-        if value is not None:
-            return validar_cod(key, value)
-        return value
+        return validar_cod(key, value, es_requerido=False)
 
     @validates('orden_calculo')
     def validar_orden_calculo(self, key, value):
-        if value is not None:
-            return validar_number(key, value, 5)
-        return value
+        return validar_number(key, value, 5, es_requerido=False)
 
     @validates('estado')
     def validar_estado(self, key, value):
@@ -232,6 +224,4 @@ class st_factores_calculo_parametros(custom_base):
 
     @validates('orden')
     def validar_orden(self, key, value):
-        if value is not None:
-            return validar_number(key, value, 3)
-        return value
+        return validar_number(key, value, 3, es_requerido=False)

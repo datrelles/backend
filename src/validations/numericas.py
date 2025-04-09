@@ -23,9 +23,15 @@ def validar_longitud(numero: int | float, digitos_enteros: int, digitos_decimale
         return False
 
 
-def validar_number(clave, valor, digitos_enteros, digitos_decimales=0):
-    if valor is None:
-        raise validation_error(campo=clave, categoria=categoria_excepcion.faltante.value)
+def validar_number(clave, valor, digitos_enteros, digitos_decimales=0, es_requerido=True):
+    if es_requerido:
+        if valor is None:
+            raise validation_error(campo=clave, categoria=categoria_excepcion.faltante.value)
+        if valor is '':
+            raise validation_error(campo=clave, categoria=categoria_excepcion.vacio.value)
+    else:
+        if not valor:
+            return None
     try:
         valor = float(valor) if digitos_decimales else int(valor)
     except Exception as e:

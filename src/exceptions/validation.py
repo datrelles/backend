@@ -22,6 +22,8 @@ class validation_error(Exception):
             match self.categoria:
                 case categoria_excepcion.faltante.value:
                     mensaje = f'{mensaje} no fue provisto'
+                case categoria_excepcion.vacio.value:
+                    mensaje = f'{mensaje} está vacío'
                 case categoria_excepcion.tipo.value:
                     mensaje = f'{mensaje} no es del tipo requerido'
                 case categoria_excepcion.longitud.value:
