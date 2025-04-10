@@ -524,6 +524,51 @@ def put_parametros(empresa, cod_parametro):
         return jsonify(
             {'mensaje': f'Ocurrió un error al actualizar el parámetro'}), 500
 
+@formulas_b.route("/empresas/<empresa>/parametros/<cod_parametro>", methods=["DELETE"])
+@jwt_required()
+@cross_origin()
+def delete_parametro(empresa, cod_parametro):
+    try:
+        empresa = validar_number('empresa', empresa, 2)
+        cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        parametro = db.session.get(st_parametro, (empresa, cod_parametro))
+        if not parametro:
+            mensaje = f'No existe un parámetro con el código {cod_parametro}'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        parametro_x_proceso = db.session.query(st_parametros_x_proceso).filter_by(empresa=empresa, cod_parametro=cod_parametro).first()
+        if parametro_x_proceso:
+            mensaje = f'El parámetro {cod_parametro} está vinculado al proceso {parametro_x_proceso.cod_proceso}'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 409
+        db.session.delete(parametro)
+        db.session.commit()
+        mensaje = f'Se eliminó el parámetro {cod_parametro}'
+        logger.info(mensaje)
+        return '', 204
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
+    except Exception as e:
+        db.session.rollback()
+        logger.exception(f'Ocurrió una excepción al eliminar el parámetro: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error al eliminar el parámetro'}), 500
+
 
 @formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>/parametros", methods=["GET"])
 @jwt_required()
