@@ -2083,8 +2083,9 @@ def get_opago_records():
         query = query.filter(vc_opago.empresa == empresa)
 
         # ----- 4. Excluir ruc = 0992594926001
+        rucs_excluidos = ['0992594926001', '0190168190001']
         query = query.filter(
-            func.replace(vc_opago.ruc, '-', '') != '0992594926001'
+            func.replace(vc_opago.ruc, '-', '').notin_(rucs_excluidos)
         )
 
         # ----- 5. Filtro por rango de fecha_factura (opcional)
@@ -2200,10 +2201,10 @@ def get_doc_electronicos():
         )
 
         # ----- 3. Excluir ruc_emisor = 0992594926001
+        rucs_excluidos = ['0992594926001', '0190168190001']
         query = query.filter(
-            func.replace(tc_doc_elec_recibidos.ruc_emisor, '-', '') != '0992594926001'
+            func.replace(tc_doc_elec_recibidos.ruc_emisor, '-', '').notin_(rucs_excluidos)
         )
-
         # ----- 4. Filtro fijo: comprobante debe ser 'FACTURA'
         query = query.filter(tc_doc_elec_recibidos.comprobante == "FACTURA")
 
@@ -2254,8 +2255,6 @@ def get_doc_electronicos():
 
     except SQLAlchemyError as e:
         return jsonify({"error": str(e)}), 500
-
-
 def checkJsonData_json(json_data):
     """
     Valida que todos los campos menos 'type_id' sean string
@@ -2267,8 +2266,6 @@ def checkJsonData_json(json_data):
     if isinstance(json_data.get('type_id'), int):
         return True
     return False
-
-
 
 @rmwa.route('/save_new_data_client', methods=['POST'])
 @jwt_required()
@@ -2342,8 +2339,6 @@ def save_new_data_client():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
 def checkJsonData_json(json_data):
     """
     Valida que todos los campos menos 'type_id' sean string
@@ -2355,3 +2350,63 @@ def checkJsonData_json(json_data):
         if key not in ('type_id', 'direccion', 'email') and not isinstance(value, str):
             return False
     return isinstance(json_data.get('type_id'), int)
+
+
+@rmwa.route('/casos_postventa/numero_guia', methods=['POST'])
+@jwt_required()
+def update_numero_guia():
+    """
+    Actualiza el campo "numero_guia" de ST_CASOS_POSTVENTA.
+
+    Se debe enviar un JSON con:
+      - empresa: (int) Número de la empresa.
+      - cod_comprobante: (str) Identificador del caso/postventa.
+      - numero_guia: (str) Número de guía que se desea insertar.
+
+    Ejemplo de JSON:
+      {
+         "empresa": 20,
+         "cod_comprobante": "ABC123",
+         "numero_guia": "NG-987654"
+      }
+    """
+    try:
+        data = request.get_json()
+        required_fields = ["empresa", "cod_comprobante", "numero_guia"]
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Falta el campo obligatorio '{field}'"}), 400
+
+        # Buscar el caso en la tabla ST_CASOS_POSTVENTA según empresa y cod_comprobante
+        caso = (
+            st_casos_postventa.query()
+            .filter(
+                st_casos_postventa.empresa == data["empresa"],
+                st_casos_postventa.cod_comprobante == data["cod_comprobante"]
+            )
+            .first()
+        )
+
+        if not caso:
+            return jsonify({"error": "No se encontró el caso con los parámetros indicados"}), 404
+
+        # Actualizar el campo numero_guia
+        caso.numero_guia = data["numero_guia"]
+
+        # Guardar los cambios en la base de datos
+        db.session.commit()
+
+        return jsonify({
+            "message": "Número de guía actualizado correctamente",
+            "empresa": caso.empresa,
+            "cod_comprobante": caso.cod_comprobante,
+            "numero_guia": caso.numero_guia
+        }), 200
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
