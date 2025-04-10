@@ -8,7 +8,7 @@ def validar_varchar(clave, valor, longitud, es_requerido=True):
         if valor is '':
             raise validation_error(campo=clave, categoria=categoria_excepcion.vacio.value)
     else:
-        if valor is '':
+        if valor is '' or valor is None:
             return None
     if not isinstance(valor, str):
         raise validation_error(campo=clave, categoria=categoria_excepcion.tipo.value)
