@@ -354,7 +354,8 @@ def delete_formula(empresa, cod_formula):
             mensaje = f'No existe una fórmula con el código {cod_formula}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        parametro_x_proceso = db.session.query(st_parametros_x_proceso).filter_by(empresa=empresa, cod_formula=cod_formula).first()
+        parametro_x_proceso = db.session.query(st_parametros_x_proceso).filter_by(empresa=empresa,
+                                                                                  cod_formula=cod_formula).first()
         if parametro_x_proceso:
             mensaje = f'La fórmula {cod_formula} está vinculada al parámetro {parametro_x_proceso.cod_parametro} del proceso {parametro_x_proceso.cod_proceso}'
             logger.error(mensaje)
@@ -524,6 +525,7 @@ def put_parametros(empresa, cod_parametro):
         return jsonify(
             {'mensaje': f'Ocurrió un error al actualizar el parámetro'}), 500
 
+
 @formulas_b.route("/empresas/<empresa>/parametros/<cod_parametro>", methods=["DELETE"])
 @jwt_required()
 @cross_origin()
@@ -540,7 +542,8 @@ def delete_parametro(empresa, cod_parametro):
             mensaje = f'No existe un parámetro con el código {cod_parametro}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        parametro_x_proceso = db.session.query(st_parametros_x_proceso).filter_by(empresa=empresa, cod_parametro=cod_parametro).first()
+        parametro_x_proceso = db.session.query(st_parametros_x_proceso).filter_by(empresa=empresa,
+                                                                                  cod_parametro=cod_parametro).first()
         if parametro_x_proceso:
             mensaje = f'El parámetro {cod_parametro} está vinculado al proceso {parametro_x_proceso.cod_proceso}'
             logger.error(mensaje)
@@ -589,7 +592,7 @@ def get_parametros_x_proceso(empresa, cod_proceso):
         parametros = query.filter(st_parametros_x_proceso.empresa == empresa,
                                   st_parametros_x_proceso.cod_proceso == cod_proceso).order_by(
             st_parametros_x_proceso.orden_imprime).all()
-        return jsonify(st_parametro.to_list(parametros))
+        return jsonify(st_parametros_x_proceso.to_list(parametros, False, 'parametro'))
     except validation_error as e:
         logger.exception(e)
         return jsonify({'mensaje': str(e)}), 400

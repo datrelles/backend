@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
 from src.exceptions.validation import validation_error
@@ -33,5 +35,6 @@ class custom_base(base):
         if excluir_none:
             data = {k: v for k, v in data.items() if v is not None}
         for arg in args:
-            data[arg] = [item.to_dict() for item in getattr(self, arg, [])]
+            atributo = getattr(self, arg, [])
+            data[arg] = ([item.to_dict() for item in atributo]) if isinstance(atributo, Iterable) else atributo.to_dict()
         return data
