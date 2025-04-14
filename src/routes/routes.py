@@ -1490,7 +1490,7 @@ def crear_o_actualizar_registro_tracking_embarque(session):
                     ultimas_combinaciones_track_embarque[(codigo_bl_house, empresa)] = {'cod_item': cod_item}
 
 # Registrar el evento before_commit en la sesión de SQLAlchemy para crear o actualizar registros en StTrackingBl
-event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_embarque)
+#event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_embarque)
 
 @bp.route('/tipo_aforo' , methods = ['POST'])
 @jwt_required()
@@ -2146,7 +2146,7 @@ def crear_o_actualizar_registro_tracking_oc(session):
                     ultimas_combinaciones_track_oc[(cod_po, empresa)] = {'cod_item': cod_item}
 
 # Registrar el evento before_commit en la sesión de SQLAlchemy para crear o actualizar registros en StTracking
-event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_oc)
+#event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_oc)
 def secuencia_track_oc(cod_po):
     existe_cod_po = db.session.query(StTracking).filter_by(cod_po=cod_po).first()
 
