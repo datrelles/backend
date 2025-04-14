@@ -1465,6 +1465,7 @@ def get_costo():
       GET /get_costo?empresa=20&cod_producto=R150-FR0545&cod_comprobante_lote=F1B241126&tipo_comprobante_lote=LT
     """
     c = None
+    iva_ecuador = 15
     try:
         # 1) Retrieve query parameters
         empresa_str = request.args.get('empresa')
@@ -1517,12 +1518,13 @@ def get_costo():
 
         # 6) Retrieve cost from output variable
         cost_value = out_cost_var.getvalue()
+        cost_value_iva = round(float(cost_value) * (1 + iva_ecuador / 100), 2)
 
         # Close the cursor
         cur.close()
 
         # 7) Return the cost in JSON
-        return jsonify({"costo": float(cost_value)}), 200
+        return jsonify({"costo": float(cost_value_iva)}), 200
 
     except Exception as e:
         # Roll back if there's any exception
