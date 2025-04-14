@@ -2280,12 +2280,8 @@ def save_new_data_client():
         if not data_client:
             return jsonify({"error": "No se recibió JSON en el cuerpo"}), 400
         type_client = 'CF'
-
         # Agregar guion solo si type_id == 1
-        if data_client['type_id'] == 1:
-            cod_client = data_client['id'][:-1] + "-" + data_client['id'][-1]
-        else:
-            cod_client = data_client['id']
+        cod_client = data_client['id']
 
         # Validar el JSON
         if not checkJsonData_json(data_client):
