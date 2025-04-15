@@ -287,11 +287,6 @@ class ar_taller_servicio_tecnico(Base):
         PrimaryKeyConstraint('codigo', 'codigo_empresa', name='PK_AR_TALLER_SERVICIO_TECNICO'),
         # Foreign Keys
         ForeignKeyConstraint(
-            ['codigo_ciudad', 'codigo_provincia'],
-            ['JAHER.AR_CIUDADES.CODIGO_CIUDAD', 'JAHER.AR_CIUDADES.CODIGO_PROVINCIA'],
-            name='FK_AR_TAL_SER_TEC_COD_CIU'
-        ),
-        ForeignKeyConstraint(
             ['codigo_empresa', 'codigo_marca'],
             ['MARCA.EMPRESA', 'MARCA.COD_MARCA'],
             name='FK_AR_TAL_SER_TEC_COD_MARCA'

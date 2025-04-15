@@ -8,6 +8,7 @@ from src.models.productos import Producto
 from src.models.despiece_repuestos import st_producto_despiece
 from src.models.lote import StLote, st_inventario_lote
 from src.models.comprobante_electronico import vc_opago, tc_doc_elec_recibidos
+from src.models.orden_compra import StPackinglist, st_prod_packing_list
 from sqlalchemy import and_, extract, func, or_
 from sqlalchemy.exc import SQLAlchemyError
 import cx_Oracle
@@ -2108,10 +2109,17 @@ def get_opago_records():
         records = query.all()
 
         # ----- 8. Construir la respuesta
+        # ----- 8. Construir la respuesta con unicidad por factura_manual
         data_list = []
+        facturas_vistas = set()
+
         for (vco, tal) in records:
+            clave = (vco.factura_manual or "").strip()
+            if clave in facturas_vistas:
+                continue
+            facturas_vistas.add(clave)
+
             data_list.append({
-                # vc_opago
                 "es_pagado": float(vco.es_pagado) if vco.es_pagado is not None else 0,
                 "empresa": vco.empresa,
                 "cod_opago": vco.cod_opago,
@@ -2152,8 +2160,6 @@ def get_opago_records():
                 "es_registrado": int(vco.es_registrado) if vco.es_registrado is not None else 0,
                 "comprobante_cabecera": vco.comprobante_cabecera,
                 "tipo_comprobante": int(vco.tipo_comprobante) if vco.tipo_comprobante is not None else 0,
-
-                # ar_taller_servicio_tecnico
                 "taller_codigo": tal.codigo,
                 "taller_descripcion": tal.descripcion,
                 "taller_telefono1": tal.telefono1,
@@ -2226,25 +2232,31 @@ def get_doc_electronicos():
         records = query.all()
 
         # ----- 8. Construir la respuesta
+        # ----- 8. Construir la respuesta con filtro de unicidad por serie_comprobante
         data_list = []
+        serie_vistas = set()
+
         for (doc, tal) in records:
+            serie = doc.serie_comprobante.strip() if doc.serie_comprobante else ""
+            if serie in serie_vistas:
+                continue  # ya agregamos esta serie_comprobante, saltamos
+            serie_vistas.add(serie)
+
             data_list.append({
                 "ruc_emisor": doc.ruc_emisor,
                 "serie_comprobante": doc.serie_comprobante,
                 "comprobante": doc.comprobante,
                 "razon_social_emisor": doc.razon_social_emisor,
-                "fecha_emision": (doc.fecha_emision.isoformat() if doc.fecha_emision else None),
-                "fecha_autorizacion": (doc.fecha_autorizacion.isoformat() if doc.fecha_autorizacion else None),
+                "fecha_emision": doc.fecha_emision.isoformat() if doc.fecha_emision else None,
+                "fecha_autorizacion": doc.fecha_autorizacion.isoformat() if doc.fecha_autorizacion else None,
                 "tipo_emision": doc.tipo_emision,
                 "numero_documento_modificado": doc.numero_documento_modificado,
                 "identificacion_receptor": doc.identificacion_receptor,
                 "clave_acceso": doc.clave_acceso,
                 "numero_autorizacion": doc.numero_autorizacion,
-                "importe_total": float(doc.importe_total) if doc.importe_total is not None else 0.0,
-                "iva": float(doc.iva) if doc.iva is not None else 0.0,
-                "valor_sin_impuestos": float(doc.valor_sin_impuestos) if doc.valor_sin_impuestos is not None else 0.0,
-
-                # Datos de ar_taller_servicio_tecnico
+                "importe_total": float(doc.importe_total or 0),
+                "iva": float(doc.iva or 0),
+                "valor_sin_impuestos": float(doc.valor_sin_impuestos or 0),
                 "taller_codigo": tal.codigo,
                 "taller_descripcion": tal.descripcion,
                 "taller_telefono1": tal.telefono1,
@@ -2400,6 +2412,47 @@ def update_numero_guia():
             "cod_comprobante": caso.cod_comprobante,
             "numero_guia": caso.numero_guia
         }), 200
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@rmwa.route('/get_nombre_producto_by_motor', methods=['GET'])
+@jwt_required()
+def get_nombre_producto_by_motor():
+    """
+    GET /get_nombre_producto_by_motor?cod_motor=...
+    """
+    # Get the 'cod_motor' parameter from the query string
+    cod_motor = request.args.get('cod_motor', type=str)
+    if not cod_motor:
+        return jsonify({"error": "Missing parameter 'cod_motor'"}), 400
+
+    try:
+        # Perform the join between Producto and StProdPackingList while removing spaces
+        result = (
+            db.session.query(Producto.nombre)
+            .join(st_prod_packing_list,
+                  func.replace(st_prod_packing_list.cod_producto, ' ', '') ==
+                  func.replace(Producto.cod_producto, ' ', '')
+                  )
+            .filter(
+                func.replace(st_prod_packing_list.cod_motor, ' ', '') ==
+                func.replace(cod_motor, ' ', '')
+            )
+            .first()
+        )
+
+        # Return the product name if found, else return an error message.
+        if result:
+            return jsonify({"nombre": result[0]}), 200
+        else:
+            return jsonify({"error": "No product found for the provided cod_motor"}), 404
 
     except SQLAlchemyError as e:
         db.session.rollback()
