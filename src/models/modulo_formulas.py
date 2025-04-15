@@ -224,7 +224,7 @@ class st_factores_calculo_parametros(custom_base):
 
     @validates('orden')
     def validar_orden(self, key, value):
-        return (validar_number(key, value, 3, es_requerido=False))
+        return (validar_number(key, value, 3))
 
     @validates('valor_fijo')
     def validar_valor_fijo(self, key, value):
