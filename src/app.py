@@ -8,6 +8,8 @@ import oracle
 from routes.web_services import web_services
 from routes.auth import auth
 from dotenv import load_dotenv, find_dotenv
+
+from src.models.catalogos_bench import Chasis, DimensionPeso
 from src.models.entities.User import User
 from flask_login import LoginManager
 from os import getenv
@@ -17,7 +19,7 @@ from flask_cors import CORS, cross_origin
 import os
 from datetime import datetime, timedelta
 import jwt
-from flask_jwt_extended import create_access_token, unset_jwt_cookies, jwt_required, JWTManager
+from flask_jwt_extended import create_access_token, unset_jwt_cookies, jwt_required, JWTManager, get_jwt_identity
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 ###################################################
@@ -33,6 +35,7 @@ from src.routes.routes_com import bpcom
 from src.routes.module_contabilidad import rmc
 from src.routes.warranty_module.warranty_module_routes import rmwa
 from src.routes.email_alert import aem, execute_send_alert_emails_for_role
+from src.routes.benchmarking.catalog_benchmarking import bench
 
 ###################################################
 
@@ -79,6 +82,7 @@ app.register_blueprint(aem, url_prefix="/alert_email")
 app.register_blueprint(rmc, url_prefix="/cont")
 app.register_blueprint(rmwa, url_prefix="/warranty")
 app.register_blueprint(net, url_prefix="/net")
+app.register_blueprint(bench, url_prefix="/bench")
 
 
 #############################################################################
@@ -424,6 +428,10 @@ def scheduled_task():
 
 scheduler.add_job(scheduled_task, 'interval', minutes=30)
 scheduler.start()
+
+
+
+
 
 
 if __name__ == '__main__':
