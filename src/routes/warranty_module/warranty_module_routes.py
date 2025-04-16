@@ -2361,7 +2361,6 @@ def checkJsonData_json(json_data):
             return False
     return isinstance(json_data.get('type_id'), int)
 
-
 @rmwa.route('/casos_postventa/numero_guia', methods=['POST'])
 @jwt_required()
 def update_numero_guia():
@@ -2421,7 +2420,6 @@ def update_numero_guia():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-
 @rmwa.route('/get_nombre_producto_by_motor', methods=['GET'])
 @jwt_required()
 def get_nombre_producto_by_motor():
@@ -2461,3 +2459,40 @@ def get_nombre_producto_by_motor():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@rmwa.route('/get_cliente_data_for_id_especific_cliente_shibot', methods=['GET'])
+@jwt_required()
+def get_cliente_data_for_id_especific_cliente_shibot():
+    # Obtener parámetros de la query string
+    cod_cliente = request.args.get('cod_cliente', None)
+    enterprise = request.args.get('enterprise', None)
+
+    # Validar si ambos parámetros fueron proporcionados
+    if not cod_cliente or not enterprise:
+        return jsonify({"error": "Missing parameters: 'cod_cliente' and/or 'enterprise'"}), 400
+    try:
+
+        cliente = (
+            Cliente.query()
+            .filter(
+                Cliente.cod_cliente == cod_cliente,
+                Cliente.empresa == enterprise
+            )
+            .first()
+        )
+        # Preparar la respuesta como un diccionario
+        data = {
+            "empresa": cliente.empresa,
+            "cod_cliente": cliente.cod_cliente,
+            "cod_tipo_identificacion": cliente.cod_tipo_identificacion,
+            "nombre": cliente.nombre,
+            "apellido1": cliente.apellido1,
+            "ruc": cliente.ruc
+        }
+
+        return jsonify(data), 200
+
+    except Exception as e:
+        # Manejar cualquier error inesperado
+        return jsonify({"error": str(e)}), 500
+
