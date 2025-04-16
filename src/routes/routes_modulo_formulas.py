@@ -831,6 +831,35 @@ def post_factores_calculo_parametros(empresa, cod_proceso, cod_parametro):
             mensaje = f'El factor de cálculo (proceso: {data['cod_proceso']}, parámetro: {data['cod_parametro']}, orden: {data['orden']}) ya existe'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
+        ultimo_factor = (db.session.query(st_factores_calculo_parametros)
+                         .filter_by(**{'empresa': data['empresa'],
+                                       'cod_proceso': data['cod_proceso'],
+                                       'cod_parametro': data['cod_parametro']})
+                         .order_by(st_factores_calculo_parametros.orden.desc())
+                         .first())
+        if ultimo_factor:
+            if ultimo_factor.tipo_operador != 'OPE' and data['tipo_operador'] in ('PAR', 'VAL'):
+                mensaje = 'El siguiente factor de cálculo debe ser un operador'
+                logger.error(mensaje)
+                return jsonify({'mensaje': mensaje}), 409
+            if ultimo_factor.tipo_operador == 'OPE' and data['tipo_operador'] not in ('PAR', 'VAL'):
+                mensaje = 'El siguiente factor de cálculo debe ser un parámetro o un valor fijo'
+                logger.error(mensaje)
+                return jsonify({'mensaje': mensaje}), 409
+            nuevo_orden = ultimo_factor.orden + 1
+            if data['orden'] != nuevo_orden:
+                mensaje = f'El orden del factor de cálculo debe ser {nuevo_orden}'
+                logger.error(mensaje)
+                return jsonify({'mensaje': mensaje}), 409
+        else:
+            if data['tipo_operador'] not in ('PAR', 'VAL'):
+                mensaje = 'El primer factor de cálculo debe ser un parámetro o un valor fijo'
+                logger.error(mensaje)
+                return jsonify({'mensaje': mensaje}), 409
+            if data['orden'] != 1:
+                mensaje = 'El primer factor de cálculo debe tener orden 1'
+                logger.error(mensaje)
+                return jsonify({'mensaje': mensaje}), 409
         match data['tipo_operador']:
             case 'PAR':
                 if not data.get('cod_parametro_operador'):
@@ -844,12 +873,6 @@ def post_factores_calculo_parametros(empresa, cod_proceso, cod_parametro):
                 data['operador'] = None
                 data['valor_fijo'] = None
             case 'VAL':
-                try:
-                    float(data.get('valor_fijo'))
-                except Exception as e:
-                    mensaje = 'El valor fijo para el operador es inválido'
-                    logger.error(mensaje)
-                    return jsonify({'mensaje': mensaje}), 400
                 data['operador'] = None
                 data['cod_parametro_operador'] = None
             case 'OPE':
@@ -923,6 +946,16 @@ def delete_factores_calculo_parametros(empresa, cod_proceso, cod_parametro, orde
             mensaje = f'Factor de cálculo (proceso: {cod_proceso}, parámetro: {cod_parametro}, orden: {orden}) inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
+        ultimo_factor = (db.session.query(st_factores_calculo_parametros)
+                         .filter_by(**{'empresa': empresa,
+                                       'cod_proceso': cod_proceso,
+                                       'cod_parametro': cod_parametro})
+                         .order_by(st_factores_calculo_parametros.orden.desc())
+                         .first())
+        if ultimo_factor and ultimo_factor.orden != orden:
+            mensaje = 'Sólo se puede eliminar el último factor de cálculo'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 409
         db.session.delete(factor_calculo)
         db.session.commit()
         mensaje = f'Se eliminó el factor de cálculo (proceso: {cod_proceso}, parámetro: {cod_parametro}, orden: {orden})'
