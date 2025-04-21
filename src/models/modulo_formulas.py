@@ -1,17 +1,13 @@
 from sqlalchemy import Column, DateTime, Index, VARCHAR, text, Integer, PrimaryKeyConstraint, ForeignKey, \
-    ForeignKeyConstraint, column
+    ForeignKeyConstraint, column, inspect
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, validates
 from src.config.database import db
-from src.exceptions.validation import validation_error
-from src.models.categoria_excepcion import categoria_excepcion
+from src.enums.validaciones import tipo_estado, tipo_retorno, tipo_objeto, tipo_parametro
 from src.validations.alfanumericas import validar_varchar
 from src.validations.numericas import validar_number
 from src.models.custom_base import custom_base
-
-tipos_ope_validos = {'PAR', 'VAL', 'OPE'}
-operadores_validos = {'+', '-', '*', '/'}
 
 base = declarative_base(metadata=db.metadata)
 schema_name = 'stock'
@@ -23,6 +19,10 @@ def validar_empresa(clave, valor):
 
 def validar_cod(clave, valor, es_requerido=True):
     return validar_varchar(clave, valor, 8, es_requerido=es_requerido)
+
+
+def validar_estado(clave, valor, es_requerido=True):
+    return validar_number(key, value, 1, valores_permitidos=tipo_estado.values())
 
 
 class st_proceso(custom_base):
@@ -52,7 +52,7 @@ class st_proceso(custom_base):
 
     @validates('estado')
     def validar_estado(self, key, value):
-        return validar_number(key, value, 1)
+        return validar_estado(key, value)
 
 
 class st_formula(custom_base):
@@ -88,7 +88,7 @@ class st_formula(custom_base):
 
     @validates('estado')
     def validar_estado(self, key, value):
-        return validar_number(key, value, 1)
+        return validar_estado(key, value)
 
     @validates('definicion')
     def validar_definicion(self, key, value):
@@ -127,7 +127,7 @@ class st_parametro(custom_base):
 
     @validates('estado')
     def validar_estado(self, key, value):
-        return validar_number(key, value, 1)
+        return validar_estado(key, value)
 
 
 class st_parametros_x_proceso(custom_base):
@@ -182,7 +182,7 @@ class st_parametros_x_proceso(custom_base):
 
     @validates('estado')
     def validar_estado(self, key, value):
-        return validar_number(key, value, 1)
+        return validar_estado(key, value)
 
     @validates('orden_imprime')
     def validar_orden_imprime(self, key, value):
@@ -229,3 +229,116 @@ class st_factores_calculo_parametros(custom_base):
     @validates('valor_fijo')
     def validar_valor_fijo(self, key, value):
         return validar_number(key, value, 22, 8, False)
+
+
+class tg_sistema(custom_base):
+    __tablename__ = 'tg_sistema'
+    __table_args__ = {'schema': 'computo'}
+
+    cod_sistema = Column(VARCHAR(3), primary_key=True)
+
+
+class st_funcion(custom_base):
+    __tablename__ = 'st_funcion'
+    __table_args__ = (
+        PrimaryKeyConstraint('empresa', 'cod_funcion'),
+        {'schema': schema_name}
+    )
+
+    empresa = Column(NUMBER(precision=2))
+    cod_funcion = Column(VARCHAR(8))
+    cod_modulo = Column(VARCHAR(3), ForeignKey(f'computo.tg_sistema.cod_sistema'), nullable=False)
+    nombre = Column(VARCHAR(60), nullable=False)
+    nombre_base_datos = Column(VARCHAR(60), nullable=False)
+    estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
+    observaciones = Column(VARCHAR(1000))
+    tipo_retorno = Column(VARCHAR(8), nullable=False)
+    tipo_objeto = Column(VARCHAR(3), nullable=False, server_default="FUN")
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+    audit_usuario_mod = Column(VARCHAR(30))
+    audit_fecha_mod = Column(DateTime)
+
+    @validates('empresa')
+    def validar_empresa(self, key, value):
+        return validar_empresa(key, value)
+
+    @validates('cod_funcion')
+    def validar_cod_funcion(self, key, value):
+        return validar_cod(key, value)
+
+    @validates('cod_modulo')
+    def validar_cod_modulo(self, key, value):
+        return validar_varchar(key, value, 3)
+
+    @validates('nombre')
+    def validar_nombre(self, key, value):
+        return validar_varchar(key, value, 60)
+
+    @validates('nombre_base_datos')
+    def validar_nombre_base_datos(self, key, value):
+        return validar_varchar(key, value, 60)
+
+    @validates('estado')
+    def validar_estado(self, key, value):
+        return validar_estado(key, value)
+
+    @validates('observaciones')
+    def validar_observaciones(self, key, value):
+        return validar_varchar(key, value, 1000, es_requerido=False)
+
+    @validates('tipo_retorno')
+    def validar_tipo_retorno(self, key, value):
+        return validar_varchar(key, value, 8, valores_permitidos=tipo_retorno.values())
+
+    @validates('tipo_objeto')
+    def validar_tipo_objeto(self, key, value):
+        return validar_varchar(key, value, 3, valores_permitidos=tipo_objeto.values())
+
+
+class st_parametro_funcion(custom_base):
+    __tablename__ = 'st_parametro_funcion'
+    __table_args__ = (
+        PrimaryKeyConstraint('empresa', 'cod_funcion', 'secuencia'),
+        {'schema': schema_name}
+    )
+
+    empresa = Column(NUMBER(precision=2), ForeignKey(f'{schema_name}.st_funcion.empresa'))
+    cod_funcion = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_funcion.cod_funcion'))
+    secuencia = Column(NUMBER(precision=10))
+    tipo_parametro = Column(VARCHAR(30), nullable=False)
+    variable = Column(VARCHAR(10))
+    fijo_caracter = Column(VARCHAR(20))
+    fijo_numero = Column(NUMBER(precision=30, scale=8))
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+    audit_usuario_mod = Column(VARCHAR(30))
+    audit_fecha_mod = Column(DateTime)
+
+    @validates('empresa')
+    def validar_empresa(self, key, value):
+        return validar_empresa(key, value)
+
+    @validates('cod_funcion')
+    def validar_cod_funcion(self, key, value):
+        return validar_cod(key, value)
+
+    @validates('secuencia')
+    def validar_secuencia(self, key, value):
+        return validar_number(key, value, 10)
+
+    @validates('tipo_parametro')
+    def validar_tipo_parametro(self, key, value):
+        return validar_varchar(key, value, 30, valores_permitidos=tipo_parametro.values())
+
+    @validates('variable')
+    def validar_variable(self, key, value):
+        return validar_varchar(key, value, 10, es_requerido=False)
+
+    @validates('fijo_caracter')
+    def validar_fijo_caracter(self, key, value):
+        return validar_varchar(key, value, 20, es_requerido=False)
+
+    @validates('fijo_numero')
+    def validar_fijo_numero(self, key, value):
+        return validar_number(key, value, 22, 8, es_requerido=False)

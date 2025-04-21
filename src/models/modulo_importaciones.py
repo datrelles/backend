@@ -4,8 +4,8 @@ from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, validates
 from src.config.database import db
+from src.enums.validaciones import categoria_excepcion, tipo_estado
 from src.exceptions.validation import validation_error
-from src.models.categoria_excepcion import categoria_excepcion
 from src.validations.alfanumericas import validar_varchar
 from src.validations.numericas import validar_number
 from src.models.custom_base import custom_base
@@ -20,6 +20,10 @@ def validar_empresa(clave, valor):
 
 def validar_cod_14(clave, valor):
     return validar_varchar(clave, valor, 14)
+
+
+def validar_estado(clave, valor, es_requerido=True):
+    return validar_number(key, value, 1, valores_permitidos=tipo_estado.values())
 
 
 class st_cabecera_consignacion(custom_base):
@@ -54,7 +58,7 @@ class st_cabecera_consignacion(custom_base):
 
     @validates('estado')
     def validar_estado(self, key, value):
-        return validar_number(key, value, 1)
+        return validar_estado(key, value)
 
 
 class st_detalle_consignacion(custom_base):

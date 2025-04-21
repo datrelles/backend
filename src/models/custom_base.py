@@ -17,7 +17,12 @@ class custom_base(base):
         }
         faltantes = requeridos - kwargs.keys()
         if faltantes:
-            raise validation_error(campos=faltantes)
+            raise validation_error(faltantes=faltantes)
+        no_requeridos = {
+            key for key in kwargs.keys() if key not in self.__table__.columns
+        }
+        if no_requeridos:
+            raise validation_error(no_requeridos=no_requeridos)
         super().__init__(**kwargs)
 
     @classmethod
@@ -36,5 +41,6 @@ class custom_base(base):
             data = {k: v for k, v in data.items() if v is not None}
         for arg in args:
             atributo = getattr(self, arg, [])
-            data[arg] = ([item.to_dict() for item in atributo]) if isinstance(atributo, Iterable) else atributo.to_dict()
+            data[arg] = ([item.to_dict() for item in atributo]) if isinstance(atributo,
+                                                                              Iterable) else atributo.to_dict()
         return data

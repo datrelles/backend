@@ -1,4 +1,4 @@
-from src.exceptions.validation import categoria_excepcion, validation_error
+from src.enums.validaciones import categoria_excepcion, validation_error
 
 
 def validar_longitud(numero: int | float, digitos_enteros: int, digitos_decimales=0, es_exacta=False):
@@ -23,11 +23,11 @@ def validar_longitud(numero: int | float, digitos_enteros: int, digitos_decimale
         return False
 
 
-def validar_number(clave, valor, digitos_enteros, digitos_decimales=0, es_requerido=True):
+def validar_number(clave, valor, digitos_enteros, digitos_decimales=0, es_requerido=True, valores_permitidos=None):
     if es_requerido:
         if valor is None:
             raise validation_error(campo=clave, categoria=categoria_excepcion.faltante.value)
-        if valor is '':
+        if valor == '':
             raise validation_error(campo=clave, categoria=categoria_excepcion.vacio.value)
     else:
         if not valor:
@@ -39,4 +39,7 @@ def validar_number(clave, valor, digitos_enteros, digitos_decimales=0, es_requer
     if not validar_longitud(valor, digitos_enteros, digitos_decimales):
         raise validation_error(campo=clave, categoria=categoria_excepcion.longitud.value,
                                longitud=digitos_enteros + digitos_decimales)
+    if valores_permitidos and not valor in valores_permitidos:
+        raise validation_error(campo=clave, categoria=categoria_excepcion.valores_permitidos.value,
+                               valores_permitidos=valores_permitidos)
     return valor

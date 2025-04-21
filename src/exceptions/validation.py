@@ -1,14 +1,19 @@
-from src.models.categoria_excepcion import categoria_excepcion
+from src.enums.validaciones import categoria_excepcion
 
 
 class validation_error(Exception):
     def __init__(self, **kwargs):
         if 'campo' in kwargs and 'categoria' in kwargs:
             self.campo, self.categoria = kwargs['campo'], kwargs['categoria']
-            if self.categoria == categoria_excepcion.longitud.value:
-                self.longitud = kwargs['longitud']
-        elif 'campos' in kwargs:
-            self.campos = kwargs['campos']
+            match (self.categoria):
+                case categoria_excepcion.longitud.value:
+                    self.longitud = kwargs['longitud']
+                case categoria_excepcion.valores_permitidos.value:
+                    self.valores_permitidos = kwargs['valores_permitidos']
+        elif 'faltantes' in kwargs:
+            self.faltantes = kwargs['faltantes']
+        elif 'no_requeridos' in kwargs:
+            self.no_requeridos = kwargs['no_requeridos']
         self.mensaje = self.__generar_mensaje()
         super().__init__(self.mensaje)
 
@@ -28,8 +33,12 @@ class validation_error(Exception):
                     mensaje = f'{mensaje} no es del tipo requerido'
                 case categoria_excepcion.longitud.value:
                     mensaje = f'{mensaje} debe contener máximo {self.longitud} caracteres'
+                case categoria_excepcion.valores_permitidos.value:
+                    mensaje = f'{mensaje} no coincide con ninguno de los valores permitidos: {', '.join(self.valores_permitidos)}'
                 case _:
                     mensaje = f'{mensaje} es inválido'
-        elif hasattr(self, 'campos'):
-            mensaje = f'Los siguientes campos no fueron provistos: {', '.join(self.campos)}'
+        elif hasattr(self, 'faltantes'):
+            mensaje = f'Faltan los siguientes campos: {', '.join(self.faltantes)}'
+        elif hasattr(self, 'no_requeridos'):
+            mensaje = f'Los siguientes campos no son requeridos: {', '.join(self.no_requeridos)}'
         return mensaje
