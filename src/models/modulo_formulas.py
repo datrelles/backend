@@ -228,7 +228,7 @@ class st_factores_calculo_parametros(custom_base):
 
     @validates('valor_fijo')
     def validar_valor_fijo(self, key, value):
-        return validar_number(key, value, 22, 8, False)
+        return validar_number(key, value, 22, 8, False, es_positivo=False)
 
 
 class tg_sistema(custom_base):
@@ -341,4 +341,4 @@ class st_parametro_funcion(custom_base):
 
     @validates('fijo_numero')
     def validar_fijo_numero(self, key, value):
-        return validar_number(key, value, 22, 8, es_requerido=False)
+        return validar_number(key, value, 22, 8, es_requerido=False, es_positivo=False)

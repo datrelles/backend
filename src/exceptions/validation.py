@@ -31,6 +31,8 @@ class validation_error(Exception):
                     mensaje = f'{mensaje} está vacío'
                 case categoria_excepcion.tipo.value:
                     mensaje = f'{mensaje} no es del tipo requerido'
+                case categoria_excepcion.valor_positivo.value:
+                    mensaje = f'{mensaje} solo admite valores positivos'
                 case categoria_excepcion.longitud.value:
                     mensaje = f'{mensaje} debe contener máximo {self.longitud} caracteres'
                 case categoria_excepcion.valores_permitidos.value:

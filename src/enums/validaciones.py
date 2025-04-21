@@ -11,6 +11,7 @@ class categoria_excepcion(CustomEnum):
     faltante = 'faltante'
     vacio = 'vacio'
     tipo = 'tipo'
+    valor_positivo = 'valor_positivo'
     longitud = 'longitud'
     valores_permitidos = 'valores_permitidos'
     no_requeridos = 'no_requeridos'
