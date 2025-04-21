@@ -6,6 +6,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
 from datetime import datetime
 from sqlalchemy import Sequence
+from sqlalchemy import text, DateTime, func
 
 Base = declarative_base(metadata = db.metadata)
 
@@ -34,8 +35,8 @@ class Chasis(Base):
 
     usuario_crea = Column(VARCHAR(50))
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = datetime.now()
-    fecha_modificacion = datetime.now()
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
     @classmethod
     def query(cls):
@@ -57,8 +58,8 @@ class DimensionPeso(Base):
     peso_seco = Column(NUMBER(10))
     usuario_crea = Column(VARCHAR(50))
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = datetime.now()
-    fecha_modificacion = datetime.now()
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
     @classmethod
     def query(cls):
@@ -82,8 +83,8 @@ class ElectronicaOtros(Base):
     velocidad_maxima = Column(VARCHAR(50))
     usuario_crea = Column(VARCHAR(50))
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = datetime.now()
-    fecha_modificacion = datetime.now()
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
     @classmethod
     def query(cls):
@@ -104,8 +105,8 @@ class Transmision(Base):
 
     usuario_crea = Column(VARCHAR(50))
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = datetime.now()
-    fecha_modificacion = datetime.now()
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 class Imagenes(Base):
     __tablename__ = 'st_imagenes'
@@ -122,8 +123,8 @@ class Imagenes(Base):
 
     usuario_crea = Column(VARCHAR(50))
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = datetime.now()
-    fecha_modificacion = datetime.now()
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 class TipoMotor(Base):
     __tablename__ = 'st_tipo_motor'
@@ -160,8 +161,8 @@ class Motor(Base):
 
     usuario_crea = Column(VARCHAR(50))
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = datetime.now()
-    fecha_modificacion = datetime.now()
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 class Color(Base):
     __tablename__ = 'st_color_bench'
@@ -176,8 +177,8 @@ class Color(Base):
     nombre_color = Column(VARCHAR(50), nullable=False)
     usuario_crea = Column(VARCHAR(50))
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = datetime.now()
-    fecha_modificacion = datetime.now()
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 class Canal(Base):
     __tablename__ = 'st_canal'
@@ -195,8 +196,8 @@ class Canal(Base):
 
     usuario_crea = Column(VARCHAR(50))
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
-    fecha_modificacion = datetime.now()
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 class MarcaRepuesto(Base):
     __tablename__ = 'st_marca_repuestos'
@@ -216,8 +217,8 @@ class MarcaRepuesto(Base):
     nombre_fabricante = Column(VARCHAR(70), unique=True)
     usuario_crea = Column(VARCHAR(50), nullable=False)
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
-    fecha_modificacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 class ProductoExterno(Base):
     __tablename__ = 'st_producto_externo'
@@ -240,8 +241,8 @@ class ProductoExterno(Base):
     descripcion_producto = Column(VARCHAR(150))
     usuario_crea = Column(VARCHAR(50), nullable=False)
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
-    fecha_modificacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
     empresa = Column(
         NUMBER(2),
@@ -268,8 +269,8 @@ class Linea(Base):
     descripcion_linea = Column(VARCHAR(150))
     usuario_crea = Column(VARCHAR(50), nullable=False)
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
-    fecha_modificacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 class Marca(Base):
     __tablename__ = 'st_marca'
@@ -288,8 +289,8 @@ class Marca(Base):
     estado_marca = Column(NUMBER(1), nullable=False)
     usuario_crea = Column(VARCHAR(50), nullable=False)
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
-    fecha_modificacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 class Benchmarking(Base):
     __tablename__ = 'st_benchmarking'
@@ -320,8 +321,8 @@ class ModeloSRI(Base):
     estado_modelo = Column(NUMBER(1), nullable=False)
     usuario_crea = Column(VARCHAR(50), nullable=False)
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
-    fecha_modificacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 class ModeloHomologado(Base):
     __tablename__ = 'st_modelo_homologado'
@@ -336,8 +337,8 @@ class ModeloHomologado(Base):
     descripcion_homologacion = Column(VARCHAR(150))
     usuario_crea = Column(VARCHAR(50), nullable=False)
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
-    fecha_modificacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 class MatriculacionMarca(Base):
     __tablename__ = 'st_matriculacion_marca'
@@ -358,8 +359,8 @@ class MatriculacionMarca(Base):
     detalle_matriculacion = Column(VARCHAR(150))
     usuario_crea = Column(VARCHAR(50), nullable=False)
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
-    fecha_modificacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 class ModeloComercial(Base):
     __tablename__ = 'st_modelo_comercial'
@@ -390,8 +391,8 @@ class ModeloComercial(Base):
     estado_modelo = Column(NUMBER(1), nullable=False)
     usuario_crea = Column(VARCHAR(50), nullable=False)
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
-    fecha_modificacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 class Segmento(Base):
     __tablename__ = 'st_segmento'
@@ -416,8 +417,8 @@ class Segmento(Base):
     descripcion_segmento = Column(VARCHAR(150))
     usuario_crea = Column(VARCHAR(50), nullable=False)
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
-    fecha_modificacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 class Version(Base):
     __tablename__ = 'st_version'
@@ -433,8 +434,8 @@ class Version(Base):
     estado_version = Column(NUMBER(1), nullable=False)
     usuario_crea = Column(VARCHAR(50), nullable=False)
     usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
-    fecha_modificacion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 class ModeloVersionRepuesto(Base):
     __tablename__ = 'st_modelo_version_repuesto'
@@ -521,6 +522,5 @@ class ModeloVersion(Base):
     precio_producto_modelo = Column(NUMBER(10), nullable=False)
     precio_venta_distribuidor = Column(NUMBER(10), nullable=False)
 
-#Metodos para gestion de catalogs
 
 

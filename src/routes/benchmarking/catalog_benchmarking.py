@@ -5,6 +5,7 @@ from datetime import datetime
 import pandas as pd
 
 from flask import request, Blueprint, jsonify
+from flask_cors import cross_origin
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, and_, text
 from sqlalchemy.exc import IntegrityError
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 @bench.route('/insert_chasis', methods=["POST"])
 @jwt_required()
+@cross_origin()
 def insert_chasis():
     try:
         data = request.json
@@ -158,13 +160,11 @@ def insert_path_imagen():
 def insert_tipo_motor():
     try:
         data = request.json
-        #user = get_jwt_identity()
 
         nombre = data.get("nombre_tipo")
         if not nombre:
             return jsonify({"error": "El campo 'nombre_tipo' es obligatorio"}), 400
 
-        # Validación case-insensitive
         tipo_existe = db.session.query(TipoMotor).filter(
             func.lower(TipoMotor.nombre_tipo) == nombre.lower()
         ).first()
@@ -267,12 +267,10 @@ def insert_marca_repuestos():
         estado = data.get("estado_marca_rep")
         nombre_fabricante = data.get("nombre_fabricante")
 
-        # Validaciones básicas
         if not nombre_comercial or estado not in [0, 1]:
             return jsonify({"error": "Campos 'nombre_comercial' y 'estado_marca_rep' (0 o 1) son obligatorios"}), 400
 
         if nombre_fabricante:
-            # Validar unicidad del nombre_fabricante (case-insensitive)
             existe = db.session.query(MarcaRepuesto).filter(
                 func.lower(MarcaRepuesto.nombre_fabricante) == nombre_fabricante.lower()
             ).first()
@@ -284,8 +282,7 @@ def insert_marca_repuestos():
             estado_marca_rep=estado,
             nombre_fabricante=nombre_fabricante,
             usuario_crea=user,
-            fecha_creacion=datetime.now(),
-            fecha_modificacion=datetime.now()
+            fecha_creacion=datetime.now()
         )
 
         db.session.add(nuevo)
@@ -352,8 +349,7 @@ def insert_producto_externo():
             descripcion_producto=data.get("descripcion_producto"),
             usuario_crea=user,
             empresa=empresa,
-            fecha_creacion=datetime.now(),
-            fecha_modificacion=datetime.now()
+            fecha_creacion=datetime.now()
         )
 
         db.session.add(nuevo)
@@ -388,17 +384,16 @@ def insert_linea():
             return jsonify({"error": "Ya existe una línea con ese nombre"}), 409
 
         nueva_linea = Linea(
-             # se actualizará luego si es raíz
             nombre_linea=nombre,
             estado_linea=estado,
             descripcion_linea=data.get("descripcion_linea"),
-            usuario_crea=user
+            usuario_crea=user,
+            fecha_creacion=datetime.now()
         )
 
         db.session.add(nueva_linea)
-        db.session.flush()  # genera el ID
+        db.session.flush()
 
-        # Línea raíz (sin padre): autorreferenciada
         if not padre_id:
             nueva_linea.codigo_linea_padre = nueva_linea.codigo_linea
         else:
@@ -437,7 +432,8 @@ def insert_marca():
         nueva = Marca(
             nombre_marca=nombre,
             estado_marca=estado,
-            usuario_crea=user
+            usuario_crea=user,
+            fecha_creacion=datetime.now()
         )
 
         db.session.add(nueva)
@@ -463,7 +459,7 @@ def insert_benchmarking():
         empresa = data.get('empresa')
         ram_inicial = data.get('ram_inicial')
         ram_final = data.get('ram_final')
-        codigo_marca = data.get('codigo_marca')  # default en DB
+        codigo_marca = data.get('codigo_marca')
 
         if not empresa or not ram_inicial:
             return jsonify({"error": "Campos 'empresa' y 'ram_inicial' son obligatorios"}), 400
@@ -519,7 +515,8 @@ def insert_modelo_sri():
             nombre_modelo=nombre,
             anio_modelo=anio,
             estado_modelo=estado,
-            usuario_crea=user
+            usuario_crea=user,
+            fecha_creacion=datetime.now()
         )
 
         db.session.add(nuevo)
@@ -556,7 +553,8 @@ def insert_modelo_homologado():
         nuevo = ModeloHomologado(
             codigo_modelo_sri=codigo_sri,
             descripcion_homologacion=descripcion,
-            usuario_crea=user
+            usuario_crea=user,
+            fecha_creacion=datetime.now()
         )
 
         db.session.add(nuevo)
@@ -604,7 +602,8 @@ def insert_matriculacion_marca():
             codigo_modelo_homologado=codigo_homologado,
             placa=placa,
             detalle_matriculacion=detalle,
-            usuario_crea=user
+            usuario_crea=user,
+            fecha_creacion=datetime.now()
         )
 
         db.session.add(nueva)
@@ -662,7 +661,8 @@ def insert_modelo_comercial():
             nombre_modelo=nombre,
             anio_modelo=anio,
             estado_modelo=estado,
-            usuario_crea=user
+            uusuario_crea=user,
+            fecha_creacion=datetime.now()
         )
 
         db.session.add(nuevo)
@@ -721,7 +721,8 @@ def insert_segmento():
             nombre_segmento=nombre,
             estado_segmento=estado,
             descripcion_segmento=descripcion,
-            usuario_crea=user
+            usuario_crea=user,
+            fecha_creacion=datetime.now()
         )
 
         db.session.add(nuevo)
@@ -763,7 +764,8 @@ def insert_version():
             nombre_version=nombre,
             descripcion_version=descripcion,
             estado_version=estado,
-            usuario_crea=user
+            usuario_crea=user,
+            fecha_creacion=datetime.now()
         )
 
         db.session.add(nueva)
@@ -986,7 +988,7 @@ def insert_modelo_version():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-#Repuestos compatibles con un modelo X
+#Repuestos compatibles con un modelo externo
 
 @bench.route("/modelo_version/repuestos_compatibles", methods=["GET"])
 @jwt_required()
@@ -1039,7 +1041,7 @@ def get_repuestos_by_nombre():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-#Comparacion de modelos de motos
+#Carga de archivos desde un Excel ----> aun no está :(
 
 ALLOWED_EXTENSIONS = {'xlsx'}
 UPLOAD_FOLDER = 'uploads/'
@@ -1315,8 +1317,6 @@ def get_dimensiones():
         return jsonify({"error": str(e)}), 500
 
 
-
-
 # ACTUALIZAR/ MODIFICAR DATOS
 
 @bench.route('/update_chasis/<int:codigo_chasis>', methods=["PUT"])
@@ -1343,6 +1343,31 @@ def update_chasis(codigo_chasis):
 
         db.session.commit()
         return jsonify({"message": "Chasis actualizado correctamente", "codigo_chasis": chasis.codigo_chasis})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_dimensiones/<int:codigo_dim_peso>', methods=["PUT"])
+@jwt_required()
+def update_dimensiones(codigo_dim_peso):
+    try:
+        data = request.json
+        user = get_jwt_identity()
+
+        dimensiones = db.session.query(DimensionPeso).filter_by(codigo_dim_peso=codigo_dim_peso).first()
+        if not dimensiones:
+            return jsonify({"error": "Dimensiones y peso no encontrados"}), 404
+
+        dimensiones.altura_total = data.get("altura_total", dimensiones.altura_total)
+        dimensiones.longitud_total = data.get("longitud_total", dimensiones.longitud_total)
+        dimensiones.ancho_total = data.get("ancho_total", dimensiones.ancho_total)
+        dimensiones.peso_seco = data.get("peso_seco", dimensiones.peso_seco)
+        dimensiones.usuario_modifica = user
+        dimensiones.fecha_modificacion = datetime.now()
+
+        db.session.commit()
+        return jsonify({"message": "Dimensiones y peso actualizados correctamente", "codigo_dim_peso": dimensiones.codigo_dim_peso})
 
     except Exception as e:
         db.session.rollback()
