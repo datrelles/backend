@@ -16,7 +16,7 @@ from os import getenv
 import json
 from datetime import datetime, date, timedelta
 from src.config.database import db
-from src.routes.warranty_module.task import send_mail_postventa
+from src.routes.warranty_module.task import send_mail_postventa, send_mail_envio_pedido
 
 
 
@@ -1692,6 +1692,7 @@ def genera_pedido():
         if int(update_status_st_casos_postventa.aplica_garantia) == 1 and update_status_st_casos_postventa.cod_pedido not in (
                 None, ''):
             send_mail_postventa(update_status_st_casos_postventa.cod_comprobante, 'PP')
+            send_mail_envio_pedido(update_status_st_casos_postventa.cod_comprobante)
 
         # 13. Return
         return jsonify({
