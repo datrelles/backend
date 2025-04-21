@@ -16,7 +16,7 @@ from os import getenv
 import json
 from datetime import datetime, date, timedelta
 from src.config.database import db
-from src.routes.warranty_module.task import send_mail_postventa
+from src.routes.warranty_module.task import send_mail_postventa, send_mail_envio_pedido
 
 
 
@@ -1692,6 +1692,7 @@ def genera_pedido():
         if int(update_status_st_casos_postventa.aplica_garantia) == 1 and update_status_st_casos_postventa.cod_pedido not in (
                 None, ''):
             send_mail_postventa(update_status_st_casos_postventa.cod_comprobante, 'PP')
+            send_mail_envio_pedido(update_status_st_casos_postventa.cod_comprobante)
 
         # 13. Return
         return jsonify({
@@ -2361,7 +2362,6 @@ def checkJsonData_json(json_data):
             return False
     return isinstance(json_data.get('type_id'), int)
 
-
 @rmwa.route('/casos_postventa/numero_guia', methods=['POST'])
 @jwt_required()
 def update_numero_guia():
@@ -2421,7 +2421,6 @@ def update_numero_guia():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-
 @rmwa.route('/get_nombre_producto_by_motor', methods=['GET'])
 @jwt_required()
 def get_nombre_producto_by_motor():
@@ -2461,3 +2460,40 @@ def get_nombre_producto_by_motor():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@rmwa.route('/get_cliente_data_for_id_especific_cliente_shibot', methods=['GET'])
+@jwt_required()
+def get_cliente_data_for_id_especific_cliente_shibot():
+    # Obtener parámetros de la query string
+    cod_cliente = request.args.get('cod_cliente', None)
+    enterprise = request.args.get('enterprise', None)
+
+    # Validar si ambos parámetros fueron proporcionados
+    if not cod_cliente or not enterprise:
+        return jsonify({"error": "Missing parameters: 'cod_cliente' and/or 'enterprise'"}), 400
+    try:
+
+        cliente = (
+            Cliente.query()
+            .filter(
+                Cliente.cod_cliente == cod_cliente,
+                Cliente.empresa == enterprise
+            )
+            .first()
+        )
+        # Preparar la respuesta como un diccionario
+        data = {
+            "empresa": cliente.empresa,
+            "cod_cliente": cliente.cod_cliente,
+            "cod_tipo_identificacion": cliente.cod_tipo_identificacion,
+            "nombre": cliente.nombre,
+            "apellido1": cliente.apellido1,
+            "ruc": cliente.ruc
+        }
+
+        return jsonify(data), 200
+
+    except Exception as e:
+        # Manejar cualquier error inesperado
+        return jsonify({"error": str(e)}), 500
+
