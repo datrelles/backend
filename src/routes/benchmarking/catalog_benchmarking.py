@@ -7,7 +7,7 @@ import pandas as pd
 from flask import request, Blueprint, jsonify
 from flask_cors import cross_origin
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from sqlalchemy import func, and_, text
+from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
 
@@ -20,30 +20,37 @@ from src.models.productos import Producto
 bench = Blueprint('routes_bench', __name__)
 logger = logging.getLogger(__name__)
 
+
 @bench.route('/insert_chasis', methods=["POST"])
 @jwt_required()
-@cross_origin()
 def insert_chasis():
     try:
-        data = request.json
         user = get_jwt_identity()
+        data = request.get_json()
 
-        nuevo = Chasis(
-            aros_rueda_posterior=data.get("aros_rueda_posterior"),
-            neumatico_delantero=data.get("neumatico_delantero"),
-            neumatico_trasero=data.get("neumatico_trasero"),
-            suspension_delantera=data.get("suspension_delantera"),
-            suspension_trasera=data.get("suspension_trasera"),
-            frenos_delanteros=data.get("frenos_delanteros"),
-            frenos_traseros=data.get("frenos_traseros"),
-            aros_rueda_delantera=data.get("aros_rueda_delantera"),
-            usuario_crea=user,
-            fecha_creacion=datetime.now()
-        )
+        if isinstance(data, dict):
+            data = [data]
+        elif isinstance(data, dict) and "chasis" in data:
 
-        db.session.add(nuevo)
+            data = data["chasis"]
+
+        for item in data:
+            chasis = Chasis(
+                aros_rueda_delantera=item.get("aros_rueda_delantera"),
+                aros_rueda_posterior=item.get("aros_rueda_posterior"),
+                neumatico_delantero=item.get("neumatico_delantero"),
+                neumatico_trasero=item.get("neumatico_trasero"),
+                suspension_delantera=item.get("suspension_delantera"),
+                suspension_trasera=item.get("suspension_trasera"),
+                frenos_delanteros=item.get("frenos_delanteros"),
+                frenos_traseros=item.get("frenos_traseros"),
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+            db.session.add(chasis)
+
         db.session.commit()
-        return jsonify({"message": "Chasis insertado correctamente", "codigo_chasis": nuevo.codigo_chasis})
+        return jsonify({"message": "Chasis insertado correctamente"}), 200
 
     except Exception as e:
         db.session.rollback()
@@ -51,6 +58,7 @@ def insert_chasis():
 
 @bench.route('/insert_dimension', methods=["POST"])
 @jwt_required()
+@cross_origin()
 def insert_dimension():
     try:
         data = request.json
@@ -76,6 +84,7 @@ def insert_dimension():
 
 @bench.route('/insert_electronica_otros', methods=["POST"])
 @jwt_required()
+@cross_origin()
 def insert_electronica_otros():
     try:
         data = request.json
@@ -181,6 +190,37 @@ def insert_tipo_motor():
         db.session.commit()
         db.session.refresh(nuevo)
         return jsonify({"message": "Tipo de motor insertado", "codigo_tipo_motor": nuevo.codigo_tipo_motor})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/insert_motor', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def insert_motor():
+    try:
+        data = request.json
+        user = get_jwt_identity()
+
+        nuevo_motor = Motor(
+            cilindrada=data.get("cilindrada"),
+            caballos_fuerza=data.get("caballos_fuerza"),
+            torque_maximo=data.get("torque_maximo"),
+            sistema_combustible=data.get("sistema_combustible"),
+            arranque=data.get("arranque"),
+            sistema_refrigeracion=data.get("sistema_refrigeracion"),
+            descripcion_motor=data.get("descripcion_motor"),
+            nombre_motor=data.get("nombre_motor"),
+            codigo_tipo_motor=data.get("codigo_tipo_motor"),
+            usuario_crea=user,
+            fecha_creacion=datetime.now()
+        )
+
+        db.session.add(nuevo_motor)
+        db.session.commit()
+        db.session.refresh(nuevo_motor)
+        return jsonify({"message": "Motor insertado correctamente", "codigo_motor": nuevo_motor.codigo_motor})
 
     except Exception as e:
         db.session.rollback()
@@ -454,7 +494,6 @@ def insert_marca():
 def insert_benchmarking():
     try:
         data = request.json
-        user = get_jwt_identity()
 
         empresa = data.get('empresa')
         ram_inicial = data.get('ram_inicial')
@@ -786,7 +825,6 @@ def insert_version():
 def insert_modelo_version_repuesto():
     try:
         data = request.json
-        user = get_jwt_identity()
 
         required_fields = [
             "codigo_prod_externo", "codigo_version", "empresa", "cod_producto",
@@ -1316,6 +1354,103 @@ def get_dimensiones():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@bench.route('/get_electronica', methods=["GET"])
+@jwt_required()
+def get_electronica():
+    try:
+        electronica = db.session.query(ElectronicaOtros).all()
+
+        resultado = []
+        for elect in electronica:
+            resultado.append({
+                "codigo_electronica": elect.codigo_electronica,
+                "capacidad_combustible": elect.capacidad_combustible,
+                "tablero": elect.tablero,
+                "luces_delanteras": elect.luces_delanteras,
+                "luces_posteriores": elect.luces_posteriores,
+                "garantia": elect.garantia,
+                "velocidad_maxima": elect.velocidad_maxima,
+                "usuario_crea": elect.usuario_crea,
+                "usuario_modifica": elect.usuario_modifica,
+                "fecha_creacion": elect.fecha_creacion.isoformat() if elect.fecha_creacion else None,
+                "fecha_modificacion": elect.fecha_modificacion.isoformat() if elect.fecha_modificacion else None
+            })
+
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/get_tipo_motor', methods=["GET"])
+@jwt_required()
+def get_tipo_motor():
+    try:
+        tipo_motor = db.session.query(TipoMotor).all()
+
+        resultado = []
+        for tipo in tipo_motor:
+            resultado.append({
+                "codigo_tipo_motor": tipo.codigo_tipo_motor,
+                "nombre_tipo": tipo.nombre_tipo,
+                "descripcion_tipo_motor": tipo.descripcion_tipo_motor
+            })
+
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/get_motores', methods=["GET"])
+@jwt_required()
+def get_motores():
+    try:
+        motores = db.session.query(Motor).all()
+
+        resultado = []
+        for m in motores:
+            resultado.append({
+                "codigo_motor": m.codigo_motor,
+                "codigo_tipo_motor": m.codigo_tipo_motor,
+                "nombre_tipo_motor": m.tipo_motor.nombre_tipo if m.tipo_motor else None,
+                "nombre_motor": m.nombre_motor,
+                "cilindrada": m.cilindrada,
+                "caballos_fuerza": m.caballos_fuerza,
+                "torque_maximo": m.torque_maximo,
+                "sistema_combustible": m.sistema_combustible,
+                "arranque": m.arranque,
+                "sistema_refrigeracion": m.sistema_refrigeracion,
+                "descripcion_motor": m.descripcion_motor,
+                "usuario_crea": m.usuario_crea,
+                "usuario_modifica": m.usuario_modifica,
+                "fecha_creacion": m.fecha_creacion.isoformat() if m.fecha_creacion else None,
+                "fecha_modificacion": m.fecha_modificacion.isoformat() if m.fecha_modificacion else None
+            })
+
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/get_color', methods=["GET"])
+@jwt_required()
+def get_color():
+    try:
+        color = db.session.query(Color).all()
+
+        resultado = []
+        for c in color:
+            resultado.append({
+                "codigo_color_bench": c.codigo_color_bench,
+                "nombre_color": c.nombre_color,
+                "usuario_crea": c.usuario_crea,
+                "usuario_modifica": c.usuario_modifica,
+                "fecha_creacion": c.fecha_creacion.isoformat() if c.fecha_creacion else None,
+                "fecha_modificacion": c.fecha_modificacion.isoformat() if c.fecha_modificacion else None
+            })
+
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ACTUALIZAR/ MODIFICAR DATOS
 
@@ -1372,3 +1507,214 @@ def update_dimensiones(codigo_dim_peso):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_electronica/<int:codigo_electronica>', methods=["PUT"])
+@jwt_required()
+def update_electronica(codigo_electronica):
+    try:
+        data = request.json
+        user = get_jwt_identity()
+
+        electronica = db.session.query(ElectronicaOtros).filter_by(codigo_electronica=codigo_electronica).first()
+        if not electronica:
+            return jsonify({"error": "Datos de electrónica no encontrados"}), 404
+
+        electronica.capacidad_combustible = data.get("capacidad_combustible", electronica.capacidad_combustible)
+        electronica.tablero = data.get("tablero", electronica.tablero)
+        electronica.luces_delanteras = data.get("luces_delanteras", electronica.luces_delanteras)
+        electronica.luces_posteriores = data.get("luces_posteriores", electronica.luces_posteriores)
+        electronica.garantia = data.get("garantia", electronica.garantia)
+        electronica.velocidad_maxima = data.get("velocidad_maxima", electronica.velocidad_maxima)
+        electronica.usuario_modifica = user
+        electronica.fecha_modificacion = datetime.now()
+
+        db.session.commit()
+        return jsonify({"message": "Datos de electrónica actualizados correctamente", "codigo_electronica": electronica.codigo_electronica})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_motor/<int:codigo_motor>', methods=["PUT"])
+@jwt_required()
+def update_motor(codigo_motor):
+    try:
+        data = request.get_json()
+        user = get_jwt_identity()
+
+        motor = db.session.query(Motor).filter_by(codigo_motor=codigo_motor).first()
+        if not motor:
+            return jsonify({"error": "Motor no encontrado"}), 404
+
+        motor.codigo_tipo_motor = data.get("codigo_tipo_motor", motor.codigo_tipo_motor)
+        motor.nombre_motor = data.get("nombre_motor", motor.nombre_motor)
+        motor.cilindrada = data.get("cilindrada", motor.cilindrada)
+        motor.caballos_fuerza = data.get("caballos_fuerza", motor.caballos_fuerza)
+        motor.torque_maximo = data.get("torque_maximo", motor.torque_maximo)
+        motor.sistema_combustible = data.get("sistema_combustible", motor.sistema_combustible)
+        motor.arranque = data.get("arranque", motor.arranque)
+        motor.sistema_refrigeracion = data.get("sistema_refrigeracion", motor.sistema_refrigeracion)
+        motor.descripcion_motor = data.get("descripcion_motor", motor.descripcion_motor)
+
+        motor.usuario_modifica = user
+        motor.fecha_modificacion = datetime.now()
+
+        db.session.commit()
+        return jsonify({"message": "Motor actualizado correctamente", "codigo_motor": motor.codigo_motor})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_color/<int:codigo_color_bench>', methods=["PUT"])
+@jwt_required()
+def update_color(codigo_color_bench):
+    try:
+        data = request.json
+        user = get_jwt_identity()
+
+        color = db.session.query(Color).filter_by(codigo_color_bench=codigo_color_bench).first()
+        if not color:
+            return jsonify({"error": "Datos de color no encontrados"}), 404
+
+        color.nombre_color = data.get("nombre_color", color.nombre_color)
+        color.usuario_modifica = user
+        color.fecha_modificacion = datetime.now()
+
+        db.session.commit()
+        return jsonify({"message": "Datos de color actualizados correctamente", "codigo_color_bench": color.codigo_color_bench})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/insert_chasis_batch', methods=["POST"])
+@jwt_required()
+def insert_chasis_batch():
+    try:
+        data = request.json.get("chasis", [])
+        user = get_jwt_identity()
+        for row in data:
+            nuevo = Chasis(
+                aros_rueda_delantera=row.get("aros_rueda_delantera"),
+                aros_rueda_posterior=row.get("aros_rueda_posterior"),
+                neumatico_delantero=row.get("neumatico_delantero"),
+                neumatico_trasero=row.get("neumatico_trasero"),
+                suspension_delantera=row.get("suspension_delantera"),
+                suspension_trasera=row.get("suspension_trasera"),
+                frenos_delanteros=row.get("frenos_delanteros"),
+                frenos_traseros=row.get("frenos_traseros"),
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+            db.session.add(nuevo)
+        db.session.commit()
+        return jsonify({"message": "Chasis cargados exitosamente"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/insert_color_batch', methods=["POST"])
+@jwt_required()
+def insert_color_batch():
+    try:
+        data = request.json.get("color", [])
+        user = get_jwt_identity()
+        for row in data:
+            nuevo = Color(
+                nombre_color=row.get("nombre_color"),
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+            db.session.add(nuevo)
+        db.session.commit()
+        return jsonify({"message": "Colores cargados exitosamente"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@bench.route('/upload_chasis_excel', methods=['POST'])
+@jwt_required()
+def upload_chasis_excel():
+    try:
+        user = get_jwt_identity()
+
+        if 'file' not in request.files:
+            return jsonify({'error': 'Archivo no enviado'}), 400
+
+        file = request.files['file']
+        df = pd.read_excel(file)
+
+        required_columns = [
+            'aros_rueda_delantera', 'aros_rueda_posterior',
+            'neumatico_delantero', 'neumatico_trasero',
+            'suspension_delantera', 'suspension_trasera',
+            'frenos_delanteros', 'frenos_traseros'
+        ]
+
+        for col in required_columns:
+            if col not in df.columns:
+                return jsonify({'error': f'Falta la columna requerida: {col}'}), 400
+
+        inserted = 0
+        for _, row in df.iterrows():
+            nuevo = Chasis(
+                aros_rueda_delantera=row['aros_rueda_delantera'],
+                aros_rueda_posterior=row['aros_rueda_posterior'],
+                neumatico_delantero=row['neumatico_delantero'],
+                neumatico_trasero=row['neumatico_trasero'],
+                suspension_delantera=row['suspension_delantera'],
+                suspension_trasera=row['suspension_trasera'],
+                frenos_delanteros=row['frenos_delanteros'],
+                frenos_traseros=row['frenos_traseros'],
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+            db.session.add(nuevo)
+            inserted += 1
+
+        db.session.commit()
+        return jsonify({'message': f'{inserted} registros insertados correctamente'})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@bench.route('/upload_color_excel', methods=['POST'])
+@jwt_required()
+def upload_color_excel():
+    try:
+        user = get_jwt_identity()
+
+        if 'file' not in request.files:
+            return jsonify({'error': 'Archivo no enviado'}), 400
+
+        file = request.files['file']
+        df = pd.read_excel(file)
+
+        required_columns = [
+            'nombre_color'
+        ]
+
+        for col in required_columns:
+            if col not in df.columns:
+                return jsonify({'error': f'Falta la columna requerida: {col}'}), 400
+
+        inserted = 0
+        for _, row in df.iterrows():
+            nuevo = Color(
+                nombre_color=row['nombre_color'],
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+            db.session.add(nuevo)
+            inserted += 1
+
+        db.session.commit()
+        return jsonify({'message': f'{inserted} registros insertados correctamente'})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500

@@ -164,6 +164,9 @@ class Motor(Base):
     fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
     fecha_modificacion = Column(DateTime, nullable=True)
 
+
+    tipo_motor = db.relationship('TipoMotor', backref='get_motores', lazy='joined')
+
 class Color(Base):
     __tablename__ = 'st_color_bench'
     __table_args__ = {'schema': 'stock'}
