@@ -1269,6 +1269,17 @@ def post_parametro_funcion(empresa, cod_funcion):
                     return jsonify({'mensaje': mensaje}), 400
                 data['variable'] = None
                 data['fijo_caracter'] = None
+        ultimo_parametro = (db.session.query(st_parametro_funcion)
+                            .filter_by(**{'empresa': empresa, 'cod_funcion': cod_funcion})
+                            .order_by(st_parametro_funcion.secuencia.desc())
+                            .first())
+        secuencia_actual = 1
+        if ultimo_parametro:
+            secuencia_actual = ultimo_parametro.secuencia + 1
+        if data['secuencia'] != secuencia_actual:
+            mensaje = f'El parámetro debe tener secuencia {secuencia_actual}'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 409
         parametro = st_parametro_funcion(**data)
         db.session.add(parametro)
         db.session.commit()
