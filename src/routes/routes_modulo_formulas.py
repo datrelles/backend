@@ -5,7 +5,7 @@ from flask_cors import cross_origin
 import logging
 from werkzeug.exceptions import BadRequest
 from src.config.database import db
-from sqlalchemy import text
+from sqlalchemy import text, and_
 from sqlalchemy.exc import SQLAlchemyError
 from src.enums.validaciones import tipo_operador, operador, tipo_parametro
 from src.models.modulo_formulas import st_proceso, st_formula, st_parametro, st_parametros_x_proceso, \
@@ -975,6 +975,21 @@ def delete_factor_calculo_parametro(empresa, cod_proceso, cod_parametro, orden):
         logger.exception(f'Ocurrió una excepción al eliminar el factor de cálculo: {e}')
         return jsonify(
             {'mensaje': f'Ocurrió un error al eliminar el factor de cálculo'}), 500
+
+
+@formulas_b.route("/modulos", methods=["GET"])
+@jwt_required()
+@cross_origin()
+def get_modulos():
+    try:
+        query = tg_sistema.query()
+        modulos = query.filter(and_(tg_sistema.ruta.isnot(None))).order_by(
+            tg_sistema.sistema).all()
+        return jsonify(tg_sistema.to_list(modulos))
+    except Exception as e:
+        logger.exception(
+            f'Ocurrió una excepción al consultar los módulos: {e}')
+        return jsonify({'mensaje': f'Ocurrió un error al consultar los módulos'}), 500
 
 
 @formulas_b.route("/empresas/<empresa>/funciones/<cod_funcion>", methods=["GET"])

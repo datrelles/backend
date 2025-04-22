@@ -236,6 +236,8 @@ class tg_sistema(custom_base):
     __table_args__ = {'schema': 'computo'}
 
     cod_sistema = Column(VARCHAR(3), primary_key=True)
+    sistema = Column(VARCHAR(50))
+    ruta = Column(VARCHAR(200))
 
 
 class st_funcion(custom_base):
