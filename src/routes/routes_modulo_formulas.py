@@ -5,7 +5,7 @@ from flask_cors import cross_origin
 import logging
 from werkzeug.exceptions import BadRequest
 from src.config.database import db
-from sqlalchemy import text, and_
+from sqlalchemy import text, and_, func
 from sqlalchemy.exc import SQLAlchemyError
 from src.enums.validaciones import tipo_operador, operador, tipo_parametro
 from src.models.modulo_formulas import st_proceso, st_formula, st_parametro, st_parametros_x_proceso, \
@@ -1031,8 +1031,7 @@ def get_funciones(empresa):
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
         query = st_funcion.query()
-        funciones = query.filter(st_funcion.empresa == empresa).order_by(
-            st_funcion.cod_modulo, st_funcion.nombre).all()
+        funciones = query.filter(st_funcion.empresa == empresa).order_by(func.lower(st_funcion.nombre)).all()
         return jsonify(st_funcion.to_list(funciones))
     except validation_error as e:
         logger.exception(e)
