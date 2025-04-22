@@ -1193,7 +1193,7 @@ def delete_funcion(empresa, cod_funcion):
             mensaje = f'Función {cod_funcion} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        if db.session.query(st_parametro_funcion).filter(st_parametro_funcion.cod_funcion==cod_funcion).first():
+        if db.session.query(st_parametro_funcion).filter(st_parametro_funcion.cod_funcion == cod_funcion).first():
             mensaje = 'Existen parámetros vinculados a la función'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
