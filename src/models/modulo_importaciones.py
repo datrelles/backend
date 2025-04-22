@@ -23,7 +23,7 @@ def validar_cod_14(clave, valor):
 
 
 def validar_estado(clave, valor, es_requerido=True):
-    return validar_number(key, value, 1, valores_permitidos=tipo_estado.values())
+    return validar_number(clave, valor, 1, valores_permitidos=tipo_estado.values())
 
 
 class st_cabecera_consignacion(custom_base):
