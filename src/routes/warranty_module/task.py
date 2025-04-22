@@ -85,7 +85,7 @@ def send_mail_envio_pedido(cod_comprobante: str) -> bool:
     """
     @copy_current_request_context
     def _job():
-        correo_posteventas = "postventa@massline.com.ec"
+        correo_posteventas = "callcenter1@massline.com.ec"
         try:
             # ------------------------------------------------------------------
             # 1. Cargar el caso
@@ -178,6 +178,7 @@ def send_mail_envio_pedido(cod_comprobante: str) -> bool:
                         "cod_producto": p.cod_producto,
                         "nombre": prod.nombre if prod else "(sin nombre)",
                         "cantidad": float(p.cantidad),
+                        "cod_comprobante": p.cod_pedido
                     }
                 )
 
