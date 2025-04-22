@@ -13,6 +13,7 @@ class categoria_excepcion(CustomEnum):
     tipo = 'tipo'
     valor_positivo = 'valor_positivo'
     longitud = 'longitud'
+    digitos = 'digitos'
     valores_permitidos = 'valores_permitidos'
     no_requeridos = 'no_requeridos'
 

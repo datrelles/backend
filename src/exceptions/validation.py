@@ -8,6 +8,8 @@ class validation_error(Exception):
             match (self.categoria):
                 case categoria_excepcion.longitud.value:
                     self.longitud = kwargs['longitud']
+                case categoria_excepcion.digitos.value:
+                    self.enteros, self.decimales = kwargs['enteros'], kwargs['decimales']
                 case categoria_excepcion.valores_permitidos.value:
                     self.valores_permitidos = kwargs['valores_permitidos']
         elif 'faltantes' in kwargs:
@@ -34,7 +36,10 @@ class validation_error(Exception):
                 case categoria_excepcion.valor_positivo.value:
                     mensaje = f'{mensaje} solo admite valores positivos'
                 case categoria_excepcion.longitud.value:
-                    mensaje = f'{mensaje} debe contener máximo {self.longitud} caracteres'
+                    mensaje = f'{mensaje} permite hasta {self.longitud} caracteres'
+                case categoria_excepcion.digitos.value:
+                    aviso_decimales = f'y {self.decimales} decimales' if self.decimales else 'sin decimales'
+                    mensaje = f'{mensaje} permite hasta {self.enteros} dígitos enteros {aviso_decimales}'
                 case categoria_excepcion.valores_permitidos.value:
                     mensaje = f'{mensaje} no coincide con ninguno de los valores permitidos: {', '.join(self.valores_permitidos)}'
                 case _:
