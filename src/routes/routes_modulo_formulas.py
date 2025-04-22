@@ -1176,6 +1176,43 @@ def put_funcion(empresa, cod_funcion):
             {'mensaje': f'Ocurrió un error al actualizar la función'}), 500
 
 
+@formulas_b.route("/empresas/<empresa>/funciones/<cod_funcion>",
+                  methods=["DELETE"])
+@jwt_required()
+@cross_origin()
+def delete_funcion(empresa, cod_funcion):
+    try:
+        empresa = validar_number('empresa', empresa, 2)
+        cod_funcion = validar_cod('cod_funcion', cod_funcion)
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        funcion = db.session.get(st_funcion, (empresa, cod_funcion))
+        if not funcion:
+            mensaje = f'Función {cod_funcion} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        if db.session.query(st_parametro_funcion).filter(st_parametro_funcion.cod_funcion==cod_funcion).first():
+            mensaje = 'Existen parámetros vinculados a la función'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 409
+        db.session.delete(funcion)
+        db.session.commit()
+        mensaje = f'Se eliminó la función {cod_funcion}'
+        logger.info(mensaje)
+        return '', 204
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.exception(f'Ocurrió una excepción al eliminar la función: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error al eliminar la función'}), 500
+
+
 @formulas_b.route("/empresas/<empresa>/funciones/<cod_funcion>/parametros/<secuencia>", methods=["GET"])
 @jwt_required()
 @cross_origin()
