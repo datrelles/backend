@@ -1,7 +1,7 @@
 from flask_jwt_extended import jwt_required
 from flask import Blueprint, jsonify, request
 from src import oracle
-from src.models.postVenta import ar_taller_servicio_tecnico, ADprovincias, ADcantones, ar_duracion_reparacion, st_casos_postventa, ar_taller_servicio_usuario, st_casos_postventas_obs,st_casos_productos
+from src.models.postVenta import ar_taller_servicio_tecnico, ADprovincias, ADcantones, ar_duracion_reparacion, st_casos_postventa, ar_taller_servicio_usuario, st_casos_postventas_obs,st_casos_productos, vt_producto_modelo_backend
 from src.models.clientes import Cliente, st_politica_credito, persona, st_vendedor, cliente_hor
 from src.models.users import Usuario, tg_rol_usuario, tg_agencia, Orden
 from src.models.productos import Producto
@@ -1180,62 +1180,56 @@ def get_vendors_by_empresa_and_activo():
 @rmwa.route('/producto/despiece', methods=['GET'])
 @jwt_required()
 def get_productos_with_despiece():
-    """
-    Emulates:
-    SELECT A.COD_PRODUCTO, A.NOMBRE
-      FROM producto A
-     WHERE A.EMPRESA = :empresa
-       AND A.ACTIVO = :activo
-       AND EXISTS (
-           SELECT 1
-             FROM st_producto_despiece X
-            WHERE A.EMPRESA = X.EMPRESA
-              AND A.COD_PRODUCTO = X.COD_PRODUCTO
-       );
-
-    Takes 'empresa' and 'activo' from query params, for example:
-        GET /producto/despiece?empresa=20&activo=S
-    """
     try:
-        # Extract query parameters
+        # Parámetros
         empresa_param = request.args.get('empresa', type=int)
-        activo_param = request.args.get('activo', type=str)
-
-        # Basic validation of parameters
+        activo_param  = request.args.get('activo',  type=str)
         if empresa_param is None or not activo_param:
-            return jsonify({"error": "Missing or invalid 'empresa' or 'activo' query parameters"}), 400
+            return jsonify({
+                "error": "Missing or nvalid 'empresa' or 'activo' query parameters"
+            }), 400
 
-        # Build the subquery using exists(...)
-        subquery = (
-            db.session.query(st_producto_despiece)
-            .filter(
-                st_producto_despiece.empresa == Producto.empresa,
-                st_producto_despiece.cod_producto == Producto.cod_producto
+        # Agregación de modelos por producto usando LISTAGG
+        modelos_agg = func.listagg(
+            vt_producto_modelo_backend.modelo,
+            '/'
+        ).within_group(
+            vt_producto_modelo_backend.modelo
+        ).label('modelos_concat')
+
+        # Query: inner join Producto ⇆ VT_VIEW, filtrar y agrupar
+        q = (
+            db.session.query(
+                Producto.cod_producto.label("COD_PRODUCTO"),
+                Producto.nombre.label("NOMBRE"),
+                modelos_agg
             )
-            .exists()
-        )
-
-        # Main query
-        productos = (
-            Producto.query()
+            .join(
+                vt_producto_modelo_backend,
+                and_(
+                    vt_producto_modelo_backend.cod_producto == Producto.cod_producto,
+                    vt_producto_modelo_backend.empresa       == Producto.empresa
+                )
+            )
             .filter(
                 Producto.empresa == empresa_param,
-                Producto.activo == activo_param,
-                subquery  # This adds the EXISTS condition
+                Producto.activo  == activo_param
             )
-            .all()
+            .group_by(
+                Producto.cod_producto,
+                Producto.nombre
+            )
         )
 
-        # Build the response with COD_PRODUCTO and NOMBRE
-        data_list = []
-        for prod in productos:
-            data_list.append({
-                "COD_PRODUCTO": prod.cod_producto,
-                "NOMBRE": prod.nombre,
-                "modelo": prod.cod_modelo
+        resultado = []
+        for cod, nombre, modelos_concat in q:
+            resultado.append({
+                "COD_PRODUCTO": cod,
+                "NOMBRE":       nombre,
+                "MODELO":       modelos_concat or ""
             })
 
-        return jsonify(data_list), 200
+        return jsonify(resultado), 200
 
     except SQLAlchemyError as e:
         return jsonify({"error": str(e)}), 500
