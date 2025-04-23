@@ -1186,7 +1186,7 @@ def get_productos_with_despiece():
         activo_param  = request.args.get('activo',  type=str)
         if empresa_param is None or not activo_param:
             return jsonify({
-                "error": "Missing or invalid 'empresa' or 'activo' query parameters"
+                "error": "Missing or nvalid 'empresa' or 'activo' query parameters"
             }), 400
 
         # Agregación de modelos por producto usando LISTAGG
