@@ -331,13 +331,11 @@ def insert_motor():
         elif isinstance(data, dict):
             data = [data]
 
-        def normalize(text):
-            if not text:
-                return ''
-            return unidecode(text.strip().lower())
-
         insertados = 0
         duplicados = []
+
+        # Traemos todos los registros actuales
+        registros_actuales = db.session.query(Motor).join(TipoMotor).all()
 
         for item in data:
             nombre_tipo_motor = item.get("tipo_motor_nombre")
@@ -346,28 +344,33 @@ def insert_motor():
                 continue
 
             tipo_motor = db.session.query(TipoMotor).filter(
-                func.lower(func.trim(TipoMotor.nombre_tipo)) == normalize(nombre_tipo_motor)
+                func.lower(func.replace(func.replace(
+                    func.replace(func.replace(func.replace(TipoMotor.nombre_tipo, 'á', 'a'), 'é', 'e'), 'í', 'i'), 'ó',
+                    'o'), 'ú', 'u')) ==
+                normalize(nombre_tipo_motor)
             ).first()
 
             if not tipo_motor:
                 tipo_motor = TipoMotor(
-                    nombre_tipo=nombre_tipo_motor,
+                    nombre_tipo=nombre_tipo_motor.strip(),
                     descripcion_tipo_motor=item.get("descripcion_tipo_motor")
                 )
                 db.session.add(tipo_motor)
-                db.session.flush()  # obtiene el nuevo ID sin commit
+                db.session.flush()
 
-            existe = db.session.query(Motor).filter(
-                Motor.codigo_tipo_motor == tipo_motor.codigo_tipo_motor,
-                func.lower(func.trim(Motor.nombre_motor)) == normalize(item.get("nombre_motor")),
-                func.lower(func.trim(Motor.cilindrada)) == normalize(item.get("cilindrada")),
-                func.lower(func.trim(Motor.caballos_fuerza)) == normalize(item.get("caballos_fuerza")),
-                func.lower(func.trim(Motor.torque_maximo)) == normalize(item.get("torque_maximo")),
-                func.lower(func.trim(Motor.sistema_combustible)) == normalize(item.get("sistema_combustible")),
-                func.lower(func.trim(Motor.arranque)) == normalize(item.get("arranque")),
-                func.lower(func.trim(Motor.sistema_refrigeracion)) == normalize(item.get("sistema_refrigeracion")),
-                func.lower(func.trim(Motor.descripcion_motor)) == normalize(item.get("descripcion_motor"))
-            ).first()
+            # Comparar con registros existentes
+            existe = any(
+                r.codigo_tipo_motor == tipo_motor.codigo_tipo_motor and
+                normalize(r.nombre_motor) == normalize(item.get("nombre_motor")) and
+                normalize(r.cilindrada) == normalize(item.get("cilindrada")) and
+                normalize(r.caballos_fuerza) == normalize(item.get("caballos_fuerza")) and
+                normalize(r.torque_maximo) == normalize(item.get("torque_maximo")) and
+                normalize(r.sistema_combustible) == normalize(item.get("sistema_combustible")) and
+                normalize(r.arranque) == normalize(item.get("arranque")) and
+                normalize(r.sistema_refrigeracion) == normalize(item.get("sistema_refrigeracion")) and
+                normalize(r.descripcion_motor) == normalize(item.get("descripcion_motor"))
+                for r in registros_actuales
+            )
 
             if existe:
                 duplicados.append(item)
@@ -1294,7 +1297,7 @@ def get_or_create(model, defaults=None, **kwargs):
         db.session.flush()
         return instance
 
-#METODOS GET CATALOGO BENCH
+#METODOS GET CATALOGO BENCH ------------------------------------------------------------------------------>
 
 @bench.route('/get_chasis', methods=["GET"])
 @jwt_required()
@@ -1448,7 +1451,30 @@ def get_color():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ACTUALIZAR/ MODIFICAR DATOS
+@bench.route('/get_imagenes', methods=["GET"])
+@jwt_required()
+def get_imagenes():
+    try:
+        img = db.session.query(Imagenes).all()
+
+        resultado = []
+        for im in img:
+            resultado.append({
+                "codigo_imagen": im.codigo_imagen,
+                "path_imagen": im.path_imagen,
+                "descripcion_imagen": im.descripcion_imagen,
+                "usuario_crea": im.usuario_crea,
+                "usuario_modifica": im.usuario_modifica,
+                "fecha_creacion": im.fecha_creacion.isoformat() if im.fecha_creacion else None,
+                "fecha_modificacion": im.fecha_modificacion.isoformat() if im.fecha_modificacion else None
+            })
+
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ACTUALIZAR/ MODIFICAR DATOS -------------------------------------------------------------------------->
 
 @bench.route('/update_chasis/<int:codigo_chasis>', methods=["PUT"])
 @jwt_required()
@@ -1508,7 +1534,6 @@ def update_dimensiones(codigo_dim_peso):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
-
 
 @bench.route('/update_electronica/<int:codigo_electronica>', methods=["PUT"])
 @jwt_required()
@@ -1610,7 +1635,8 @@ def update_color(codigo_color_bench):
         return jsonify({"error": str(e)}), 500
 
 
-# registros masivos mediante plantilla excel
+
+# REGISTROS MASIVOS MEDIANTE PLANTILLA EXCEL ------------------------------------------------------------------------------>
 @bench.route('/upload_chasis_excel', methods=['POST'])
 @jwt_required()
 def upload_chasis_excel():
@@ -1809,9 +1835,12 @@ def upload_motor_excel():
         duplicados = []
 
         for _, row in df.iterrows():
-            tipo_motor_nombre = normalize(row['tipo_motor_nombre'])
+            nombre_tipo_motor = normalize(row['tipo_motor_nombre'])
             tipo_motor = db.session.query(TipoMotor).filter(
-                func.lower(func.replace(TipoMotor.nombre_tipo, 'á', 'a')) == tipo_motor_nombre
+                func.lower(func.replace(func.replace(
+                    func.replace(func.replace(func.replace(TipoMotor.nombre_tipo, 'á', 'a'), 'é', 'e'), 'í', 'i'), 'ó',
+                    'o'), 'ú', 'u')) ==
+                normalize(nombre_tipo_motor)
             ).first()
 
             if not tipo_motor:
