@@ -874,7 +874,7 @@ def post_factor_calculo_parametro(empresa, cod_proceso, cod_parametro):
                 data['operador'] = None
                 data['valor_fijo'] = None
             case tipo_operador.valor.value:
-                if data.get('valor_fijo') is None:
+                if data.get('valor_fijo') is None or data.get('valor_fijo') == "":
                     mensaje = 'Falta el valor fijo'
                     logger.error(mensaje)
                     return jsonify({'mensaje': mensaje}), 400
