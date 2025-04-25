@@ -9,7 +9,6 @@ from routes.web_services import web_services
 from routes.auth import auth
 from dotenv import load_dotenv, find_dotenv
 
-from src.models.catalogos_bench import Chasis, DimensionPeso
 from src.models.entities.User import User
 from flask_login import LoginManager
 from os import getenv
@@ -36,6 +35,7 @@ from src.routes.module_contabilidad import rmc
 from src.routes.warranty_module.warranty_module_routes import rmwa
 from src.routes.email_alert import aem, execute_send_alert_emails_for_role
 from src.routes.benchmarking.catalog_benchmarking import bench
+from src.routes.images.s3_upload import s3
 
 ###################################################
 
@@ -83,6 +83,7 @@ app.register_blueprint(rmc, url_prefix="/cont")
 app.register_blueprint(rmwa, url_prefix="/warranty")
 app.register_blueprint(net, url_prefix="/net")
 app.register_blueprint(bench, url_prefix="/bench")
+app.register_blueprint(s3, url_prefix="/s3")
 
 
 #############################################################################

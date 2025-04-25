@@ -1634,8 +1634,28 @@ def update_color(codigo_color_bench):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
+@bench.route('/update_imagen/<int:codigo_imagen>', methods=["PUT"])
+@jwt_required()
+def update_imagen(codigo_imagen):
+    try:
+        data = request.json
+        user = get_jwt_identity()
 
+        imagen = db.session.query(Imagenes).filter_by(codigo_imagen=codigo_imagen).first()
+        if not imagen:
+            return jsonify({"error": "Datos de imágenes no encontrados"}), 404
 
+        imagen.path_imagen = data.get("path_imagen", imagen.path_imagen)
+        imagen.descripcion_imagen = data.get("descripcion_imagen", imagen.descripcion_imagen)
+        imagen.usuario_modifica = user
+        imagen.fecha_modificacion = datetime.now()
+
+        db.session.commit()
+        return jsonify({"message": "Datos de path/ruta imagen actualizados correctamente", "codigo_imagen": imagen.codigo_imagen})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 # REGISTROS MASIVOS MEDIANTE PLANTILLA EXCEL ------------------------------------------------------------------------------>
 @bench.route('/upload_chasis_excel', methods=['POST'])
 @jwt_required()
