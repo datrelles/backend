@@ -1132,9 +1132,9 @@ def put_funcion(empresa, cod_funcion):
             mensaje = f'Empresa {empresa} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        funcion = db.session.get(st_funcion, (empresa, data['cod_funcion']))
+        funcion = db.session.get(st_funcion, (empresa, cod_funcion))
         if not funcion:
-            mensaje = f'Función {data['cod_funcion']} inexistente'
+            mensaje = f'Función {cod_funcion} inexistente'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
         if data.get('cod_modulo'):
@@ -1355,6 +1355,81 @@ def post_parametro_funcion(empresa, cod_funcion):
         logger.exception(f'Ocurrió una excepción al registrar el parámetro: {e}')
         return jsonify(
             {'mensaje': f'Ocurrió un error al registrar el parámetro'}), 500
+
+
+@formulas_b.route("/empresas/<empresa>/funciones/<cod_funcion>/parametros/<secuencia>", methods=["PUT"])
+@jwt_required()
+@cross_origin()
+def put_parametro_funcion(empresa, cod_funcion, secuencia):
+    try:
+        empresa = validar_number('empresa', empresa, 2)
+        cod_funcion = validar_varchar('cod_funcion', cod_funcion, 8)
+        secuencia = validar_number('secuencia', secuencia, 10)
+        data = {'empresa': empresa, 'cod_funcion': cod_funcion, 'secuencia': secuencia, **request.get_json()}
+        st_parametro_funcion(**data)
+        if not db.session.get(Empresa, empresa):
+            mensaje = f'Empresa {empresa} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        if not db.session.get(st_funcion, (empresa, cod_funcion)):
+            mensaje = f'Función {cod_funcion} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 409
+        parametro = db.session.get(st_parametro_funcion, (empresa, cod_funcion, secuencia))
+        if not parametro:
+            mensaje = f'Parámetro {secuencia} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 409
+        parametro.tipo_parametro = data['tipo_parametro']
+        match (data['tipo_parametro']):
+            case tipo_parametro.variable.value:
+                if not data.get('variable'):
+                    mensaje = 'Falta el nombre de la variable'
+                    logger.error(mensaje)
+                    return jsonify({'mensaje': mensaje}), 400
+                parametro.variable = data.get('variable')
+                parametro.fijo_caracter = None
+                parametro.fijo_numero = None
+            case tipo_parametro.caracter.value:
+                if not data.get('fijo_caracter'):
+                    mensaje = 'Falta el valor fijo del caracter'
+                    logger.error(mensaje)
+                    return jsonify({'mensaje': mensaje}), 400
+                parametro.fijo_caracter = data.get('fijo_caracter')
+                parametro.variable = None
+                parametro.fijo_numero = None
+            case tipo_parametro.numero.value:
+                if data.get('fijo_numero') is None or data.get('fijo_numero') == "":
+                    mensaje = 'Falta el valor fijo del número'
+                    logger.error(mensaje)
+                    return jsonify({'mensaje': mensaje}), 400
+                parametro.fijo_numero = data.get('fijo_numero')
+                parametro.variable = None
+                parametro.fijo_caracter = None
+        parametro.audit_usuario_mod = text('user')
+        parametro.audit_fecha_mod = text('sysdate')
+        db.session.commit()
+        mensaje = f'Se actualizó el parámetro {secuencia}'
+        logger.info(mensaje)
+        return '', 204
+    except BadRequest as e:
+        mensaje = 'Solicitud malformada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
+    except validation_error as e:
+        db.session.rollback()
+        logger.exception(e)
+        return jsonify({'mensaje': str(e)}), 400
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
+    except Exception as e:
+        db.session.rollback()
+        logger.exception(f'Ocurrió una excepción al actualizar el parámetro: {e}')
+        return jsonify(
+            {'mensaje': f'Ocurrió un error al actualizar el parámetro'}), 500
 
 
 @formulas_b.route("/empresas/<empresa>/funciones/<cod_funcion>/parametros/<secuencia>",
