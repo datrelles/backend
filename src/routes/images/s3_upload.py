@@ -118,3 +118,33 @@ def insert_path_imagen():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@s3.route('/eliminar-imagen', methods=["DELETE"])
+@jwt_required()
+def eliminar_imagen():
+    try:
+        data = request.get_json()
+        path_imagen = data.get("path_imagen")
+
+        if not path_imagen:
+            return jsonify({"error": "Falta path_imagen"}), 400
+
+        # Obtener el nombre del archivo desde la URL completa
+        filename = path_imagen.split("/")[-1]
+
+        # 1. Borrar en S3
+        s3_client.delete_object(Bucket=BUCKET_NAME, Key=filename)
+
+        # 2. Borrar en la base de datos
+        imagen = db.session.query(Imagenes).filter_by(path_imagen=path_imagen).first()
+        if imagen:
+            db.session.delete(imagen)
+            db.session.commit()
+        else:
+            return jsonify({"error": "Imagen no encontrada en base"}), 404
+
+        return jsonify({"message": "Imagen eliminada correctamente"})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
