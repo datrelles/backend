@@ -691,6 +691,9 @@ def put_parametro_proceso(empresa, cod_proceso, cod_parametro):
             mensaje = f'Se deben proporcionar ambas fechas o ninguna'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
+        else:
+            parametro_x_proceso.fecha_calculo_inicio = None
+            parametro_x_proceso.fecha_calculo_fin = None
         parametro_x_proceso.orden_imprime = data['orden_imprime']
         parametro_x_proceso.audit_usuario_mod = text('user')
         parametro_x_proceso.audit_fecha_mod = text('sysdate')
