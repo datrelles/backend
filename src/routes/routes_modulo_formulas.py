@@ -684,8 +684,13 @@ def put_parametro_proceso(empresa, cod_proceso, cod_parametro):
         parametro_x_proceso.orden_calculo = data.get('orden_calculo')
         if data.get('estado') is not None:
             parametro_x_proceso.estado = data['estado']
-        parametro_x_proceso.fecha_calculo_inicio = data.get('fecha_calculo_inicio')
-        parametro_x_proceso.fecha_calculo_fin = data.get('fecha_calculo_fin')
+        if data.get('fecha_calculo_inicio') and data.get('fecha_calculo_fin'):
+            parametro_x_proceso.fecha_calculo_inicio = data.get('fecha_calculo_inicio')
+            parametro_x_proceso.fecha_calculo_fin = data.get('fecha_calculo_fin')
+        elif data.get('fecha_calculo_inicio') or data.get('fecha_calculo_fin'):
+            mensaje = f'Se deben proporcionar ambas fechas o ninguna'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 409
         parametro_x_proceso.orden_imprime = data['orden_imprime']
         parametro_x_proceso.audit_usuario_mod = text('user')
         parametro_x_proceso.audit_fecha_mod = text('sysdate')

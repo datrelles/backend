@@ -5,7 +5,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, validates
 from src.config.database import db
 from src.enums.validaciones import tipo_estado, tipo_retorno, tipo_objeto, tipo_parametro
-from src.validations.alfanumericas import validar_varchar
+from src.validations.alfanumericas import validar_varchar, validar_fecha
 from src.validations.numericas import validar_number
 from src.models.custom_base import custom_base
 
@@ -183,6 +183,14 @@ class st_parametros_x_proceso(custom_base):
     @validates('estado')
     def validar_estado(self, key, value):
         return validar_estado(key, value)
+
+    @validates('fecha_calculo_inicio')
+    def validar_fecha_calculo_inicio(self, key, value):
+        return validar_fecha(key, value, es_requerido=False)
+
+    @validates('fecha_calculo_fin')
+    def validar_fecha_calculo_fin(self, key, value):
+        return validar_fecha(key, value, es_requerido=False)
 
     @validates('orden_imprime')
     def validar_orden_imprime(self, key, value):
