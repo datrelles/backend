@@ -13,6 +13,7 @@ from flask_login import LoginManager
 from os import getenv
 import dotenv
 from flask_cors import CORS, cross_origin
+from logging_config import configure_logging
 
 import os
 from datetime import datetime, timedelta
@@ -39,6 +40,9 @@ from src.routes.email_alert import aem, execute_send_alert_emails_for_role
 dotenv.load_dotenv()
 
 app = Flask(__name__)
+
+configure_logging(app)
+
 ####################mail################################
 
 app.config['MAIL_SERVER'] = 'smtp.office365.com'
