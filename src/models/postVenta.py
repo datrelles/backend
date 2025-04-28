@@ -1,6 +1,6 @@
 from sqlalchemy import (Column, DateTime,
                         Index, VARCHAR,
-                        NVARCHAR, text, CHAR,CLOB,
+                        NVARCHAR, text, CHAR,CLOB,BLOB,
                         Float, Unicode, ForeignKeyConstraint,
                         PrimaryKeyConstraint, CheckConstraint,  and_)
 from sqlalchemy.dialects.oracle import NUMBER
@@ -454,6 +454,30 @@ class st_types_mail_warranty(Base):
     asunto = Column(VARCHAR(200), nullable=False)
     cuerpo_html = Column(CLOB, nullable=False)
     activo = Column(NUMBER(1), default=1)
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class vt_producto_modelo_backend(Base):
+    __tablename__ = 'VT_PRODUCTO_MODELO_BACKEND'
+    __table_args__ = (
+        # Como no hay PK explícita en la vista, definimos una compuesta
+        PrimaryKeyConstraint(
+            'cod_producto',
+            'empresa',
+            'modelo',
+            name='PK_VT_PRODUCTO_MODELO_IMAGEN'
+        ),
+        # Ajusta el esquema si la vista está en 'JAHER' u otro
+        {'schema': 'STOCK'}
+    )
+
+    # Columnas según el SELECT de la vista
+    cod_producto    = Column(VARCHAR(14), nullable=False)
+    empresa         = Column(NUMBER(4),  nullable=False)
+    imagen_modelo   = Column(BLOB)  # D.FOTO suele ser un BLOB en Oracle
+    modelo          = Column(VARCHAR(200), nullable=False)
 
     @classmethod
     def query(cls):
