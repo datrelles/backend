@@ -14,6 +14,7 @@ from src.models.catalogos_bench import Chasis, DimensionPeso, ElectronicaOtros, 
     Color, Canal, MarcaRepuesto, ProductoExterno, Linea, Marca, ModeloSRI, ModeloHomologado, MatriculacionMarca, \
     ModeloComercial, Segmento, Version, ModeloVersionRepuesto, ClienteCanal, ModeloVersion, Benchmarking
 from src.models.productos import Producto
+from src.models.users import Empresa
 
 bench = Blueprint('routes_bench', __name__)
 logger = logging.getLogger(__name__)
@@ -567,39 +568,66 @@ def insert_canal():
 @jwt_required()
 def insert_marca_repuestos():
     try:
-        data = request.json
+        data = request.get_json()
         user = get_jwt_identity()
 
-        nombre_comercial = data.get("nombre_comercial")
-        estado = data.get("estado_marca_rep")
-        nombre_fabricante = data.get("nombre_fabricante")
+        if isinstance(data, dict):
+            data = [data]
 
-        if not nombre_comercial or estado not in [0, 1]:
-            return jsonify({"error": "Campos 'nombre_comercial' y 'estado_marca_rep' (0 o 1) son obligatorios"}), 400
+        registros_existentes = db.session.query(MarcaRepuesto).all()
 
-        if nombre_fabricante:
-            existe = db.session.query(MarcaRepuesto).filter(
-                func.lower(MarcaRepuesto.nombre_fabricante) == nombre_fabricante.lower()
-            ).first()
-            if existe:
-                return jsonify({"error": "Ya existe una marca con ese nombre de fabricante"}), 409
+        duplicados = []
+        insertados = 0
 
-        nuevo = MarcaRepuesto(
-            nombre_comercial=nombre_comercial,
-            estado_marca_rep=estado,
-            nombre_fabricante=nombre_fabricante,
-            usuario_crea=user,
-            fecha_creacion=datetime.now()
-        )
+        for item in data:
+            nombre_comercial = item.get("nombre_comercial")
+            estado = item.get("estado_marca_rep")
+            nombre_fabricante = item.get("nombre_fabricante")
 
-        db.session.add(nuevo)
+            if not nombre_comercial or estado is None:
+                duplicados.append(item)
+                continue
+
+            # Normalizar estado
+            if isinstance(estado, str):
+                estado_normalizado = estado.strip().lower()
+                if estado_normalizado == "activo":
+                    estado = 1
+                elif estado_normalizado == "inactivo":
+                    estado = 0
+                else:
+                    duplicados.append(item)
+                    continue
+
+            if nombre_fabricante:
+                existe = any(
+                    r.nombre_fabricante and r.nombre_fabricante.lower() == nombre_fabricante.lower()
+                    for r in registros_existentes
+                )
+                if existe:
+                    duplicados.append(item)
+                    continue
+
+            nuevo = MarcaRepuesto(
+                nombre_comercial=nombre_comercial,
+                estado_marca_rep=estado,
+                nombre_fabricante=nombre_fabricante,
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+
+            db.session.add(nuevo)
+            insertados += 1
+
+        if insertados == 0:
+            db.session.rollback()
+            return jsonify({"error": "No se insertó ningún registro válido"}), 409
+
         db.session.commit()
-        db.session.refresh(nuevo)
 
         return jsonify({
-            "message": "Marca de repuesto insertada correctamente",
-            "codigo_marca_rep": nuevo.codigo_marca_rep
-        })
+            "message": f"{insertados} registro(s) insertado(s), {len(duplicados)} duplicado(s) omitido(s)"
+        }), 201
 
     except Exception as e:
         db.session.rollback()
@@ -609,61 +637,81 @@ def insert_marca_repuestos():
 @jwt_required()
 def insert_producto_externo():
     try:
-        data = request.json
+        data = request.get_json()
         user = get_jwt_identity()
 
-        codigo = data.get("codigo_prod_externo")
-        marca_id = data.get("codigo_marca_rep")
-        nombre = data.get("nombre_producto")
-        estado = data.get("estado_prod_externo")
-        empresa = data.get("empresa")
+        if isinstance(data, dict):
+            data = [data]
 
-        # Validaciones obligatorias
-        if not all([codigo, marca_id, nombre, empresa]):
-            return jsonify({
-                "error": "Los campos 'codigo_prod_externo', 'codigo_marca_rep', 'nombre_producto' y 'empresa' son obligatorios"
-            }), 400
+        registros_existentes = db.session.query(ProductoExterno).all()
 
-        if estado not in [0, 1, None]:
-            return jsonify({"error": "El campo 'estado_prod_externo' debe ser 0 o 1"}), 400
+        ultimo_codigo = db.session.query(ProductoExterno.codigo_prod_externo)\
+            .order_by(ProductoExterno.codigo_prod_externo.desc()).first()
 
-        # Validar existencia de empresa
-        existe_empresa = db.session.execute(
-            text("SELECT 1 FROM empresa WHERE empresa = :empresa"),
-            {"empresa": empresa}
-        ).fetchone()
+        if ultimo_codigo and ultimo_codigo[0].startswith('PE'):
+            numero_actual = int(ultimo_codigo[0][2:])
+        else:
+            numero_actual = 0
 
-        if not existe_empresa:
-            return jsonify({"error": f"La empresa '{empresa}' no existe en la tabla EMPRESA"}), 404
+        insertados = 0
+        duplicados = []
 
-        # Validar unicidad combinada (case-insensitive)
-        existe = db.session.query(ProductoExterno).filter(
-            func.lower(ProductoExterno.nombre_producto) == nombre.lower(),
-            ProductoExterno.codigo_marca_rep == marca_id,
-            ProductoExterno.empresa == empresa
-        ).first()
+        for item in data:
+            codigo_marca_rep = item.get("codigo_marca_rep")
+            nombre_producto = item.get("nombre_producto")
+            estado = item.get("estado_prod_externo")
+            descripcion_producto = item.get("descripcion_producto")
+            empresa = item.get("empresa")
 
-        if existe:
-            return jsonify({
-                "error": "Ya existe un producto con ese nombre para la misma marca y empresa"
-            }), 409
+            if not codigo_marca_rep or not nombre_producto or empresa is None:
+                duplicados.append(item)
+                continue
 
-        nuevo = ProductoExterno(
-            codigo_prod_externo=codigo,
-            codigo_marca_rep=marca_id,
-            nombre_producto=nombre,
-            estado_prod_externo=estado if estado is not None else 1,
-            descripcion_producto=data.get("descripcion_producto"),
-            usuario_crea=user,
-            empresa=empresa,
-            fecha_creacion=datetime.now()
-        )
+            if isinstance(estado, str):
+                estado_normalizado = estado.strip().lower()
+                if estado_normalizado == "activo":
+                    estado = 1
+                elif estado_normalizado == "inactivo":
+                    estado = 0
+                else:
+                    duplicados.append(item)
+                    continue
 
-        db.session.add(nuevo)
+            # Validar duplicado
+            existe = any(
+                r.nombre_producto.lower() == nombre_producto.lower() and
+                r.codigo_marca_rep == codigo_marca_rep
+                for r in registros_existentes
+            )
+            if existe:
+                duplicados.append(item)
+                continue
+
+            numero_actual += 1
+            nuevo_codigo = f"PE{str(numero_actual).zfill(5)}"
+
+            nuevo = ProductoExterno(
+                codigo_prod_externo=nuevo_codigo,
+                codigo_marca_rep=codigo_marca_rep,
+                nombre_producto=nombre_producto,
+                estado_prod_externo=estado,
+                descripcion_producto=descripcion_producto,
+                empresa=empresa,
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+
+            db.session.add(nuevo)
+            insertados += 1
+
+        if not insertados:
+            return jsonify({"error": "Registros duplicados detectados, no se insertó nada."}), 409
+
         db.session.commit()
-        db.session.refresh(nuevo)
 
-        return jsonify({"message": "Producto externo insertado", "codigo": nuevo.codigo_prod_externo})
+        return jsonify({
+            "message": f"{insertados} registro(s) insertado(s), {len(duplicados)} duplicado(s) omitido(s)"
+        }), 201
 
     except Exception as e:
         db.session.rollback()
@@ -1592,6 +1640,58 @@ def get_canal():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@bench.route('/get_marca_repuestos', methods=["GET"])
+@jwt_required()
+def get_marca_repuestos():
+    try:
+        registros = db.session.query(MarcaRepuesto).order_by(MarcaRepuesto.nombre_comercial).all()
+
+        resultado = []
+        for r in registros:
+            resultado.append({
+                "codigo_marca_rep": r.codigo_marca_rep,
+                "nombre_comercial": r.nombre_comercial,
+                "estado_marca_rep": r.estado_marca_rep,
+                "nombre_fabricante": r.nombre_fabricante,
+                "usuario_crea": r.usuario_crea,
+                "usuario_modifica": r.usuario_modifica,
+                "fecha_creacion": r.fecha_creacion.isoformat() if r.fecha_creacion else None,
+                "fecha_modificacion": r.fecha_modificacion.isoformat() if r.fecha_modificacion else None
+            })
+
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/get_productos_externos', methods=["GET"])
+@jwt_required()
+def get_productos_externos():
+    try:
+        registros = db.session.query(ProductoExterno).order_by(ProductoExterno.nombre_producto).all()
+
+        resultado = []
+        for r in registros:
+            resultado.append({
+                "codigo_prod_externo": r.codigo_prod_externo,
+                "codigo_marca_rep": r.codigo_marca_rep,
+                "nombre_producto": r.nombre_producto,
+                "estado_prod_externo": r.estado_prod_externo,
+                "descripcion_producto": r.descripcion_producto,
+                "empresa": r.empresa,
+                "usuario_crea": r.usuario_crea,
+                "usuario_modifica": r.usuario_modifica,
+                "fecha_creacion": r.fecha_creacion.isoformat() if r.fecha_creacion else None,
+                "fecha_modificacion": r.fecha_modificacion.isoformat() if r.fecha_modificacion else None
+            })
+
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ACTUALIZAR/ MODIFICAR DATOS -------------------------------------------------------------------------->
 
 @bench.route('/update_chasis/<int:codigo_chasis>', methods=["PUT"])
@@ -1820,4 +1920,123 @@ def update_canal(codigo_canal):
 
     except Exception as e:
         db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_marca_repuesto/<int:codigo_marca_rep>', methods=["PUT"])
+@jwt_required()
+def update_marca_repuesto(codigo_marca_rep):
+    try:
+        data = request.get_json()
+        user = get_jwt_identity()
+
+        registro = db.session.query(MarcaRepuesto).filter_by(codigo_marca_rep=codigo_marca_rep).first()
+
+        if not registro:
+            return jsonify({"error": "Marca de repuesto no encontrada"}), 404
+
+        nombre_comercial = data.get("nombre_comercial", registro.nombre_comercial)
+        estado = data.get("estado_marca_rep", registro.estado_marca_rep)
+        nombre_fabricante = data.get("nombre_fabricante", registro.nombre_fabricante)
+
+        if isinstance(estado, str):
+            estado_normalizado = estado.strip().lower()
+            if estado_normalizado == "activo":
+                estado = 1
+            elif estado_normalizado == "inactivo":
+                estado = 0
+            else:
+                return jsonify({"error": f"Estado inválido: {estado}"}), 400
+
+        if nombre_fabricante and nombre_fabricante.lower() != (registro.nombre_fabricante or '').lower():
+            existe = db.session.query(MarcaRepuesto).filter(
+                func.lower(MarcaRepuesto.nombre_fabricante) == nombre_fabricante.lower(),
+                MarcaRepuesto.codigo_marca_rep != codigo_marca_rep
+            ).first()
+            if existe:
+                return jsonify({"error": "Ya existe una marca con ese nombre de fabricante"}), 409
+
+        registro.nombre_comercial = nombre_comercial
+        registro.estado_marca_rep = estado
+        registro.nombre_fabricante = nombre_fabricante
+        registro.usuario_modifica = user
+        registro.fecha_modificacion = datetime.now()
+
+        db.session.commit()
+
+        return jsonify({"message": "Marca de repuesto actualizada correctamente"})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_producto_externo/<string:codigo_prod_externo>', methods=["PUT"])
+@jwt_required()
+def update_producto_externo(codigo_prod_externo):
+    try:
+        data = request.get_json()
+        user = get_jwt_identity()
+
+        registro = db.session.query(ProductoExterno).filter_by(codigo_prod_externo=codigo_prod_externo).first()
+
+        if not registro:
+            return jsonify({"error": "Producto externo no encontrado"}), 404
+
+        nombre_producto = data.get("nombre_producto", registro.nombre_producto)
+        estado = data.get("estado_prod_externo", registro.estado_prod_externo)
+        descripcion_producto = data.get("descripcion_producto", registro.descripcion_producto)
+        empresa = data.get("empresa", registro.empresa)
+
+        if isinstance(estado, str):
+            estado_normalizado = estado.strip().lower()
+            if estado_normalizado == "activo":
+                estado = 1
+            elif estado_normalizado == "inactivo":
+                estado = 0
+            else:
+                return jsonify({"error": f"Estado inválido: {estado}"}), 400
+
+        nuevo_nombre = nombre_producto.lower()
+        nueva_marca = data.get("codigo_marca_rep", registro.codigo_marca_rep)
+
+        if (nuevo_nombre != registro.nombre_producto.lower()) or (nueva_marca != registro.codigo_marca_rep):
+            existe = db.session.query(ProductoExterno).filter(
+                ProductoExterno.nombre_producto.ilike(nombre_producto),
+                ProductoExterno.codigo_marca_rep == nueva_marca,
+                ProductoExterno.codigo_prod_externo != codigo_prod_externo
+            ).first()
+            if existe:
+                return jsonify({"error": "Ya existe un producto con ese nombre en la misma marca"}), 409
+
+        registro.nombre_producto = nombre_producto
+        registro.estado_prod_externo = estado
+        registro.descripcion_producto = descripcion_producto
+        registro.empresa = empresa
+        registro.usuario_modifica = user
+        registro.fecha_modificacion = datetime.now()
+
+        db.session.commit()
+
+        return jsonify({"message": "Producto externo actualizado correctamente"})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@bench.route('/get_empresas', methods=["GET"])
+@jwt_required()
+def get_empresas():
+    try:
+        registros = db.session.query(Empresa).order_by(Empresa.nombre).all()
+
+        resultado = []
+        for r in registros:
+            resultado.append({
+                "empresa": r.empresa,
+                "nombre": r.nombre
+            })
+
+        return jsonify(resultado)
+
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
