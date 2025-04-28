@@ -5,9 +5,9 @@ import dotenv
 dotenv.load_dotenv()
 
 
-def connection(user,password):
+def connection(user, password):
+    conexion = None
     try:
-
         conexion = cx_Oracle.connect(
             user=user,
             password=password,
@@ -18,7 +18,6 @@ def connection(user,password):
     else:
         print('Conectado a Oracle Database', conexion.version)
     return conexion
-
 
 def connection_test(user,password):
     try:
