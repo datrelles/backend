@@ -19,6 +19,7 @@ from src.models.tipo_aforo import StTipoAforo
 from src.models.comprobante_electronico import tc_doc_elec_recibidos
 from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, st_casos_tipo_problema, st_casos_url, ArCiudades, ADcantones, ADprovincias
 from src.models.despiece_repuestos import st_producto_despiece, st_despiece, st_producto_rep_anio, st_modelo_crecimiento_bi
+from src.routes.warranty_module.task import send_mail_postventa
 from src.models.images import st_material_imagen, st_despiece_d_imagen
 from src.config.database import db, engine, session
 from sqlalchemy import func, text, bindparam, Integer, event, desc
@@ -1489,7 +1490,7 @@ def crear_o_actualizar_registro_tracking_embarque(session):
                     ultimas_combinaciones_track_embarque[(codigo_bl_house, empresa)] = {'cod_item': cod_item}
 
 # Registrar el evento before_commit en la sesión de SQLAlchemy para crear o actualizar registros en StTrackingBl
-event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_embarque)
+#event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_embarque)
 
 @bp.route('/tipo_aforo' , methods = ['POST'])
 @jwt_required()
@@ -2145,7 +2146,7 @@ def crear_o_actualizar_registro_tracking_oc(session):
                     ultimas_combinaciones_track_oc[(cod_po, empresa)] = {'cod_item': cod_item}
 
 # Registrar el evento before_commit en la sesión de SQLAlchemy para crear o actualizar registros en StTracking
-event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_oc)
+#event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_oc)
 def secuencia_track_oc(cod_po):
     existe_cod_po = db.session.query(StTracking).filter_by(cod_po=cod_po).first()
 
@@ -3010,6 +3011,10 @@ def update_estado_casos():
             st_casos_postventa.empresa == 20,
             st_casos_postventa.cod_comprobante == params["cod_comprobante"]
         ).first()
+        flag_first_insertion=0
+        if int(update_status_st_casos_postventa.aplica_garantia) not in (1,0):
+            flag_first_insertion = 1
+
             #Get all record of the subcases by their cod_comprobante except the case that contains the cod_duration, in this case, cod_probelma refers to cod_duracion.
         all_subcases_status = st_casos_tipo_problema.query().filter(
             st_casos_tipo_problema.empresa == 20,
@@ -3038,6 +3043,14 @@ def update_estado_casos():
                  update_status_st_casos_postventa.aplica_garantia = params["status"]
                  update_status_st_casos_postventa.estado = 'C'
             db.session.commit()
+            # alert sms 'aplica garantia'
+            if int(update_status_st_casos_postventa.aplica_garantia) == 1 and update_status_st_casos_postventa.cod_pedido in (
+            None, '') and flag_first_insertion ==1:
+                send_mail_postventa(update_status_st_casos_postventa.cod_comprobante, 'P')
+            if int(update_status_st_casos_postventa.aplica_garantia) == 0 and update_status_st_casos_postventa.cod_pedido in (
+            None, '') and flag_first_insertion ==1:
+                send_mail_postventa(update_status_st_casos_postventa.cod_comprobante, 'NP')
+
             return jsonify({"message": "Estado actualizado correctamente"}), 200
         else:
             return jsonify({"error": "No se encontro los resultados"}), 500
@@ -3762,7 +3775,6 @@ def post_change_price_ecommerce():
         p_cod_politica = 48
         politica = get_politica_credito_ecommerce(db1, p_cod_politica)
         price = round(float(price) / politica, 3)
-        print(price)
         if not price:
             return jsonify({"error": "Missing price"}), 400
 

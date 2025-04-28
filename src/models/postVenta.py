@@ -1,6 +1,6 @@
 from sqlalchemy import (Column, DateTime,
                         Index, VARCHAR,
-                        NVARCHAR, text, CHAR,
+                        NVARCHAR, text, CHAR,CLOB,BLOB,
                         Float, Unicode, ForeignKeyConstraint,
                         PrimaryKeyConstraint, CheckConstraint,  and_)
 from sqlalchemy.dialects.oracle import NUMBER
@@ -287,11 +287,6 @@ class ar_taller_servicio_tecnico(Base):
         PrimaryKeyConstraint('codigo', 'codigo_empresa', name='PK_AR_TALLER_SERVICIO_TECNICO'),
         # Foreign Keys
         ForeignKeyConstraint(
-            ['codigo_ciudad', 'codigo_provincia'],
-            ['JAHER.AR_CIUDADES.CODIGO_CIUDAD', 'JAHER.AR_CIUDADES.CODIGO_PROVINCIA'],
-            name='FK_AR_TAL_SER_TEC_COD_CIU'
-        ),
-        ForeignKeyConstraint(
             ['codigo_empresa', 'codigo_marca'],
             ['MARCA.EMPRESA', 'MARCA.COD_MARCA'],
             name='FK_AR_TAL_SER_TEC_COD_MARCA'
@@ -442,6 +437,47 @@ class st_casos_productos(Base):
     cod_tipo_pedido = Column(VARCHAR(2))
     tipo_comprobante_lote = Column(VARCHAR(2))
     cod_comprobante_lote = Column(VARCHAR(9))
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class st_types_mail_warranty(Base):
+    __tablename__ = 'ST_TYPES_MAIL_WARRANTY'
+    __table_args__ = (
+        {'schema': 'stock'},
+    )
+
+    empresa = Column(NUMBER(4), primary_key=True, nullable=False)
+    type_modulo = Column(VARCHAR(30), primary_key=True, nullable=False)  # Ej: 'WARRANTY'
+    estado_caso = Column(VARCHAR(30), primary_key=True, nullable=False)  # Ej: 'APROBADO'
+    asunto = Column(VARCHAR(200), nullable=False)
+    cuerpo_html = Column(CLOB, nullable=False)
+    activo = Column(NUMBER(1), default=1)
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+class vt_producto_modelo_backend(Base):
+    __tablename__ = 'VT_PRODUCTO_MODELO_BACKEND'
+    __table_args__ = (
+        # Como no hay PK explícita en la vista, definimos una compuesta
+        PrimaryKeyConstraint(
+            'cod_producto',
+            'empresa',
+            'modelo',
+            name='PK_VT_PRODUCTO_MODELO_IMAGEN'
+        ),
+        # Ajusta el esquema si la vista está en 'JAHER' u otro
+        {'schema': 'STOCK'}
+    )
+
+    # Columnas según el SELECT de la vista
+    cod_producto    = Column(VARCHAR(14), nullable=False)
+    empresa         = Column(NUMBER(4),  nullable=False)
+    imagen_modelo   = Column(BLOB)  # D.FOTO suele ser un BLOB en Oracle
+    modelo          = Column(VARCHAR(200), nullable=False)
 
     @classmethod
     def query(cls):

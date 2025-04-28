@@ -1,7 +1,7 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, request, jsonify
 from numpy.core.defchararray import upper
-from flask_mail import Mail, Message
+from flask_mail import Mail
 import requests
 
 import oracle
@@ -14,11 +14,10 @@ from os import getenv
 import dotenv
 from flask_cors import CORS, cross_origin
 
-import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import jwt
-from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager
+from flask_jwt_extended import create_access_token, unset_jwt_cookies, jwt_required, JWTManager
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 ###################################################
@@ -32,8 +31,8 @@ from src.routes.routes_fin import bpfin
 from src.routes.routes_logis import bplog
 from src.routes.routes_com import bpcom
 from src.routes.module_contabilidad import rmc
-from src.routes.warranty_module import rmwa
-from src.routes.email_alert import aem, execute_send_alert_emails, execute_send_alert_emails_for_role
+from src.routes.warranty_module.warranty_module_routes import rmwa
+from src.routes.email_alert import aem, execute_send_alert_emails_for_role
 
 ###################################################
 
@@ -429,6 +428,7 @@ def scheduled_task():
 
 scheduler.add_job(scheduled_task, 'interval', minutes=30)
 scheduler.start()
+
 
 if __name__ == '__main__':
     load_dotenv(find_dotenv())
