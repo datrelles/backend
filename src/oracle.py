@@ -6,20 +6,18 @@ dotenv.load_dotenv()
 
 
 def connection(user, password):
-    conexion = None
+    ip = getenv("IP")
+    port = getenv("PORT")
+    sid = getenv("SID")
+
+    if not ip:
+        raise EnvironmentError("La variable de entorno 'IP' no está definida.")
+    if not port:
+        raise EnvironmentError("La variable de entorno 'PORT' no está definida.")
+    if not sid:
+        raise EnvironmentError("La variable de entorno 'SID' no está definida.")
+
     try:
-        ip = getenv("IP")
-        port = getenv("PORT")
-        sid = getenv("SID")
-
-        # Validaciones
-        if not ip:
-            raise ValueError("La variable de entorno 'IP' no está definida.")
-        if not port:
-            raise ValueError("La variable de entorno 'PORT' no está definida.")
-        if not sid:
-            raise ValueError("La variable de entorno 'SID' no está definida.")
-
         dsn = cx_Oracle.makedsn(ip, port, sid)
 
         conexion = cx_Oracle.connect(
@@ -28,11 +26,12 @@ def connection(user, password):
             dsn=dsn
         )
         print('Conectado a Oracle Database', conexion.version)
+        return conexion
 
-    except Exception as err:
+    except cx_Oracle.DatabaseError as err:
         print('Error en la conexión a la base de datos:', err)
+        raise
 
-    return conexion
 def connection_test(user,password):
     try:
 
