@@ -4,12 +4,10 @@ from datetime import datetime
 
 import pandas as pd
 import unicodedata
-
 from flask import request, Blueprint, jsonify
 from flask_cors import cross_origin
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, text
-from unidecode import unidecode
 from sqlalchemy.exc import IntegrityError
 from src.config.database import db
 from src.models.catalogos_bench import Chasis, DimensionPeso, ElectronicaOtros, Transmision, Imagenes, TipoMotor, Motor, \
@@ -236,20 +234,56 @@ def insert_electronica_otros():
 @jwt_required()
 def insert_transmision():
     try:
-        data = request.json
         user = get_jwt_identity()
+        data = request.get_json()
 
-        nuevo = Transmision(
-            caja_cambios=data.get("caja_cambios"),
-            descripcion_transmision=data.get("descripcion_transmision"),
-            usuario_crea=user,
-            fecha_creacion=datetime.now()
-        )
+        if isinstance(data, dict) and "transmision" in data:
+            data = data["transmision"]
+        elif isinstance(data, dict):
+            data = [data]
 
-        db.session.add(nuevo)
+        duplicados = []
+        insertados = 0
+
+        registros = db.session.query(Transmision).all()
+
+        for item in data:
+            existe = any(
+                normalize(r.caja_cambios) == normalize(item.get("caja_cambios")) and
+                normalize(r.descripcion_transmision) == normalize(item.get("descripcion_transmision"))
+                for r in registros
+            )
+
+            if existe:
+                duplicados.append(item)
+                continue
+
+            nuevo = Transmision(
+                caja_cambios=item.get("caja_cambios"),
+                descripcion_transmision=item.get("descripcion_transmision"),
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+
+            db.session.add(nuevo)
+            insertados += 1
+
         db.session.commit()
-        db.session.refresh(nuevo)
-        return jsonify({"message": "Transmision insertada", "codigo_transmision": nuevo.codigo_transmision})
+
+        if duplicados and len(duplicados) == len(data):
+            return jsonify({"error": "Todos los registros ya existen. No se insertó ninguno"}), 409
+        elif duplicados:
+            return jsonify({
+                "message": f"{len(data) - len(duplicados)} registro(s) insertado(s), {len(duplicados)} duplicado(s) omitido(s)"
+            }), 201
+        else:
+            return jsonify({"message": "Elementos insertados correctamente"}), 200
+
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({
+            "error": "Registro duplicado: ya existe un registro de electrónica con estos datos"
+        }), 409
 
     except Exception as e:
         db.session.rollback()
@@ -460,33 +494,70 @@ def insert_color():
 @jwt_required()
 def insert_canal():
     try:
-        data = request.json
         user = get_jwt_identity()
+        data = request.get_json()
 
-        nombre_canal = data.get("nombre_canal")
-        if not nombre_canal:
-            return jsonify({"error": "El nombre del canal es obligatorio"}), 400
+        if isinstance(data, dict) and "canal" in data:
+            data = data["canal"]
+        elif isinstance(data, dict):
+            data = [data]
 
-        nombre_existe = db.session.query(Canal).filter(
-            func.lower(Canal.nombre_canal) == nombre_canal.lower()
-        ).first()
+        duplicados = []
+        insertados = 0
 
-        if nombre_existe:
-            return jsonify({"error": "Este canal ya existe"}), 409
+        registros = db.session.query(Canal).all()
 
-        nuevo = Canal(
-            nombre_canal=nombre_canal,
-            estado_canal=data.get("estado_canal"),
-            descripcion_canal=data.get("descripcion_canal"),
-            usuario_crea=user,
-            fecha_creacion=datetime.now()
-        )
+        for item in data:
+            estado = item.get("estado_canal")
 
-        db.session.add(nuevo)
+
+            if isinstance(estado, str):
+                estado_normalizado = estado.strip().lower()
+                if estado_normalizado == "activo":
+                    estado = 1
+                elif estado_normalizado == "inactivo":
+                    estado = 0
+                else:
+                    return jsonify({'error': f"Estado inválido en el registro: {estado}"}), 400
+
+            existe = any(
+                normalize(r.nombre_canal) == normalize(item.get("nombre_canal")) and
+                normalize(str(r.estado_canal)) == normalize(str(estado)) and
+                normalize(r.descripcion_canal) == normalize(item.get("descripcion_canal"))
+                for r in registros
+            )
+
+            if existe:
+                duplicados.append(item)
+                continue
+
+            nuevo = Canal(
+                nombre_canal=item.get("nombre_canal"),
+                estado_canal=estado,
+                descripcion_canal=item.get("descripcion_canal"),
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+
+            db.session.add(nuevo)
+            insertados += 1
+
         db.session.commit()
-        db.session.refresh(nuevo)
 
-        return jsonify({"message": "Canal insertado correctamente", "codigo_canal": nuevo.codigo_canal})
+        if duplicados and len(duplicados) == len(data):
+            return jsonify({"error": "Todos los registros ya existen. No se insertó ninguno"}), 409
+        elif duplicados:
+            return jsonify({
+                "message": f"{len(data) - len(duplicados)} registro(s) insertado(s), {len(duplicados)} duplicado(s) omitido(s)"
+            }), 201
+        else:
+            return jsonify({"message": "Elementos insertados correctamente"}), 200
+
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({
+            "error": "Registro duplicado: ya existe un registro de canal con estos datos"
+        }), 409
 
     except Exception as e:
         db.session.rollback()
@@ -1474,6 +1545,53 @@ def get_imagenes():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@bench.route('/get_transmision', methods=["GET"])
+@jwt_required()
+def get_transmision():
+    try:
+        trans = db.session.query(Transmision).all()
+
+        resultado = []
+        for tr in trans:
+            resultado.append({
+                "codigo_transmision": tr.codigo_transmision,
+                "caja_cambios": tr.caja_cambios,
+                "descripcion_transmision": tr.descripcion_transmision,
+                "usuario_crea": tr.usuario_crea,
+                "usuario_modifica": tr.usuario_modifica,
+                "fecha_creacion": tr.fecha_creacion.isoformat() if tr.fecha_creacion else None,
+                "fecha_modificacion": tr.fecha_modificacion.isoformat() if tr.fecha_modificacion else None
+            })
+
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/get_canal', methods=["GET"])
+@jwt_required()
+def get_canal():
+    try:
+        canal = db.session.query(Canal).all()
+
+        resultado = []
+        for c in canal:
+            resultado.append({
+                "codigo_canal": c.codigo_canal,
+                "nombre_canal": c.nombre_canal,
+                "estado_canal": c.estado_canal,
+                "descripcion_canal": c.descripcion_canal,
+                "usuario_crea": c.usuario_crea,
+                "usuario_modifica": c.usuario_modifica,
+                "fecha_creacion": c.fecha_creacion.isoformat() if c.fecha_creacion else None,
+                "fecha_modificacion": c.fecha_modificacion.isoformat() if c.fecha_modificacion else None
+            })
+
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # ACTUALIZAR/ MODIFICAR DATOS -------------------------------------------------------------------------->
 
 @bench.route('/update_chasis/<int:codigo_chasis>', methods=["PUT"])
@@ -1656,263 +1774,50 @@ def update_imagen(codigo_imagen):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
-# REGISTROS MASIVOS MEDIANTE PLANTILLA EXCEL ------------------------------------------------------------------------------>
-@bench.route('/upload_chasis_excel', methods=['POST'])
+
+@bench.route('/update_transmision/<int:codigo_transmision>', methods=["PUT"])
 @jwt_required()
-def upload_chasis_excel():
+def update_transmision(codigo_transmision):
     try:
+        data = request.json
         user = get_jwt_identity()
 
-        if 'file' not in request.files:
-            return jsonify({'error': 'Archivo no enviado'}), 400
+        trans = db.session.query(Transmision).filter_by(codigo_transmision=codigo_transmision).first()
+        if not trans:
+            return jsonify({"error": "Datos no encontrados"}), 404
 
-        file = request.files['file']
-        df = pd.read_excel(file)
-
-        required_columns = [
-            'aros_rueda_delantera', 'aros_rueda_posterior',
-            'neumatico_delantero', 'neumatico_trasero',
-            'suspension_delantera', 'suspension_trasera',
-            'frenos_delanteros', 'frenos_traseros'
-        ]
-
-        for col in required_columns:
-            if col not in df.columns:
-                return jsonify({'error': f'Falta la columna requerida: {col}'}), 400
-
-        inserted = 0
-        for _, row in df.iterrows():
-            nuevo = Chasis(
-                aros_rueda_delantera=row['aros_rueda_delantera'],
-                aros_rueda_posterior=row['aros_rueda_posterior'],
-                neumatico_delantero=row['neumatico_delantero'],
-                neumatico_trasero=row['neumatico_trasero'],
-                suspension_delantera=row['suspension_delantera'],
-                suspension_trasera=row['suspension_trasera'],
-                frenos_delanteros=row['frenos_delanteros'],
-                frenos_traseros=row['frenos_traseros'],
-                usuario_crea=user,
-                fecha_creacion=datetime.now()
-            )
-            db.session.add(nuevo)
-            inserted += 1
+        trans.caja_cambios = data.get("caja_cambios", trans.caja_cambios)
+        trans.descripcion_transmision = data.get("descripcion_transmision", trans.descripcion_transmision)
+        trans.usuario_modifica = user
+        trans.fecha_modificacion = datetime.now()
 
         db.session.commit()
-        return jsonify({'message': f'{inserted} registros insertados correctamente'})
+        return jsonify({"message": "Datos actualizados correctamente", "codigo_transmision": trans.codigo_transmision})
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@bench.route('/upload_color_excel', methods=['POST'])
+@bench.route('/update_canal/<int:codigo_canal>', methods=["PUT"])
 @jwt_required()
-def upload_color_excel():
+def update_canal(codigo_canal):
     try:
+        data = request.json
         user = get_jwt_identity()
 
-        if 'file' not in request.files:
-            return jsonify({'error': 'Archivo no enviado'}), 400
+        canal = db.session.query(Canal).filter_by(codigo_canal=codigo_canal).first()
+        if not canal:
+            return jsonify({"error": "Datos no encontrados"}), 404
 
-        file = request.files['file']
-        df = pd.read_excel(file)
-
-        required_columns = [
-            'nombre_color'
-        ]
-
-        for col in required_columns:
-            if col not in df.columns:
-                return jsonify({'error': f'Falta la columna requerida: {col}'}), 400
-
-        inserted = 0
-        for _, row in df.iterrows():
-            nuevo = Color(
-                nombre_color=row['nombre_color'],
-                usuario_crea=user,
-                fecha_creacion=datetime.now()
-            )
-            db.session.add(nuevo)
-            inserted += 1
+        canal.nombre_canal = data.get("nombre_canal", canal.nombre_canal)
+        canal.estado_canal = data.get("estado_canal", canal.estado_canal)
+        canal.descripcion_canal = data.get("descripcion_canal", canal.descripcion_canal)
+        canal.usuario_modifica = user
+        canal.fecha_modificacion = datetime.now()
 
         db.session.commit()
-        return jsonify({'message': f'{inserted} registros insertados correctamente'})
+        return jsonify({"message": "Datos actualizados correctamente", "codigo_canal": canal.codigo_canal})
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-@bench.route('/upload_dimension_excel', methods=['POST'])
-@jwt_required()
-def upload_dimension_excel():
-    try:
-        user = get_jwt_identity()
-
-        if 'file' not in request.files:
-            return jsonify({'error': 'Archivo no enviado'}), 400
-
-        file = request.files['file']
-        df = pd.read_excel(file)
-
-        required_columns = [
-            'altura_total', 'longitud_total', 'ancho_total','peso_seco'
-        ]
-
-        for col in required_columns:
-            if col not in df.columns:
-                return jsonify({'error': f'Falta la columna requerida: {col}'}), 400
-
-        inserted = 0
-        for _, row in df.iterrows():
-            nuevo = DimensionPeso(
-                altura_total=row['altura_total'],
-                longitud_total=row['longitud_total'],
-                ancho_total=row['ancho_total'],
-                peso_seco=row['peso_seco'],
-                usuario_crea=user,
-                fecha_creacion=datetime.now()
-            )
-            db.session.add(nuevo)
-            inserted += 1
-
-        db.session.commit()
-        return jsonify({'message': f'{inserted} registros insertados correctamente'})
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-@bench.route('/upload_electronica_excel', methods=['POST'])
-@jwt_required()
-def upload_electronica_excel():
-    try:
-        user = get_jwt_identity()
-
-        if 'file' not in request.files:
-            return jsonify({'error': 'Archivo no enviado'}), 400
-
-        file = request.files['file']
-        df = pd.read_excel(file)
-
-        required_columns = [
-            'capacidad_combustible', 'tablero', 'luces_delanteras','luces_posteriores',
-            'garantia', 'velocidad_maxima'
-        ]
-
-        for col in required_columns:
-            if col not in df.columns:
-                return jsonify({'error': f'Falta la columna requerida: {col}'}), 400
-
-        inserted = 0
-        for _, row in df.iterrows():
-            nuevo = ElectronicaOtros(
-                capacidad_combustible=row['capacidad_combustible'],
-                tablero=row['tablero'],
-                luces_delanteras=row['luces_delanteras'],
-                luces_posteriores=row['luces_posteriores'],
-                garantia=row['garantia'],
-                velocidad_maxima=row['velocidad_maxima'],
-                usuario_crea=user,
-                fecha_creacion=datetime.now()
-            )
-            db.session.add(nuevo)
-            inserted += 1
-
-        db.session.commit()
-        return jsonify({'message': f'{inserted} registros insertados correctamente'})
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-@bench.route('/upload_motor_excel', methods=['POST'])
-@jwt_required()
-def upload_motor_excel():
-    try:
-        user = get_jwt_identity()
-
-        if 'file' not in request.files:
-            return jsonify({'error': 'Archivo no enviado'}), 400
-
-        file = request.files['file']
-        df = pd.read_excel(file)
-
-        required_columns = [
-            'tipo_motor_nombre', 'nombre_motor', 'cilindrada', 'caballos_fuerza',
-            'torque_maximo', 'sistema_combustible', 'arranque',
-            'sistema_refrigeracion', 'descripcion_motor'
-        ]
-
-        for col in required_columns:
-            if col not in df.columns:
-                return jsonify({'error': f'Falta la columna requerida: {col}'}), 400
-
-        from unidecode import unidecode
-
-        def normalize(value):
-            return unidecode(str(value).strip().lower()) if value else ""
-
-        insertados = 0
-        duplicados = []
-
-        for _, row in df.iterrows():
-            nombre_tipo_motor = normalize(row['tipo_motor_nombre'])
-            tipo_motor = db.session.query(TipoMotor).filter(
-                func.lower(func.replace(func.replace(
-                    func.replace(func.replace(func.replace(TipoMotor.nombre_tipo, 'á', 'a'), 'é', 'e'), 'í', 'i'), 'ó',
-                    'o'), 'ú', 'u')) ==
-                normalize(nombre_tipo_motor)
-            ).first()
-
-            if not tipo_motor:
-                duplicados.append({'error': 'Tipo de motor no encontrado', 'row': row.to_dict()})
-                continue
-
-            existe = db.session.query(Motor).filter(
-                func.lower(Motor.nombre_motor) == normalize(row['nombre_motor']),
-                func.lower(Motor.cilindrada) == normalize(row['cilindrada']),
-                func.lower(Motor.caballos_fuerza) == normalize(row['caballos_fuerza']),
-                func.lower(Motor.torque_maximo) == normalize(row['torque_maximo']),
-                func.lower(Motor.sistema_combustible) == normalize(row['sistema_combustible']),
-                func.lower(Motor.arranque) == normalize(row['arranque']),
-                func.lower(Motor.sistema_refrigeracion) == normalize(row['sistema_refrigeracion']),
-                func.lower(Motor.descripcion_motor) == normalize(row['descripcion_motor']),
-                Motor.codigo_tipo_motor == tipo_motor.codigo_tipo_motor
-            ).first()
-
-            if existe:
-                duplicados.append(row.to_dict())
-                continue
-
-            nuevo = Motor(
-                nombre_motor=row['nombre_motor'],
-                cilindrada=row['cilindrada'],
-                caballos_fuerza=row['caballos_fuerza'],
-                torque_maximo=row['torque_maximo'],
-                sistema_combustible=row['sistema_combustible'],
-                arranque=row['arranque'],
-                sistema_refrigeracion=row['sistema_refrigeracion'],
-                descripcion_motor=row['descripcion_motor'],
-                codigo_tipo_motor=tipo_motor.codigo_tipo_motor,
-                usuario_crea=user,
-                fecha_creacion=datetime.now()
-            )
-
-            db.session.add(nuevo)
-            insertados += 1
-
-        db.session.commit()
-
-        if insertados == 0:
-            return jsonify({
-                "error": "Todos los registros ya existen. No se insertó ninguno",
-                "omitidos": len(duplicados)
-            }), 409
-
-        return jsonify({
-            "message": f"{insertados} registro(s) insertado(s). {len(duplicados)} duplicado(s) omitido(s).",
-            "omitidos": len(duplicados)
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
