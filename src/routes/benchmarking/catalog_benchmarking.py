@@ -717,6 +717,7 @@ def insert_producto_externo():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
+
 @bench.route('/insert_linea', methods=["POST"])
 @jwt_required()
 def insert_linea():
@@ -724,24 +725,78 @@ def insert_linea():
         data = request.json
         user = get_jwt_identity()
 
+        # Verifica si es carga masiva (lista) o individual (dict)
+        if isinstance(data, list):
+            nuevas_lineas = []
+            errores = []
+            for i, item in enumerate(data):
+                nombre = item.get("nombre_linea")
+                estado = item.get("estado_linea")
+                descripcion = item.get("descripcion_linea", "")
+                padre_nombre = item.get("nombre_linea_padre")
+
+                if not nombre or estado not in [0, 1]:
+                    errores.append(f"Fila {i + 2}: Campos obligatorios faltantes")
+                    continue
+
+                # Validar unicidad (insensible a mayúsculas y espacios)
+                existe = db.session.query(Linea).filter(
+                    func.lower(func.trim(Linea.nombre_linea)) == func.lower(nombre.strip())
+                ).first()
+                if existe:
+                    errores.append(f"Fila {i + 2}: Línea '{nombre}' ya existe")
+                    continue
+
+                nueva = Linea(
+                    nombre_linea=nombre.strip(),
+                    estado_linea=estado,
+                    descripcion_linea=descripcion.strip(),
+                    usuario_crea=user,
+                    fecha_creacion=datetime.now()
+                )
+                db.session.add(nueva)
+                db.session.flush()  # Para obtener el ID
+
+                # Asignar código padre si existe
+                if padre_nombre:
+                    padre = db.session.query(Linea).filter(
+                        func.lower(func.trim(Linea.nombre_linea)) == func.lower(padre_nombre.strip())
+                    ).first()
+                    if padre:
+                        nueva.codigo_linea_padre = padre.codigo_linea
+                    else:
+                        nueva.codigo_linea_padre = nueva.codigo_linea  # Se convierte en su propio padre
+                else:
+                    nueva.codigo_linea_padre = nueva.codigo_linea
+
+                nuevas_lineas.append(nueva)
+
+            db.session.commit()
+            if errores and not nuevas_lineas:
+                return jsonify({"error": "No se insertó ningún registro válido", "detalles": errores}), 400
+            elif errores:
+                return jsonify({"message": "Se insertaron algunas líneas con errores", "detalles": errores}), 206
+            return jsonify({"message": f"{len(nuevas_lineas)} líneas insertadas correctamente"})
+
+        # Inserción individual desde formulario
         nombre = data.get("nombre_linea")
         estado = data.get("estado_linea")
-        padre_id = data.get("codigo_linea_padre")
+        descripcion = data.get("descripcion_linea", "")
+        padre_codigo = data.get("codigo_linea_padre")
 
         if not nombre or estado not in [0, 1]:
-            return jsonify({"error": "Los campos 'nombre_linea' y 'estado_linea' (0 o 1) son obligatorios"}), 400
+            return jsonify({"error": "Los campos 'nombre_linea' y 'estado_linea' son obligatorios"}), 400
 
-        # Validar nombre único (case-insensitive)
         existe = db.session.query(Linea).filter(
-            func.lower(Linea.nombre_linea) == nombre.lower()
+            func.lower(func.trim(Linea.nombre_linea)) == func.lower(nombre.strip())
         ).first()
         if existe:
-            return jsonify({"error": "Ya existe una línea con ese nombre"}), 409
+            return jsonify({"error": f"Ya existe una línea con el nombre '{nombre}'"}), 409
 
         nueva_linea = Linea(
-            nombre_linea=nombre,
+            nombre_linea=nombre.strip(),
             estado_linea=estado,
-            descripcion_linea=data.get("descripcion_linea"),
+            descripcion_linea=descripcion.strip(),
             usuario_crea=user,
             fecha_creacion=datetime.now()
         )
@@ -749,13 +804,11 @@ def insert_linea():
         db.session.add(nueva_linea)
         db.session.flush()
 
-        if not padre_id:
-            nueva_linea.codigo_linea_padre = nueva_linea.codigo_linea
+        if padre_codigo:
+            padre = db.session.query(Linea).filter_by(codigo_linea=padre_codigo).first()
+            nueva_linea.codigo_linea_padre = padre.codigo_linea if padre else nueva_linea.codigo_linea
         else:
-            padre = db.session.query(Linea).filter_by(codigo_linea=padre_id).first()
-            if not padre:
-                return jsonify({"error": "La línea padre no existe"}), 404
-            nueva_linea.codigo_linea_padre = padre_id
+            nueva_linea.codigo_linea_padre = nueva_linea.codigo_linea
 
         db.session.commit()
         return jsonify({"message": "Línea insertada correctamente", "codigo_linea": nueva_linea.codigo_linea})
@@ -1096,40 +1149,66 @@ def insert_segmento():
 @jwt_required()
 def insert_version():
     try:
-        data = request.json
+        data = request.get_json()
         user = get_jwt_identity()
 
-        nombre = data.get("nombre_version")
-        descripcion = data.get("descripcion_version")
-        estado = data.get("estado_version")
+        if isinstance(data, dict):
+            data = [data]
 
-        if not nombre or estado not in [0, 1]:
-            return jsonify({
-                "error": "Los campos 'nombre_version' y 'estado_version' (0 o 1) son obligatorios"
-            }), 400
+        registros_existentes = db.session.query(Version).all()
 
-        existe = db.session.query(Version).filter(
-            func.lower(Version.nombre_version) == nombre.lower()
-        ).first()
-        if existe:
-            return jsonify({"error": "Ya existe una versión con ese nombre"}), 409
+        duplicados = []
+        insertados = 0
 
-        nueva = Version(
-            nombre_version=nombre,
-            descripcion_version=descripcion,
-            estado_version=estado,
-            usuario_crea=user,
-            fecha_creacion=datetime.now()
-        )
+        for item in data:
+            nombre_version = item.get("nombre_version")
+            estado = item.get("estado_version")
+            descripcion_version = item.get("descripcion_version")
 
-        db.session.add(nueva)
+            if not nombre_version or estado is None:
+                duplicados.append(item)
+                continue
+
+            # Normalizar estado
+            if isinstance(estado, str):
+                estado_normalizado = estado.strip().lower()
+                if estado_normalizado == "activo":
+                    estado = 1
+                elif estado_normalizado == "inactivo":
+                    estado = 0
+                else:
+                    duplicados.append(item)
+                    continue
+
+            if nombre_version:
+                existe = any(
+                    r.nombre_version and r.nombre_version.lower() == nombre_version.lower()
+                    for r in registros_existentes
+                )
+                if existe:
+                    duplicados.append(item)
+                    continue
+
+            nuevo = Version(
+                nombre_version=nombre_version,
+                estado_version=estado,
+                descripcion_version=descripcion_version,
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+
+            db.session.add(nuevo)
+            insertados += 1
+
+        if insertados == 0:
+            db.session.rollback()
+            return jsonify({"error": "No se insertó, registro inválido o duplicado"}), 409
+
         db.session.commit()
-        db.session.refresh(nueva)
 
         return jsonify({
-            "message": "Versión insertada correctamente",
-            "codigo_version": nueva.codigo_version
-        })
+            "message": f"{insertados} registro(s) insertado(s), {len(duplicados)} duplicado(s) omitido(s)"
+        }), 201
 
     except Exception as e:
         db.session.rollback()
@@ -1640,6 +1719,35 @@ def get_canal():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@bench.route('/get_lineas', methods=["GET"])
+@jwt_required()
+def get_lineas():
+    try:
+        lineas = db.session.query(Linea).all()
+
+        resultado = []
+        for l in lineas:
+            padre = next((p.nombre_linea for p in lineas if p.codigo_linea == l.codigo_linea_padre), None)
+
+            resultado.append({
+                "codigo_linea": l.codigo_linea,
+                "codigo_linea_padre": l.codigo_linea_padre,
+                "nombre_linea": l.nombre_linea,
+                "nombre_linea_padre": padre if padre and padre != l.nombre_linea else None,
+                "estado_linea": l.estado_linea,
+                "descripcion_linea": l.descripcion_linea,
+                "usuario_crea": l.usuario_crea,
+                "usuario_modifica": l.usuario_modifica,
+                "fecha_creacion": l.fecha_creacion.isoformat() if l.fecha_creacion else None,
+                "fecha_modificacion": l.fecha_modificacion.isoformat() if l.fecha_modificacion else None
+            })
+
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 
 @bench.route('/get_marca_repuestos', methods=["GET"])
 @jwt_required()
@@ -1680,6 +1788,30 @@ def get_productos_externos():
                 "estado_prod_externo": r.estado_prod_externo,
                 "descripcion_producto": r.descripcion_producto,
                 "empresa": r.empresa,
+                "usuario_crea": r.usuario_crea,
+                "usuario_modifica": r.usuario_modifica,
+                "fecha_creacion": r.fecha_creacion.isoformat() if r.fecha_creacion else None,
+                "fecha_modificacion": r.fecha_modificacion.isoformat() if r.fecha_modificacion else None
+            })
+
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/get_version', methods=["GET"])
+@jwt_required()
+def get_version():
+    try:
+        registros = db.session.query(Version).order_by(Version.nombre_version).all()
+
+        resultado = []
+        for r in registros:
+            resultado.append({
+                "codigo_version": r.codigo_version,
+                "nombre_version": r.nombre_version,
+                "estado_version": r.estado_version,
+                "descripcion_version": r.descripcion_version,
                 "usuario_crea": r.usuario_crea,
                 "usuario_modifica": r.usuario_modifica,
                 "fecha_creacion": r.fecha_creacion.isoformat() if r.fecha_creacion else None,
@@ -2022,21 +2154,91 @@ def update_producto_externo(codigo_prod_externo):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-
-@bench.route('/get_empresas', methods=["GET"])
+@bench.route('/update_version/<int:codigo_version>', methods=["PUT"])
 @jwt_required()
-def get_empresas():
+def update_version(codigo_version):
     try:
-        registros = db.session.query(Empresa).order_by(Empresa.nombre).all()
+        data = request.get_json()
+        user = get_jwt_identity()
 
-        resultado = []
-        for r in registros:
-            resultado.append({
-                "empresa": r.empresa,
-                "nombre": r.nombre
-            })
+        registro = db.session.query(Version).filter_by(codigo_version=codigo_version).first()
 
-        return jsonify(resultado)
+        if not registro:
+            return jsonify({"error": "Versión no encontrada"}), 404
+
+        nombre_version = data.get("nombre_version", registro.nombre_version)
+        estado = data.get("estado_version", registro.estado_version)
+        descripcion_version = data.get("descripcion_version", registro.descripcion_version)
+
+        if isinstance(estado, str):
+            estado_normalizado = estado.strip().lower()
+            if estado_normalizado == "activo":
+                estado = 1
+            elif estado_normalizado == "inactivo":
+                estado = 0
+            else:
+                return jsonify({"error": f"Estado inválido: {estado}"}), 400
+
+        if nombre_version and nombre_version.lower() != (registro.nombre_version or '').lower():
+            existe = db.session.query(Version).filter(
+                func.lower(Version.nombre_version) == nombre_version.lower(),
+                Version.codigo_version != codigo_version
+            ).first()
+            if existe:
+                return jsonify({"error": "Ya existe una marca con ese nombre de fabricante"}), 409
+
+        registro.nombre_version = nombre_version
+        registro.estado_version = estado
+        registro.descripcion_version = descripcion_version
+        registro.usuario_modifica = user
+        registro.fecha_modificacion = datetime.now()
+
+        db.session.commit()
+
+        return jsonify({"message": "Versión actualizada correctamente"})
 
     except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_linea/<int:codigo_linea>', methods=["PUT"])
+@jwt_required()
+def update_linea(codigo_linea):
+    try:
+        data = request.json
+        user = get_jwt_identity()
+
+        linea = db.session.query(Linea).filter_by(codigo_linea=codigo_linea).first()
+        if not linea:
+            return jsonify({"error": "Línea no encontrada"}), 404
+
+        nuevo_nombre = data.get("nombre_linea")
+        if nuevo_nombre and nuevo_nombre.lower() != linea.nombre_linea.lower():
+            existe = db.session.query(Linea).filter(
+                func.lower(Linea.nombre_linea) == nuevo_nombre.lower(),
+                Linea.codigo_linea != codigo_linea
+            ).first()
+            if existe:
+                return jsonify({"error": "Ya existe una línea con ese nombre"}), 409
+            linea.nombre_linea = nuevo_nombre
+
+        linea.estado_linea = data.get("estado_linea", linea.estado_linea)
+        linea.descripcion_linea = data.get("descripcion_linea", linea.descripcion_linea)
+        linea.usuario_modifica = user
+        linea.fecha_modificacion = datetime.now()
+
+        codigo_padre = data.get("codigo_linea_padre")
+        if codigo_padre:
+            if codigo_padre == codigo_linea:
+                return jsonify({"error": "Una línea no puede ser su propio padre"}), 400
+            padre = db.session.query(Linea).filter_by(codigo_linea=codigo_padre).first()
+            if not padre:
+                return jsonify({"error": "La línea padre no existe"}), 404
+            linea.codigo_linea_padre = codigo_padre
+
+        db.session.commit()
+        return jsonify({"message": "Línea actualizada correctamente"})
+
+    except Exception as e:
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500
