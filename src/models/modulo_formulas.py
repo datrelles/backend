@@ -4,9 +4,8 @@ from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, validates
 from src.config.database import db
-from src.enums.validaciones import tipo_estado, tipo_retorno, tipo_objeto, tipo_parametro
-from src.validations.alfanumericas import validar_varchar, validar_fecha
-from src.validations.numericas import validar_number
+from src.enums import tipo_estado, tipo_retorno, tipo_objeto, tipo_parametro
+from src.validations import validar_varchar, validar_fecha, validar_number
 from src.models.custom_base import custom_base
 
 base = declarative_base(metadata=db.metadata)

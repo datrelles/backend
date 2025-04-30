@@ -1,5 +1,5 @@
-from src.exceptions.validation import validation_error
-from src.enums.validaciones import categoria_excepcion
+from src.exceptions import validation_error
+from src.enums import categoria_excepcion
 
 
 def validar_digitos(numero: int | float, digitos_enteros: int, digitos_decimales=0, es_exacta=False):

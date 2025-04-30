@@ -1,4 +1,4 @@
-from src.enums.validaciones import categoria_excepcion
+from src.enums import categoria_excepcion
 
 
 class validation_error(Exception):

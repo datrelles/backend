@@ -5,9 +5,8 @@ import logging
 from werkzeug.exceptions import BadRequest
 from src.config.database import db
 from sqlalchemy.exc import SQLAlchemyError
-from src.exceptions.validation import validation_error
-from src.validations.numericas import validar_number
-from src.validations.alfanumericas import validar_varchar
+from src.exceptions import validation_error
+from src.validations import validar_varchar, validar_number
 from src.models.users import Empresa
 from src.models.clientes import Cliente
 from src.models.modulo_importaciones import st_cabecera_consignacion, st_detalle_consignacion

@@ -1,4 +1,5 @@
-from src.exceptions.validation import categoria_excepcion, validation_error
+from src.exceptions import validation_error
+from src.enums import categoria_excepcion
 from datetime import datetime
 
 

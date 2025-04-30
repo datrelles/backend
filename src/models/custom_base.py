@@ -2,7 +2,7 @@ from collections.abc import Iterable
 
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
-from src.exceptions.validation import validation_error
+from src.exceptions import validation_error
 
 base = declarative_base(metadata=db.metadata)
 
