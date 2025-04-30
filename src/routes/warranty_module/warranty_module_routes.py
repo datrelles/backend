@@ -1450,14 +1450,11 @@ def existencia_lote():
             c.close()
 
 
-@rmwa.route('/obt_precio_actual', methods=['GET'])
+@rmwa.route('/obt_precio_actual_deprecated', methods=['GET'])
 @jwt_required()
 def get_costo():
     """
-    Minimal endpoint to retrieve cost directly from ks_producto_lote.obt_costo_lote
-    without using ROWTYPE objects.
-    Example query:
-      GET /get_costo?empresa=20&cod_producto=R150-FR0545&cod_comprobante_lote=F1B241126&tipo_comprobante_lote=LT
+    PACK NO USE IN  WARRANTY MODULE
     """
     c = None
     iva_ecuador = 15
@@ -1481,6 +1478,7 @@ def get_costo():
         # 2) Open the database connection
         c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur = c.cursor()
+        iva = get_iva_porcent(c)
 
         # 3) Minimal PL/SQL block calling ks_producto_lote.obt_costo_lote
         #    and returning the result in an output variable (out_cost).
@@ -1533,6 +1531,138 @@ def get_costo():
         if c:
             c.close()
 
+
+@rmwa.route('/obt_precio_actual', methods=['GET'])
+@jwt_required()
+def get_precio_actual():
+    """
+    Endpoint to retrieve price and value from ks_lista_precio.consulta_reg_precio_actual.
+    """
+    c = None
+    try:
+        # 1) Retrieve query parameters
+        empresa_str = request.args.get('empresa')
+        #agencia_str = request.args.get('agencia')
+        cod_producto = request.args.get('cod_producto')
+        #cod_unidad = request.args.get('cod_unidad')
+        #cod_cliente = request.args.get('cod_cliente')
+        #cod_forma_pago = request.args.get('cod_forma_pago')
+        #cod_divisa = request.args.get('cod_divisa')
+        #fecha_str = request.args.get('fecha')
+        #cod_forma_pago2 = request.args.get('cod_forma_pago2')
+        #lote_serie = request.args.get('lote_serie')
+        #tipo_lote = request.args.get('tipo_lote')
+        cod_comprobante_lote = request.args.get('cod_comprobante_lote')
+        tipo_comprobante_lote = request.args.get('tipo_comprobante_lote')
+
+        # Preparing data to adapt it to the previous front-end endpoint
+        agencia_str = 6 #DEFINIDA DEFAULT POR EL PACKAGE
+        cod_unidad = 'U'
+        cod_cliente = '0992594926001' #FACTURACION DE GARANTIAS, SIEMPRE AUTOCONSUMO
+        cod_forma_pago = 'CRE'# DEFAULT PARA AUTOCONSUMO
+        cod_divisa = 'DOLARES'
+        fecha_str = '24/4/2025'  # formato DD/MM/YYYY
+        cod_forma_pago2 = 'CRE'# DEFAULT PARA AUTOCONSUMO
+        lote_serie = cod_comprobante_lote
+        tipo_lote = tipo_comprobante_lote
+
+        # Validate required parameters
+        if not all([empresa_str, cod_producto,
+                    fecha_str, cod_forma_pago2,
+                    lote_serie, tipo_lote]):
+            return jsonify({"error": "Missing one or more required query parameters"}), 400
+
+        # Convert numeric parameters
+        try:
+            empresa = float(empresa_str)
+            agencia = float(agencia_str)
+        except ValueError:
+            return jsonify({"error": "'empresa' and 'agencia' must be numeric"}), 400
+
+        # 2) Open database connection
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = c.cursor()
+
+        # 3) PL/SQL block
+        plsql_block = """
+        DECLARE
+            v_result ks_lista_precio.subt_lista_precio;
+        BEGIN
+            v_result := ks_lista_precio.consulta_reg_precio_actual(
+                p_cod_empresa    => :p_cod_empresa,
+                p_cod_agencia    => :p_cod_agencia,
+                p_cod_producto   => :p_cod_producto,
+                p_cod_unidad     => :p_cod_unidad,
+                p_cod_cliente    => :p_cod_cliente,
+                p_cod_forma_pago => :p_cod_forma_pago,
+                p_cod_divisa     => :p_cod_divisa,
+                p_fecha          =>  SYSDATE,
+                p_cod_forma_pago2 => :p_cod_forma_pago2,
+                p_lote_serie     => :p_lote_serie,
+                p_tipo_lote      => :p_tipo_lote
+            );
+            :p_precio := v_result.precio;
+            :p_valor := v_result.valor;
+        END;
+        """
+
+        # 4) Bind output variables
+        out_precio_var = cur.var(cx_Oracle.NUMBER)
+        out_valor_var = cur.var(cx_Oracle.NUMBER)
+
+        # 5) Execute
+        cur.execute(plsql_block, {
+            "p_cod_empresa": empresa,
+            "p_cod_agencia": agencia,
+            "p_cod_producto": cod_producto,
+            "p_cod_unidad": cod_unidad,
+            "p_cod_cliente": cod_cliente,
+            "p_cod_forma_pago": cod_forma_pago,
+            "p_cod_divisa": cod_divisa,
+            "p_cod_forma_pago2": cod_forma_pago2,
+            "p_lote_serie": lote_serie,
+            "p_tipo_lote": tipo_lote,
+            "p_precio": out_precio_var,
+            "p_valor": out_valor_var
+        })
+
+        # 6) Get results
+        precio = out_precio_var.getvalue()
+        valor = out_valor_var.getvalue()
+
+        # 7) Close cursor
+        cur.close()
+
+        # 8) Return result
+        return jsonify({
+            "costo": float(precio) if precio is not None else None
+        }), 200
+
+    except Exception as e:
+        if c:
+            c.rollback()
+        print(f"Error in obt_precio_actual endpoint: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        if c:
+            c.close()
+
+
+def get_iva_porcent(c):
+    try:
+        cursor = db.cursor()
+        sql = """ 
+                select iva from empresa a
+                where a.empresa=20
+            """
+        cursor.execute(sql)
+        rows = cursor.fetchone()
+        cursor.close()
+        iva = rows[0]
+        return iva
+    except Exception as e:
+        return str(e)
 @rmwa.route('/generate_order_warranty', methods=['GET'])
 @jwt_required()
 def genera_pedido():

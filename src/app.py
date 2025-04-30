@@ -14,6 +14,7 @@ from flask_login import LoginManager
 from os import getenv
 import dotenv
 from flask_cors import CORS, cross_origin
+from logging_config import configure_logging
 
 import os
 from datetime import datetime, timedelta
@@ -42,6 +43,9 @@ from src.routes.images.s3_upload import s3
 dotenv.load_dotenv()
 
 app = Flask(__name__)
+
+configure_logging(app)
+
 ####################mail################################
 
 app.config['MAIL_SERVER'] = 'smtp.office365.com'
@@ -119,14 +123,18 @@ def create_token():
 
     try:
         db = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        if db is None:
+            return {"msg": "Error connecting to database"}, 500
+
         cursor = db.cursor()
         sql = """SELECT USUARIO_ORACLE, PASSWORD, NOMBRE FROM USUARIO 
                 WHERE USUARIO_ORACLE = '{}'""".format(user.upper())
         cursor.execute(sql)
-        db.close
         row = cursor.fetchone()
-        if row != None:
-            isCorrect = User.check_password(row[1],password)
+        db.close()
+
+        if row is not None:
+            isCorrect = User.check_password(row[1], password)
             if isCorrect:
                 access_token = create_access_token(identity=user)
                 return {"access_token": access_token}
