@@ -1943,15 +1943,41 @@ def get_marca():
         resultado = []
         for m in marca:
             resultado.append({
-                "codigo_marca": marca.codigo_marca,
-                "nombre_marca": marca.nombre_marca,
-                "estado_marca": marca.estado_marca
+                "codigo_marca": m.codigo_marca,
+                "nombre_marca": m.nombre_marca,
+                "estado_marca": m.estado_marca
             })
 
         return jsonify(resultado)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@bench.route('/get_modelos_comerciales', methods=['GET'])
+@jwt_required()
+def get_modelos_comerciales():
+    try:
+        registros = db.session.query(ModeloComercial).all()
+        resultados = []
+
+        for modelo in registros:
+            resultados.append({
+                "codigo_modelo_comercial": modelo.codigo_modelo_comercial,
+                "nombre_marca": modelo.marca.nombre_marca,
+                "nombre_modelo_homologado": modelo.modelo_homologado.modelo_sri.nombre_modelo,
+                "codigo_modelo_homologado": modelo.codigo_modelo_homologado,
+                "nombre_modelo": modelo.nombre_modelo,
+                "anio_modelo": modelo.anio_modelo,
+                "estado_modelo": modelo.estado_modelo,
+                "usuario_crea": modelo.usuario_crea,
+                "fecha_creacion": modelo.fecha_creacion.isoformat() if modelo.fecha_creacion else None,
+                "fecha_modificacion": modelo.fecha_modificacion.isoformat() if modelo.fecha_modificacion else None
+            })
+
+        return jsonify(resultados), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 # ACTUALIZAR/ MODIFICAR DATOS -------------------------------------------------------------------------->
 
@@ -2442,6 +2468,56 @@ def update_modelo_homologado(codigo):
 
         db.session.commit()
         return jsonify({"message": "Homologación actualizada correctamente"})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_modelo_comercial/<int:codigo>', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def update_modelo_comercial(codigo):
+    try:
+        user = get_jwt_identity()
+        data = request.get_json()
+
+        nombre_marca = data.get("nombre_marca")
+        codigo_modelo_homologado = data.get("codigo_modelo_homologado")
+        nombre_modelo = data.get("nombre_modelo")
+        anio_modelo = data.get("anio_modelo")
+        estado_modelo = data.get("estado_modelo")
+
+        if not nombre_marca or not nombre_modelo or not codigo_modelo_homologado or not anio_modelo:
+            return jsonify({"error": "Faltan campos obligatorios"}), 400
+
+        marca = db.session.query(Marca).filter(
+            func.lower(func.replace(func.trim(Marca.nombre_marca), '\u00A0', ' ')) == normalize(nombre_marca)
+        ).first()
+
+        if not marca:
+            marca = Marca(
+                nombre_marca=nombre_marca.strip(),
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+            db.session.add(marca)
+            db.session.flush()
+
+        modelo = db.session.query(ModeloComercial).filter_by(codigo_modelo_comercial=codigo).first()
+
+        if not modelo:
+            return jsonify({"error": "Modelo comercial no encontrado"}), 404
+
+        modelo.codigo_marca = marca.codigo_marca
+        modelo.codigo_modelo_homologado = codigo_modelo_homologado
+        modelo.nombre_modelo = nombre_modelo.strip()
+        modelo.anio_modelo = int(anio_modelo)
+        modelo.estado_modelo = int(estado_modelo) if estado_modelo in [0, 1] else 1
+        modelo.usuario_modifica = user
+        modelo.fecha_modificacion = datetime.now()
+
+        db.session.commit()
+        return jsonify({"message": "Modelo comercial actualizado correctamente"}), 200
 
     except Exception as e:
         db.session.rollback()

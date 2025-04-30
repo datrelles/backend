@@ -307,6 +307,28 @@ class Benchmarking(Base):
     codigo_marca = Column(NUMBER(14), nullable=False)
     codigo_benchmarking = Column(NUMBER(14), primary_key=True)
 
+class MatriculacionMarca(Base):
+    __tablename__ = 'st_matriculacion_marca'
+    __table_args__ = (
+        UniqueConstraint('placa', name='uq_st_matricula_placa'),
+        {'schema': 'stock'}
+    )
+
+    codigo_matricula_marca = Column(
+        NUMBER(14, 0),
+        Sequence('seq_st_matriculacion_marca', schema='stock'),
+        primary_key=True)
+    codigo_modelo_homologado = Column(
+        NUMBER(14),
+        ForeignKey('stock.st_modelo_homologado.codigo_modelo_homologado'), nullable=False
+    )
+    placa = Column(VARCHAR(15), nullable=False)
+    detalle_matriculacion = Column(VARCHAR(150))
+    usuario_crea = Column(VARCHAR(50), nullable=False)
+    usuario_modifica = Column(VARCHAR(50))
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
+
 class ModeloSRI(Base):
     __tablename__ = 'st_modelo_sri'
     __table_args__ = (
@@ -345,34 +367,7 @@ class ModeloHomologado(Base):
     fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
     fecha_modificacion = Column(DateTime, nullable=True)
 
-    modelo_sri = relationship(
-        "ModeloSRI",
-        backref="homologaciones",
-        lazy="joined"
-    )
-
-
-class MatriculacionMarca(Base):
-    __tablename__ = 'st_matriculacion_marca'
-    __table_args__ = (
-        UniqueConstraint('placa', name='uq_st_matricula_placa'),
-        {'schema': 'stock'}
-    )
-
-    codigo_matricula_marca = Column(
-        NUMBER(14, 0),
-        Sequence('seq_st_matriculacion_marca', schema='stock'),
-        primary_key=True)
-    codigo_modelo_homologado = Column(
-        NUMBER(14),
-        ForeignKey('stock.st_modelo_homologado.codigo_modelo_homologado'), nullable=False
-    )
-    placa = Column(VARCHAR(15), nullable=False)
-    detalle_matriculacion = Column(VARCHAR(150))
-    usuario_crea = Column(VARCHAR(50), nullable=False)
-    usuario_modifica = Column(VARCHAR(50))
-    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
-    fecha_modificacion = Column(DateTime, nullable=True)
+    modelo_sri = relationship("ModeloSRI", backref="homologaciones")
 
 class ModeloComercial(Base):
     __tablename__ = 'st_modelo_comercial'
@@ -405,6 +400,9 @@ class ModeloComercial(Base):
     usuario_modifica = Column(VARCHAR(50))
     fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
     fecha_modificacion = Column(DateTime, nullable=True)
+
+    marca = relationship("Marca", backref="modelos_comerciales")
+    modelo_homologado = relationship("ModeloHomologado", backref="modelos_comerciales")
 
 class Segmento(Base):
     __tablename__ = 'st_segmento'
