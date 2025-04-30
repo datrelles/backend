@@ -739,7 +739,6 @@ def insert_linea():
                     errores.append(f"Fila {i + 2}: Campos obligatorios faltantes")
                     continue
 
-                # Validar unicidad (insensible a mayúsculas y espacios)
                 existe = db.session.query(Linea).filter(
                     func.lower(func.trim(Linea.nombre_linea)) == func.lower(nombre.strip())
                 ).first()
@@ -755,9 +754,8 @@ def insert_linea():
                     fecha_creacion=datetime.now()
                 )
                 db.session.add(nueva)
-                db.session.flush()  # Para obtener el ID
+                db.session.flush()
 
-                # Asignar código padre si existe
                 if padre_nombre:
                     padre = db.session.query(Linea).filter(
                         func.lower(func.trim(Linea.nombre_linea)) == func.lower(padre_nombre.strip())
@@ -899,41 +897,52 @@ def insert_benchmarking():
 @jwt_required()
 def insert_modelo_sri():
     try:
-        data = request.json
+        data = request.get_json()
         user = get_jwt_identity()
 
-        nombre = data.get("nombre_modelo")
-        anio = data.get("anio_modelo")
-        estado = data.get("estado_modelo")
+        if isinstance(data, dict):
+            data = [data]
 
-        if not nombre or estado not in [0, 1] or not (1950 <= int(anio) <= 2100):
-            return jsonify({
-                "error": "Campos requeridos: nombre_modelo (string), anio_modelo (1950-2100), estado_modelo (0 o 1)"
-            }), 400
+        registros_existentes = db.session.query(ModeloSRI).all()
+        nombres_existentes = {r.nombre_modelo.lower() for r in registros_existentes}
 
-        # Validación de nombre único (case-insensitive)
-        existe = db.session.query(ModeloSRI).filter(
-            func.lower(ModeloSRI.nombre_modelo) == nombre.lower()
-        ).first()
-        if existe:
-            return jsonify({"error": "Ya existe un modelo con ese nombre"}), 409
+        duplicados = []
+        insertados = 0
 
-        nuevo = ModeloSRI(
-            nombre_modelo=nombre,
-            anio_modelo=anio,
-            estado_modelo=estado,
-            usuario_crea=user,
-            fecha_creacion=datetime.now()
-        )
+        for item in data:
+            nombre = item.get("nombre_modelo")
+            anio = item.get("anio_modelo")
+            estado = item.get("estado_modelo")
 
-        db.session.add(nuevo)
+            if not nombre or estado not in [0, 1] or not (1950 <= int(anio) <= 2100):
+                duplicados.append(item)
+                continue
+
+            if nombre.lower() in nombres_existentes:
+                duplicados.append(item)
+                continue
+
+            nuevo = ModeloSRI(
+                nombre_modelo=nombre,
+                anio_modelo=anio,
+                estado_modelo=estado,
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+
+            db.session.add(nuevo)
+            nombres_existentes.add(nombre.lower())
+            insertados += 1
+
+        if insertados == 0:
+            db.session.rollback()
+            return jsonify({"error": "No se insertó ningún registro válido"}), 409
+
         db.session.commit()
-        db.session.refresh(nuevo)
 
         return jsonify({
-            "message": "Modelo SRI insertado correctamente",
-            "codigo_modelo_sri": nuevo.codigo_modelo_sri
-        })
+            "message": f"{insertados} modelo(s) insertado(s), {len(duplicados)} duplicado(s) omitido(s)"
+        }), 201
 
     except Exception as e:
         db.session.rollback()
@@ -943,39 +952,71 @@ def insert_modelo_sri():
 @jwt_required()
 def insert_modelo_homologado():
     try:
-        data = request.json
+        data = request.get_json()
         user = get_jwt_identity()
 
-        codigo_sri = data.get("codigo_modelo_sri")
-        descripcion = data.get("descripcion_homologacion")
+        if isinstance(data, dict):
+            data = [data]
 
-        if not codigo_sri:
-            return jsonify({"error": "El campo 'codigo_modelo_sri' es obligatorio"}), 400
+        insertados, errores = 0, []
 
-        # Validar existencia del modelo SRI
-        modelo_sri = db.session.query(ModeloSRI).filter_by(codigo_modelo_sri=codigo_sri).first()
-        if not modelo_sri:
-            return jsonify({"error": "El código de modelo SRI no existe"}), 404
+        for item in data:
+            codigo_sri = item.get("codigo_modelo_sri")
+            nombre_modelo = item.get("nombre_modelo_sri", "").strip().lower()
+            descripcion = item.get("descripcion_homologacion", "").strip()
 
-        nuevo = ModeloHomologado(
-            codigo_modelo_sri=codigo_sri,
-            descripcion_homologacion=descripcion,
-            usuario_crea=user,
-            fecha_creacion=datetime.now()
-        )
+            modelo_sri = None
 
-        db.session.add(nuevo)
+            # 🔍 Resolver por nombre si no viene el código
+            if not codigo_sri and nombre_modelo:
+                modelo_sri = db.session.query(ModeloSRI).filter(
+                    func.lower(func.trim(func.replace(ModeloSRI.nombre_modelo, '\u00A0', ' '))) == nombre_modelo
+                ).first()
+                if modelo_sri:
+                    codigo_sri = modelo_sri.codigo_modelo_sri
+            elif codigo_sri:
+                modelo_sri = db.session.query(ModeloSRI).filter_by(codigo_modelo_sri=codigo_sri).first()
+
+            if not modelo_sri:
+                errores.append({**item, "error": "Modelo SRI no encontrado"})
+                continue
+
+            # Validación de duplicado
+            ya_existe = db.session.query(ModeloHomologado).filter_by(
+                codigo_modelo_sri=modelo_sri.codigo_modelo_sri
+            ).first()
+
+            if ya_existe:
+                errores.append({**item, "error": "Ya existe homologación para este modelo"})
+                continue
+
+            nuevo = ModeloHomologado(
+                codigo_modelo_sri=modelo_sri.codigo_modelo_sri,
+                descripcion_homologacion=descripcion,
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+
+            db.session.add(nuevo)
+            insertados += 1
+
+        if insertados == 0:
+            db.session.rollback()
+            return jsonify({
+                "error": "No se insertó ningún registro válido",
+                "detalles": errores
+            }), 409
+
         db.session.commit()
-        db.session.refresh(nuevo)
-
         return jsonify({
-            "message": "Modelo homologado insertado correctamente",
-            "codigo_modelo_homologado": nuevo.codigo_modelo_homologado
-        })
+            "message": f"{insertados} homologación(es) insertada(s), {len(errores)} con error(es)",
+            "errores": errores
+        }), 201
 
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
 
 @bench.route('/insert_matriculacion_marca', methods=["POST"])
 @jwt_required()
@@ -1026,60 +1067,87 @@ def insert_matriculacion_marca():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-@bench.route('/insert_modelo_comercial', methods=["POST"])
+@bench.route('/insert_modelo_comercial', methods=['POST'])
 @jwt_required()
+@cross_origin()
 def insert_modelo_comercial():
     try:
-        data = request.json
         user = get_jwt_identity()
+        data = request.get_json()
 
-        nombre = data.get("nombre_modelo")
-        anio = data.get("anio_modelo")
-        estado = data.get("estado_modelo")
-        marca = data.get("codigo_marca")
-        homologado = data.get("codigo_modelo_homologado")
+        if isinstance(data, dict) and "modelo" in data:
+            data = data["modelo"]
+        elif isinstance(data, dict):
+            data = [data]
 
-        # Validaciones obligatorias
-        if not all([nombre, anio, estado is not None, marca, homologado]):
-            return jsonify({"error": "Todos los campos son obligatorios"}), 400
-        if not (1950 <= int(anio) <= 2100):
-            return jsonify({"error": "El año debe estar entre 1950 y 2100"}), 400
-        if estado not in [0, 1]:
-            return jsonify({"error": "El estado debe ser 0 o 1"}), 400
+        insertados = 0
+        duplicados = []
 
-        # Validar existencia de marca
-        if not db.session.query(Marca).filter_by(codigo_marca=marca).first():
-            return jsonify({"error": "La marca no existe"}), 404
+        # Traemos todos los registros actuales
+        registros_actuales = db.session.query(ModeloComercial).all()
 
-        # Validar existencia de modelo homologado
-        if not db.session.query(ModeloHomologado).filter_by(codigo_modelo_homologado=homologado).first():
-            return jsonify({"error": "El modelo homologado no existe"}), 404
+        for item in data:
+            nombre_marca = item.get("nombre_marca")
+            nombre_modelo = item.get("nombre_modelo")
+            codigo_modelo_homologado = item.get("codigo_modelo_homologado")
+            anio_modelo = item.get("anio_modelo")
+            estado_modelo = item.get("estado_modelo")
 
-        # Validar unicidad de nombre
-        existe = db.session.query(ModeloComercial).filter(
-            func.lower(ModeloComercial.nombre_modelo) == nombre.lower()
-        ).first()
-        if existe:
-            return jsonify({"error": "Ya existe un modelo con ese nombre"}), 409
+            if not nombre_marca or not nombre_modelo or not codigo_modelo_homologado or not anio_modelo:
+                duplicados.append({**item, "error": "Faltan campos obligatorios"})
+                continue
 
-        nuevo = ModeloComercial(
-            codigo_marca=marca,
-            codigo_modelo_homologado=homologado,
-            nombre_modelo=nombre,
-            anio_modelo=anio,
-            estado_modelo=estado,
-            uusuario_crea=user,
-            fecha_creacion=datetime.now()
-        )
+            # Buscar o crear marca
+            marca = db.session.query(Marca).filter(
+                func.lower(func.replace(func.trim(Marca.nombre_marca), '\u00A0', ' ')) == normalize(nombre_marca)
+            ).first()
 
-        db.session.add(nuevo)
+            if not marca:
+                marca = Marca(
+                    nombre_marca=nombre_marca.strip(),
+                    usuario_crea=user,
+                    fecha_creacion=datetime.now()
+                )
+                db.session.add(marca)
+                db.session.flush()  # Obtener codigo_marca
+
+            # Verificar duplicado exacto
+            existe = any(
+                r.codigo_marca == marca.codigo_marca and
+                normalize(r.nombre_modelo) == normalize(nombre_modelo) and
+                r.codigo_modelo_homologado == codigo_modelo_homologado and
+                r.anio_modelo == int(anio_modelo)
+                for r in registros_actuales
+            )
+
+            if existe:
+                duplicados.append({**item, "error": "Ya existe este modelo comercial para esa marca"})
+                continue
+
+            nuevo = ModeloComercial(
+                codigo_marca=marca.codigo_marca,
+                codigo_modelo_homologado=codigo_modelo_homologado,
+                nombre_modelo=nombre_modelo.strip(),
+                anio_modelo=int(anio_modelo),
+                estado_modelo=int(estado_modelo) if estado_modelo in [0, 1] else 1,
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+
+            db.session.add(nuevo)
+            insertados += 1
+
         db.session.commit()
-        db.session.refresh(nuevo)
 
-        return jsonify({
-            "message": "Modelo comercial insertado correctamente",
-            "codigo_modelo_comercial": nuevo.codigo_modelo_comercial
-        })
+        if duplicados and len(duplicados) == len(data):
+            return jsonify({"error": "Todos los registros ya existen", "detalles": duplicados}), 409
+        elif duplicados:
+            return jsonify({
+                "message": f"{insertados} insertado(s), {len(duplicados)} duplicado(s) omitido(s)",
+                "detalles": duplicados
+            }), 201
+        else:
+            return jsonify({"message": "Modelo comercial insertado correctamente"}), 200
 
     except Exception as e:
         db.session.rollback()
@@ -1748,7 +1816,6 @@ def get_lineas():
         return jsonify({"error": str(e)}), 500
 
 
-
 @bench.route('/get_marca_repuestos', methods=["GET"])
 @jwt_required()
 def get_marca_repuestos():
@@ -1823,6 +1890,68 @@ def get_version():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@bench.route('/get_modelos_sri', methods=["GET"])
+@jwt_required()
+def get_modelos_sri():
+    try:
+        modelos = db.session.query(ModeloSRI).order_by(ModeloSRI.codigo_modelo_sri.desc()).all()
+        resultado = [
+            {
+                "codigo_modelo_sri": m.codigo_modelo_sri,
+                "nombre_modelo": m.nombre_modelo,
+                "anio_modelo": m.anio_modelo,
+                "estado_modelo": m.estado_modelo,
+                "usuario_crea": m.usuario_crea,
+                "usuario_modifica": m.usuario_modifica,
+                "fecha_creacion": m.fecha_creacion.isoformat() if m.fecha_creacion else None,
+                "fecha_modificacion": m.fecha_modificacion.isoformat() if m.fecha_modificacion else None
+            }
+            for m in modelos
+        ]
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/get_modelos_homologados', methods=["GET"])
+@jwt_required()
+def get_modelos_homologados():
+    try:
+        homologados = db.session.query(ModeloHomologado).join(ModeloSRI).all()
+        resultado = [
+            {
+                "codigo_modelo_homologado": h.codigo_modelo_homologado,
+                "codigo_modelo_sri": h.codigo_modelo_sri,
+                "nombre_modelo_sri": h.modelo_sri.nombre_modelo if h.modelo_sri else None,
+                "descripcion_homologacion": h.descripcion_homologacion,
+                "usuario_crea": h.usuario_crea,
+                "usuario_modifica": h.usuario_modifica,
+                "fecha_creacion": h.fecha_creacion.isoformat() if h.fecha_creacion else None,
+                "fecha_modificacion": h.fecha_modificacion.isoformat() if h.fecha_modificacion else None
+            }
+            for h in homologados
+        ]
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/get_marca', methods=["GET"])
+@jwt_required()
+def get_marca():
+    try:
+        marca = db.session.query(Marca).all()
+
+        resultado = []
+        for m in marca:
+            resultado.append({
+                "codigo_marca": marca.codigo_marca,
+                "nombre_marca": marca.nombre_marca,
+                "estado_marca": marca.estado_marca
+            })
+
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ACTUALIZAR/ MODIFICAR DATOS -------------------------------------------------------------------------->
 
@@ -2238,6 +2367,81 @@ def update_linea(codigo_linea):
 
         db.session.commit()
         return jsonify({"message": "Línea actualizada correctamente"})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_modelo_sri/<int:codigo_modelo_sri>', methods=["PUT"])
+@jwt_required()
+def update_modelo_sri(codigo_modelo_sri):
+    try:
+        data = request.get_json()
+        user = get_jwt_identity()
+
+        modelo = db.session.query(ModeloSRI).filter_by(codigo_modelo_sri=codigo_modelo_sri).first()
+        if not modelo:
+            return jsonify({"error": "Modelo no encontrado"}), 404
+
+        nombre = data.get("nombre_modelo")
+        anio = data.get("anio_modelo")
+        estado = data.get("estado_modelo")
+
+        # Validar campos si existen en el payload
+        if nombre:
+            existe_nombre = db.session.query(ModeloSRI).filter(
+                func.lower(ModeloSRI.nombre_modelo) == nombre.lower(),
+                ModeloSRI.codigo_modelo_sri != codigo_modelo_sri
+            ).first()
+            if existe_nombre:
+                return jsonify({"error": "Ya existe otro modelo con ese nombre"}), 409
+            modelo.nombre_modelo = nombre
+
+        if anio and (1950 <= int(anio) <= 2100):
+            modelo.anio_modelo = int(anio)
+
+        if estado in [0, 1]:
+            modelo.estado_modelo = estado
+
+        modelo.usuario_modifica = user
+        modelo.fecha_modificacion = datetime.now()
+
+        db.session.commit()
+
+        return jsonify({"message": "Modelo actualizado correctamente"})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_modelo_homologado/<int:codigo>', methods=["PUT"])
+@jwt_required()
+def update_modelo_homologado(codigo):
+    try:
+        data = request.get_json()
+        user = get_jwt_identity()
+
+        modelo = db.session.query(ModeloHomologado).filter_by(codigo_modelo_homologado=codigo).first()
+        if not modelo:
+            return jsonify({"error": "Registro no encontrado"}), 404
+
+        nuevo_codigo_sri = data.get("codigo_modelo_sri")
+        descripcion = data.get("descripcion_homologacion")
+
+        if nuevo_codigo_sri:
+            existe = db.session.query(ModeloSRI).filter_by(codigo_modelo_sri=nuevo_codigo_sri).first()
+            if not existe:
+                return jsonify({"error": "Código modelo SRI inválido"}), 400
+            modelo.codigo_modelo_sri = nuevo_codigo_sri
+
+        if descripcion is not None:
+            modelo.descripcion_homologacion = descripcion
+
+        modelo.usuario_modifica = user
+        modelo.fecha_modificacion = datetime.now()
+
+        db.session.commit()
+        return jsonify({"message": "Homologación actualizada correctamente"})
 
     except Exception as e:
         db.session.rollback()

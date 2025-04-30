@@ -7,6 +7,8 @@ from src.config.database import db
 from datetime import datetime
 from sqlalchemy import Sequence
 from sqlalchemy import text, DateTime, func
+from sqlalchemy.orm import relationship
+
 
 Base = declarative_base(metadata = db.metadata)
 
@@ -342,6 +344,13 @@ class ModeloHomologado(Base):
     usuario_modifica = Column(VARCHAR(50))
     fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
     fecha_modificacion = Column(DateTime, nullable=True)
+
+    modelo_sri = relationship(
+        "ModeloSRI",
+        backref="homologaciones",
+        lazy="joined"
+    )
+
 
 class MatriculacionMarca(Base):
     __tablename__ = 'st_matriculacion_marca'
