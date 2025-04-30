@@ -14,7 +14,8 @@ from src.models.catalogos_bench import Chasis, DimensionPeso, ElectronicaOtros, 
     Color, Canal, MarcaRepuesto, ProductoExterno, Linea, Marca, ModeloSRI, ModeloHomologado, MatriculacionMarca, \
     ModeloComercial, Segmento, Version, ModeloVersionRepuesto, ClienteCanal, ModeloVersion, Benchmarking
 from src.models.productos import Producto
-from src.models.users import Empresa
+
+
 
 bench = Blueprint('routes_bench', __name__)
 logger = logging.getLogger(__name__)
@@ -1157,7 +1158,6 @@ def insert_modelo_comercial():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-
 @bench.route('/insert_segmento', methods=["POST"])
 @jwt_required()
 def insert_segmento():
@@ -1287,63 +1287,82 @@ def insert_version():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-@bench.route('/insert_modelo_version_repuesto', methods=["POST"])
+@bench.route('/insert_modelo_version_repuesto', methods=['POST'])
 @jwt_required()
+@cross_origin()
 def insert_modelo_version_repuesto():
     try:
-        data = request.json
+        user = get_jwt_identity()
+        data = request.get_json()
 
-        required_fields = [
-            "codigo_prod_externo", "codigo_version", "empresa", "cod_producto",
-            "codigo_modelo_comercial", "codigo_marca", "precio_producto_modelo",
-            "precio_venta_distribuidor"
-        ]
-        if not all(data.get(f) is not None for f in required_fields):
-            return jsonify({"error": f"Faltan campos requeridos: {required_fields}"}), 400
+        # ✔ Acepta tanto un único objeto como una lista
+        if isinstance(data, dict):
+            if "modelo" in data:  # En caso de que venga como { "modelo": [...] }
+                data = data["modelo"]
+            else:
+                data = [data]
 
-        # Validar claves foráneas
-        if not db.session.query(ProductoExterno).filter_by(codigo_prod_externo=data["codigo_prod_externo"]).first():
-            return jsonify({"error": "Producto externo no existe"}), 404
+        insertados, errores = 0, []
 
-        if not db.session.query(Version).filter_by(codigo_version=data["codigo_version"]).first():
-            return jsonify({"error": "Versión no existe"}), 404
+        registros_actuales = db.session.query(ModeloVersionRepuesto).all()
 
-        if not db.session.query(ModeloComercial).filter_by(
-            codigo_modelo_comercial=data["codigo_modelo_comercial"],
-            codigo_marca=data["codigo_marca"]
-        ).first():
-            return jsonify({"error": "Modelo comercial no existe para esa marca"}), 404
+        for item in data:
+            try:
+                # Validaciones básicas
+                required = ["codigo_prod_externo", "codigo_version", "empresa", "cod_producto", "codigo_modelo_comercial", "codigo_marca", "precio_producto_modelo", "precio_venta_distribuidor"]
+                if not all(item.get(k) for k in required):
+                    errores.append({**item, "error": "Faltan campos obligatorios"})
+                    continue
 
-        if not db.session.query(Producto).filter_by(
-            empresa=data["empresa"],
-            cod_producto=data["cod_producto"]
-        ).first():
-            return jsonify({"error": "Producto no existe en esa empresa"}), 404
+                # Verificar duplicado exacto
+                existe = any(
+                    r.empresa == item["empresa"] and
+                    r.cod_producto == item["cod_producto"] and
+                    r.codigo_modelo_comercial == item["codigo_modelo_comercial"] and
+                    r.codigo_marca == item["codigo_marca"]
+                    for r in registros_actuales
+                )
 
-        nuevo = ModeloVersionRepuesto(
-            codigo_prod_externo=data["codigo_prod_externo"],
-            codigo_version=data["codigo_version"],
-            empresa=data["empresa"],
-            cod_producto=data["cod_producto"],
-            codigo_modelo_comercial=data["codigo_modelo_comercial"],
-            codigo_marca=data["codigo_marca"],
-            descripcion=data.get("descripcion"),
-            precio_producto_modelo=data["precio_producto_modelo"],
-            precio_venta_distribuidor=data["precio_venta_distribuidor"]
-        )
+                if existe:
+                    errores.append({**item, "error": "Ya existe este registro para ese modelo y producto"})
+                    continue
 
-        db.session.add(nuevo)
+                nuevo = ModeloVersionRepuesto(
+                    codigo_prod_externo=item["codigo_prod_externo"],
+                    codigo_version=item["codigo_version"],
+                    empresa=item["empresa"],
+                    cod_producto=item["cod_producto"],
+                    codigo_modelo_comercial=item["codigo_modelo_comercial"],
+                    codigo_marca=item["codigo_marca"],
+                    descripcion=item.get("descripcion", ""),
+                    precio_producto_modelo=item["precio_producto_modelo"],
+                    precio_venta_distribuidor=item["precio_venta_distribuidor"]
+                )
+
+                db.session.add(nuevo)
+                insertados += 1
+
+            except Exception as e:
+                errores.append({**item, "error": str(e)})
+                continue
+
         db.session.commit()
-        db.session.refresh(nuevo)
 
-        return jsonify({
-            "message": "Repuesto relacionado con versión insertado correctamente",
-            "codigo_mod_vers_repuesto": nuevo.codigo_mod_vers_repuesto
-        })
+        if insertados == 0:
+            return jsonify({"error": "No se insertaron registros válidos", "detalles": errores}), 409
+        elif errores:
+            return jsonify({
+                "message": f"{insertados} insertado(s), {len(errores)} con error(es)",
+                "detalles": errores
+            }), 201
+        else:
+            return jsonify({"message": "Registros insertados correctamente"}), 200
 
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+
 
 @bench.route('/insert_cliente_canal', methods=["POST"])
 @jwt_required()

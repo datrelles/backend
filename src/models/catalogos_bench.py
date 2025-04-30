@@ -1,13 +1,14 @@
 # coding: utf-8
-from sqlalchemy import Column, Index, VARCHAR, ForeignKey, text, DateTime, CheckConstraint, UniqueConstraint, \
-    ForeignKeyConstraint
+from sqlalchemy import Column, Index, VARCHAR, ForeignKey, CheckConstraint, UniqueConstraint, \
+    ForeignKeyConstraint, PrimaryKeyConstraint
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
-from datetime import datetime
+
 from sqlalchemy import Sequence
-from sqlalchemy import text, DateTime, func
+from sqlalchemy import DateTime, func
 from sqlalchemy.orm import relationship
+from src.models.productos import Producto
 
 
 Base = declarative_base(metadata = db.metadata)
@@ -450,6 +451,14 @@ class Version(Base):
 class ModeloVersionRepuesto(Base):
     __tablename__ = 'st_modelo_version_repuesto'
     __table_args__ = (
+        PrimaryKeyConstraint(
+            'codigo_mod_vers_repuesto',
+            'cod_producto',
+            'codigo_modelo_comercial',
+            'codigo_marca',
+            'empresa',
+            name='pk_st_mod_vers_repuesto'
+        ),
         ForeignKeyConstraint(
             ['codigo_modelo_comercial', 'codigo_marca'],
             ['stock.st_modelo_comercial.codigo_modelo_comercial', 'stock.st_modelo_comercial.codigo_marca'],
@@ -463,16 +472,23 @@ class ModeloVersionRepuesto(Base):
         {'schema': 'stock'}
     )
 
-    codigo_mod_vers_repuesto = Column(NUMBER(14), Sequence('seq_st_modelo_version_repuesto', schema='stock'), primary_key=True)
+    codigo_mod_vers_repuesto = Column(NUMBER(14, 0), Sequence('seq_st_modelo_version_repuesto', schema='stock'), nullable=False)
     codigo_prod_externo = Column(VARCHAR(14), ForeignKey('stock.st_producto_externo.codigo_prod_externo'), nullable=False)
     codigo_version = Column(NUMBER(14), ForeignKey('stock.st_version.codigo_version'), nullable=False)
-    empresa = Column(NUMBER(2), nullable=False, primary_key=True)
-    cod_producto = Column(VARCHAR(14), nullable=False, primary_key=True)
-    codigo_modelo_comercial = Column(NUMBER(14), nullable=False, primary_key=True)
-    codigo_marca = Column(NUMBER(14), nullable=False, primary_key=True)
+    empresa = Column(NUMBER(2), nullable=False)
+    cod_producto = Column(VARCHAR(14), nullable=False)
+    codigo_modelo_comercial = Column(NUMBER(14), nullable=False)
+    codigo_marca = Column(NUMBER(14), nullable=False)
     descripcion = Column(VARCHAR(150))
-    precio_producto_modelo = Column(NUMBER(10), nullable=False)
-    precio_venta_distribuidor = Column(NUMBER(10), nullable=False)
+    precio_producto_modelo = Column(NUMBER(10,2), nullable=False)
+    precio_venta_distribuidor = Column(NUMBER(10,2), nullable=False)
+
+    producto_externo = relationship("ProductoExterno", backref="repuestos_version")
+    version = relationship("Version", backref="repuestos_version")
+    modelo_comercial = relationship("ModeloComercial", backref="repuestos_version")
+    producto = relationship(Producto, backref="repuestos_modelo_version")
+
+
 
 class ClienteCanal(Base):
     __tablename__ = 'st_cliente_canal'
