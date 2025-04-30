@@ -8,7 +8,7 @@ from sqlalchemy import text, and_, func
 from src.decorators import validate_json, handle_exceptions
 from src.enums import tipo_operador, operador, tipo_parametro
 from src.models.modulo_formulas import st_proceso, st_formula, st_parametro, st_parametros_x_proceso, \
-    st_factores_calculo_parametros, st_funcion, validar_cod, tg_sistema, st_parametro_funcion
+    st_factores_calculo_parametros, st_funcion, validar_cod, tg_sistema, st_parametro_funcion, validar_estado
 from src.validations import validar_varchar, validar_number
 from src.models.users import Empresa
 from src.models.clientes import Cliente
@@ -454,20 +454,32 @@ def put_parametro_proceso(empresa, cod_proceso, cod_parametro, data):
         mensaje = f'El parámetro {cod_parametro} no está vinculado al proceso {cod_proceso}'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
-    parametro_x_proceso.cod_formula = data.get('cod_formula')
     parametro_x_proceso.orden_calculo = data.get('orden_calculo')
-    if data.get('estado') is not None:
-        parametro_x_proceso.estado = data['estado']
-    if data.get('fecha_calculo_inicio') and data.get('fecha_calculo_fin'):
-        parametro_x_proceso.fecha_calculo_inicio = data.get('fecha_calculo_inicio')
-        parametro_x_proceso.fecha_calculo_fin = data.get('fecha_calculo_fin')
-    elif data.get('fecha_calculo_inicio') or data.get('fecha_calculo_fin'):
-        mensaje = f'Se deben proporcionar ambas fechas o ninguna'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 409
+    estado = validar_estado('estado', data.get('estado'), False)
+    if estado:
+        parametro_x_proceso.estado = estado
+    cod_formula = validar_cod('cod_formula', data.get('cod_formula'), False)
+    if cod_formula:
+        if not db.session.get(st_formula, (empresa, cod_formula)):
+            mensaje = f'Fórmula {cod_formula} inexistente'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        if data.get('fecha_calculo_inicio') and data.get('fecha_calculo_fin'):
+            parametro_x_proceso.fecha_calculo_inicio = data.get('fecha_calculo_inicio')
+            parametro_x_proceso.fecha_calculo_fin = data.get('fecha_calculo_fin')
+        elif data.get('fecha_calculo_inicio') or data.get('fecha_calculo_fin'):
+            mensaje = f'Se deben proporcionar ambas fechas o ninguna'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 400
+        else:
+            parametro_x_proceso.fecha_calculo_inicio = None
+            parametro_x_proceso.fecha_calculo_fin = None
     else:
-        parametro_x_proceso.fecha_calculo_inicio = None
-        parametro_x_proceso.fecha_calculo_fin = None
+        if data.get('fecha_calculo_inicio') or data.get('fecha_calculo_fin'):
+            mensaje = 'Solo se deben proporcionar fechas cuando se ha especificado una fórmula'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 400
+    parametro_x_proceso.cod_formula = cod_formula
     parametro_x_proceso.orden_imprime = data['orden_imprime']
     parametro_x_proceso.audit_usuario_mod = text('user')
     parametro_x_proceso.audit_fecha_mod = text('sysdate')

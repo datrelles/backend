@@ -21,7 +21,7 @@ def validar_cod(clave, valor, es_requerido=True):
 
 
 def validar_estado(clave, valor, es_requerido=True):
-    return validar_number(clave, valor, 1, valores_permitidos=tipo_estado.values())
+    return validar_number(clave, valor, 1, es_requerido=es_requerido, valores_permitidos=tipo_estado.values())
 
 
 class st_proceso(custom_base):
