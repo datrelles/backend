@@ -488,8 +488,6 @@ class ModeloVersionRepuesto(Base):
     modelo_comercial = relationship("ModeloComercial", backref="repuestos_version")
     producto = relationship(Producto, backref="repuestos_modelo_version")
 
-
-
 class ClienteCanal(Base):
     __tablename__ = 'st_cliente_canal'
     __table_args__ = (
