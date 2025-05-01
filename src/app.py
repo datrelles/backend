@@ -314,6 +314,10 @@ def logout():
     unset_jwt_cookies(response)
     return response
 
+@app.route("/health")
+def health_check():
+    return "OK", 200
+
 @app.route("/gen_jwt", methods=["POST"])
 @cross_origin()
 @jwt_required()
