@@ -1344,17 +1344,15 @@ def insert_modelo_version_repuesto():
                 errores.append({"error": "Alguna FK no existe", "repuestos": item})
                 continue
 
-            existe = any(
-                r.cod_producto == cod_producto and
-                r.codigo_marca == codigo_marca and
-                r.codigo_modelo_comercial == codigo_modelo_comercial and
-                r.empresa == empresa and
-                r.codigo_mod_vers_repuesto is not None
-                for r in registros_actuales
-            )
+            existe = db.session.query(ModeloVersionRepuesto).filter(
+                ModeloVersionRepuesto.cod_producto == cod_producto,
+                ModeloVersionRepuesto.codigo_marca == codigo_marca,
+                ModeloVersionRepuesto.codigo_modelo_comercial == codigo_modelo_comercial,
+                ModeloVersionRepuesto.empresa == empresa
+            ).first()
 
             if existe:
-                duplicados.append({"error": "Duplicado exacto", "repuestos": item})
+                duplicados.append({"error": "Registro duplicado", "repuestos": item})
                 continue
 
             nuevo = ModeloVersionRepuesto(
@@ -2648,49 +2646,47 @@ def update_modelo_comercial(codigo):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-@bench.route('/update_modelo_version_repuesto', methods=['PUT'])
+@bench.route('/update_modelo_version_repuesto/<int:codigo>', methods=['PUT', 'OPTIONS'])
 @jwt_required()
-@cross_origin()
-def update_modelo_version_repuesto():
+@cross_origin(methods=["PUT", "OPTIONS"])
+def update_modelo_version_repuesto(codigo):
     try:
         data = request.get_json()
 
-        cod_producto = data.get("cod_producto")
-        codigo_marca = data.get("codigo_marca")
-        codigo_modelo_comercial = data.get("codigo_modelo_comercial")
-        empresa = data.get("empresa")
-        codigo_mod_vers_repuesto = data.get("codigo_mod_vers_repuesto")
+        # Validaciones mínimas requeridas
+        required_fields = ["cod_producto", "codigo_marca", "codigo_modelo_comercial", "empresa",
+                           "codigo_version", "codigo_prod_externo", "descripcion",
+                           "precio_producto_modelo", "precio_venta_distribuidor"]
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Campo obligatorio faltante: {field}"}), 400
 
-        if not all([cod_producto, codigo_marca, codigo_modelo_comercial, empresa, codigo_mod_vers_repuesto]):
-            return jsonify({"error": "Faltan campos clave para identificar el registro"}), 400
-
-        registro = db.session.query(ModeloVersionRepuesto).filter_by(
-            cod_producto=cod_producto,
-            codigo_marca=codigo_marca,
-            codigo_modelo_comercial=codigo_modelo_comercial,
-            empresa=empresa,
-            codigo_mod_vers_repuesto=codigo_mod_vers_repuesto
-        ).first()
-
+        registro = db.session.query(ModeloVersionRepuesto).filter_by(codigo_mod_vers_repuesto=codigo).first()
         if not registro:
             return jsonify({"error": "Registro no encontrado"}), 404
 
-        producto = db.session.query(Producto).filter_by(empresa=empresa, cod_producto=cod_producto).first()
+        # Validar FKs antes de asignar
+        producto = db.session.query(Producto).filter_by(empresa=data["empresa"], cod_producto=data["cod_producto"]).first()
         modelo = db.session.query(ModeloComercial).filter_by(
-            codigo_modelo_comercial=codigo_modelo_comercial,
-            codigo_marca=codigo_marca
+            codigo_modelo_comercial=data["codigo_modelo_comercial"],
+            codigo_marca=data["codigo_marca"]
         ).first()
-        version = db.session.query(Version).filter_by(codigo_version=data.get("codigo_version")).first()
-        prod_ext = db.session.query(ProductoExterno).filter_by(codigo_prod_externo=data.get("codigo_prod_externo")).first()
+        version = db.session.query(Version).filter_by(codigo_version=data["codigo_version"]).first()
+        prod_ext = db.session.query(ProductoExterno).filter_by(codigo_prod_externo=data["codigo_prod_externo"]).first()
 
         if not all([producto, modelo, version, prod_ext]):
-            return jsonify({"error": "Alguna FK no existe"}), 409
+            return jsonify({"error": "Alguna FK referenciada no existe"}), 409
 
-        registro.codigo_version = data.get("codigo_version")
-        registro.codigo_prod_externo = data.get("codigo_prod_externo")
-        registro.descripcion = data.get("descripcion")
-        registro.precio_producto_modelo = data.get("precio_producto_modelo")
-        registro.precio_venta_distribuidor = data.get("precio_venta_distribuidor")
+        # Actualizar datos
+        registro.cod_producto = data["cod_producto"]
+        registro.codigo_marca = data["codigo_marca"]
+        registro.codigo_modelo_comercial = data["codigo_modelo_comercial"]
+        registro.empresa = data["empresa"]
+        registro.codigo_version = data["codigo_version"]
+        registro.codigo_prod_externo = data["codigo_prod_externo"]
+        registro.descripcion = data["descripcion"]
+        registro.precio_producto_modelo = data["precio_producto_modelo"]
+        registro.precio_venta_distribuidor = data["precio_venta_distribuidor"]
 
         db.session.commit()
         return jsonify({"message": "Registro actualizado correctamente"}), 200
