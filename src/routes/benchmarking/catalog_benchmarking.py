@@ -1077,7 +1077,6 @@ def insert_modelo_comercial():
         user = get_jwt_identity()
         data = request.get_json()
 
-        # Detectar si es carga individual
         if isinstance(data, dict) and "modelo" in data:
             data = [data["modelo"]]
         elif isinstance(data, dict):
@@ -1097,13 +1096,11 @@ def insert_modelo_comercial():
                 duplicados.append({**item, "error": "Faltan campos obligatorios"})
                 continue
 
-            # Validar modelo homologado existente
             homologado = db.session.query(ModeloHomologado).filter_by(codigo_modelo_homologado=codigo_modelo_homologado).first()
             if not homologado:
                 duplicados.append({**item, "error": "Modelo homologado no encontrado"})
                 continue
 
-            # Buscar o crear marca
             marca = db.session.query(Marca).filter(
                 func.lower(func.replace(func.trim(Marca.nombre_marca), '\u00A0', ' ')) == normalize(nombre_marca)
             ).first()
@@ -1111,14 +1108,13 @@ def insert_modelo_comercial():
             if not marca:
                 marca = Marca(
                     nombre_marca=nombre_marca.strip(),
-                    estado_marca=1,  # Valor por defecto (Activo)
+                    estado_marca=estado_modelo.strip(),
                     usuario_crea=user,
                     fecha_creacion=datetime.now()
                 )
                 db.session.add(marca)
                 db.session.flush()
 
-            # Validar duplicado en tiempo real
             existe = db.session.query(ModeloComercial).filter(
                 ModeloComercial.codigo_marca == marca.codigo_marca,
                 func.lower(func.replace(func.trim(ModeloComercial.nombre_modelo), '\u00A0', ' ')) == normalize(nombre_modelo),
@@ -1130,7 +1126,6 @@ def insert_modelo_comercial():
                 duplicados.append({**item, "error": "Ya existe este modelo comercial para esa marca"})
                 continue
 
-            # Insertar nuevo
             nuevo = ModeloComercial(
                 codigo_marca=marca.codigo_marca,
                 codigo_modelo_homologado=codigo_modelo_homologado,
@@ -1155,6 +1150,9 @@ def insert_modelo_comercial():
         else:
             return jsonify({"message": "Modelo(s) comercial(es) insertado(s) correctamente"}), 200
 
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"error": "Ya existe un modelo comercial con los mismos datos.", "details": str(e)}), 409
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -1293,7 +1291,6 @@ def insert_version():
 @cross_origin()
 def insert_modelo_version_repuesto():
     try:
-        user = get_jwt_identity()
         data = request.get_json()
 
         if isinstance(data, dict) and "repuestos" in data:
@@ -1372,7 +1369,7 @@ def insert_modelo_version_repuesto():
         if insertados == 0:
             db.session.rollback()
             return jsonify({
-                "error": "No se insertaron registros válidos",
+                "error": "Registro inválido o duplicado",
                 "detalles": errores + duplicados
             }), 409
 
@@ -2635,7 +2632,7 @@ def update_modelo_comercial(codigo):
         modelo.codigo_modelo_homologado = codigo_modelo_homologado
         modelo.nombre_modelo = nombre_modelo.strip()
         modelo.anio_modelo = int(anio_modelo)
-        modelo.estado_modelo = int(estado_modelo) if estado_modelo in [0, 1] else 1
+        modelo.estado_modelo = int(estado_modelo)
         modelo.usuario_modifica = user
         modelo.fecha_modificacion = datetime.now()
 
