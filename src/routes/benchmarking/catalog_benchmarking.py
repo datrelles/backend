@@ -1302,56 +1302,81 @@ def insert_modelo_version_repuesto():
         errores = []
         duplicados = []
 
-        registros_actuales = db.session.query(ModeloVersionRepuesto).all()
-
         for item in data:
             cod_producto = item.get("cod_producto")
-            codigo_marca = item.get("codigo_marca")
-            codigo_modelo_comercial = item.get("codigo_modelo_comercial")
             empresa = item.get("empresa")
-            codigo_version = item.get("codigo_version")
             codigo_prod_externo = item.get("codigo_prod_externo")
-            descripcion = item.get("descripcion")
+            codigo_modelo_comercial = item.get("codigo_modelo_comercial")
+            codigo_marca = item.get("codigo_marca")
+            codigo_version = item.get("codigo_version")
+
+            # Resolver producto y empresa desde nombre
+            if not cod_producto or not empresa:
+                if item.get("nombre_producto"):
+                    prod = db.session.query(Producto).filter_by(nombre=item["nombre_producto"]).first()
+                    if prod:
+                        cod_producto = prod.cod_producto
+                        empresa = prod.empresa
+
+                    else:
+                        errores.append({"error": "Producto no encontrado", "repuestos": item})
+                        continue
+
+            # Resolver producto externo
+            if not codigo_prod_externo and item.get("nombre_producto_externo"):
+                ext = db.session.query(ProductoExterno).filter_by(nombre_producto=item["nombre_producto_externo"]).first()
+                if ext:
+                    codigo_prod_externo = ext.codigo_prod_externo
+                else:
+                    errores.append({"error": "Producto externo no encontrado", "repuestos": item})
+                    continue
+
+            # Resolver modelo comercial y marca
+            if not codigo_modelo_comercial or not codigo_marca:
+                if item.get("nombre_modelo_comercial"):
+                    modelo = db.session.query(ModeloComercial).filter_by(nombre_modelo=item["nombre_modelo_comercial"]).first()
+                    if modelo:
+                        codigo_modelo_comercial = modelo.codigo_modelo_comercial
+                        codigo_marca = modelo.codigo_marca
+                    else:
+                        errores.append({"error": "Modelo comercial no encontrado", "repuestos": item})
+                        continue
+
+            # Resolver versión
+            if not codigo_version and item.get("nombre_version"):
+                version = db.session.query(Version).filter_by(nombre_version=item["nombre_version"]).first()
+                if version:
+                    codigo_version = version.codigo_version
+                else:
+                    errores.append({"error": "Versión no encontrada", "repuestos": item})
+                    continue
+
+            descripcion = item.get("descripcion") or item.get("descripción")
             precio_producto_modelo = item.get("precio_producto_modelo")
             precio_venta_distribuidor = item.get("precio_venta_distribuidor")
 
-            campos_obligatorios = [cod_producto, codigo_marca, codigo_modelo_comercial,
-                                   empresa, codigo_version, codigo_prod_externo,
-                                   precio_producto_modelo, precio_venta_distribuidor]
+            campos_obligatorios = [
+                cod_producto, empresa, codigo_prod_externo,
+                codigo_modelo_comercial, codigo_marca, codigo_version,
+                precio_producto_modelo, precio_venta_distribuidor
+            ]
+
             if any(c is None or c == "" for c in campos_obligatorios):
                 errores.append({"error": "Faltan campos obligatorios", "repuestos": item})
                 continue
 
-            modelo = db.session.query(ModeloComercial).filter_by(
+            # Verificar duplicado
+            existe = db.session.query(ModeloVersionRepuesto).filter_by(
+                cod_producto=cod_producto,
                 codigo_modelo_comercial=codigo_modelo_comercial,
-                codigo_marca=codigo_marca
+                codigo_marca=codigo_marca,
+                empresa=empresa
             ).first()
-            producto = db.session.query(Producto).filter_by(
-                empresa=empresa,
-                cod_producto=cod_producto
-            ).first()
-            version = db.session.query(Version).filter_by(
-                codigo_version=codigo_version
-            ).first()
-            prod_ext = db.session.query(ProductoExterno).filter_by(
-                codigo_prod_externo=codigo_prod_externo
-            ).first()
-
-            if not all([modelo, producto, version, prod_ext]):
-                errores.append({"error": "Alguna FK no existe", "repuestos": item})
-                continue
-
-            existe = db.session.query(ModeloVersionRepuesto).filter(
-                ModeloVersionRepuesto.cod_producto == cod_producto,
-                ModeloVersionRepuesto.codigo_marca == codigo_marca,
-                ModeloVersionRepuesto.codigo_modelo_comercial == codigo_modelo_comercial,
-                ModeloVersionRepuesto.empresa == empresa
-            ).first()
-
             if existe:
                 duplicados.append({"error": "Registro duplicado", "repuestos": item})
                 continue
 
+            # Insertar
             nuevo = ModeloVersionRepuesto(
                 codigo_prod_externo=codigo_prod_externo,
                 codigo_version=codigo_version,
@@ -1366,23 +1391,20 @@ def insert_modelo_version_repuesto():
             db.session.add(nuevo)
             insertados += 1
 
-        if insertados == 0:
-            db.session.rollback()
-            return jsonify({
-                "error": "Registro inválido o duplicado",
-                "detalles": errores + duplicados
-            }), 409
-
         db.session.commit()
+
+        if insertados == 0:
+            return jsonify({"error": "No se insertó ningún registro", "detalles": errores + duplicados}), 409
+
         return jsonify({
             "message": f"{insertados} registro(s) insertado(s)",
-            "duplicados": duplicados,
-            "errores": errores
+            "errores": errores,
+            "duplicados": duplicados
         }), 201
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Error inesperado: {str(e)}"}), 500
 
 
 @bench.route('/insert_cliente_canal', methods=["POST"])
