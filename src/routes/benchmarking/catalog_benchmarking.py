@@ -1492,76 +1492,105 @@ def insert_modelo_version():
     try:
         data = request.json
         campos_requeridos = [
-            "codigo_dim_peso", "codigo_imagen", "codigo_electronica", "codigo_motor", "codigo_tipo_motor",
-            "codigo_transmision", "codigo_color_bench", "codigo_chasis",
-            "codigo_modelo_comercial", "codigo_marca", "codigo_cliente_canal", "codigo_mod_vers_repuesto",
-            "empresa", "cod_producto", "codigo_version",
-            "nombre_modelo_version", "anio_modelo_version",
-            "precio_producto_modelo", "precio_venta_distribuidor"
+            "descripcion_imagen",
+            "codigo_dim_peso",
+            "codigo_electronica",
+            "nombre_motor",
+            "codigo_tipo_motor",
+            "codigo_transmision",
+            "nombre_color",
+            "codigo_chasis",
+            "nombre_modelo_comercial",
+            "nombre_marca", "nombre_version",
+            "codigo_cliente_canal",
+            "empresa", "cod_producto",
+            "codigo_mod_vers_repuesto",
+            "nombre_modelo_version",
+            "anio_modelo_version",
+            "precio_producto_modelo",
+            "precio_venta_distribuidor"
         ]
-        faltantes = [campo for campo in campos_requeridos if data.get(campo) is None]
-        if faltantes:
-            return jsonify({"error": f"Faltan campos obligatorios: {faltantes}"}), 400
 
+        faltantes = [campo for campo in campos_requeridos if data.get(campo) in [None, ""]]
+        if faltantes:
+            return jsonify({"error": f"Campo requerido faltante: {faltantes}"}), 400
+
+        # Validación año
         if not (1950 <= int(data["anio_modelo_version"]) <= 2100):
             return jsonify({"error": "Año de modelo fuera de rango (1950-2100)"}), 400
 
+        # Validar nombre único
         nombre_existente = db.session.query(ModeloVersion).filter(
             func.lower(ModeloVersion.nombre_modelo_version) == data["nombre_modelo_version"].lower()
         ).first()
         if nombre_existente:
             return jsonify({"error": "Ya existe un modelo con ese nombre"}), 409
 
+        imagen = db.session.query(Imagenes).filter_by(descripcion_imagen=data["descripcion_imagen"]).first()
+        if not imagen:
+            return jsonify({"error": "Imagen no encontrada"}), 404
+
+        motor = db.session.query(Motor).filter_by(nombre_motor=data["nombre_motor"]).first()
+        if not motor:
+            return jsonify({"error": "Motor no encontrado"}), 404
+
+        color = db.session.query(Color).filter_by(nombre_color=data["nombre_color"]).first()
+        if not color:
+            return jsonify({"error": "Color no encontrado"}), 404
+
+        modelo = db.session.query(ModeloComercial).filter_by(
+            nombre_modelo=data["nombre_modelo_comercial"]
+        ).first()
+        if not modelo:
+            return jsonify({"error": "Modelo comercial no encontrado"}), 404
+
+        if modelo.codigo_marca is None:
+            return jsonify({"error": "Marca no asociada al modelo comercial"}), 404
+
+        version = db.session.query(Version).filter_by(nombre_version=data["nombre_version"]).first()
+        if not version:
+            return jsonify({"error": "Versión no encontrada"}), 404
+
         def validar_existencia(model, **kwargs):
             return db.session.query(model).filter_by(**kwargs).first() is not None
 
-        if not validar_existencia(DimensionPeso, codigo_dim_peso=data["codigo_dim_peso"]): return jsonify(
-            {"error": "Dimensión/peso no encontrado"}), 404
-        if not validar_existencia(Imagenes, codigo_imagen=data["codigo_imagen"]): return jsonify(
-            {"error": "Imagen no encontrada"}), 404
-        if not validar_existencia(ElectronicaOtros, codigo_electronica=data["codigo_electronica"]): return jsonify(
-            {"error": "Electrónica no encontrada"}), 404
-        if not validar_existencia(Motor, codigo_motor=data["codigo_motor"],
-                                  codigo_tipo_motor=data["codigo_tipo_motor"]): return jsonify(
-            {"error": "Motor/tipo no encontrado"}), 404
-        if not validar_existencia(Transmision, codigo_transmision=data["codigo_transmision"]): return jsonify(
-            {"error": "Transmisión no encontrada"}), 404
-        if not validar_existencia(Color, codigo_color_bench=data["codigo_color_bench"]): return jsonify(
-            {"error": "Color no encontrado"}), 404
-        if not validar_existencia(Chasis, codigo_chasis=data["codigo_chasis"]): return jsonify(
-            {"error": "Chasis no encontrado"}), 404
-        if not validar_existencia(Version, codigo_version=data["codigo_version"]): return jsonify(
-            {"error": "Versión no encontrada"}), 404
-        if not validar_existencia(ModeloComercial, codigo_modelo_comercial=data["codigo_modelo_comercial"],
-                                  codigo_marca=data["codigo_marca"]): return jsonify(
-            {"error": "Modelo comercial no válido"}), 404
+        if not validar_existencia(DimensionPeso, codigo_dim_peso=data["codigo_dim_peso"]):
+            return jsonify({"error": "Dimensión/peso no encontrado"}), 404
 
-        if not validar_existencia(
-                ClienteCanal,
-                codigo_cliente_canal=data["codigo_cliente_canal"],
-                codigo_mod_vers_repuesto=data["codigo_mod_vers_repuesto"],
-                empresa=data["empresa"],
-                cod_producto=data["cod_producto"],
-                codigo_modelo_comercial=data["codigo_modelo_comercial"],
-                codigo_marca=data["codigo_marca"]
-        ):
+        if not validar_existencia(ElectronicaOtros, codigo_electronica=data["codigo_electronica"]):
+            return jsonify({"error": "Electrónica no encontrada"}), 404
+
+        if not validar_existencia(Transmision, codigo_transmision=data["codigo_transmision"]):
+            return jsonify({"error": "Transmisión no encontrada"}), 404
+
+        if not validar_existencia(Chasis, codigo_chasis=data["codigo_chasis"]):
+            return jsonify({"error": "Chasis no encontrado"}), 404
+
+        if not validar_existencia(ClienteCanal,
+                                  codigo_cliente_canal=data["codigo_cliente_canal"],
+                                  codigo_mod_vers_repuesto=data["codigo_mod_vers_repuesto"],
+                                  empresa=data["empresa"],
+                                  cod_producto=data["cod_producto"],
+                                  codigo_modelo_comercial=modelo.codigo_modelo_comercial,
+                                  codigo_marca=modelo.codigo_marca):
             return jsonify({"error": "Cliente-canal no válido"}), 404
+
         nuevo = ModeloVersion(
             codigo_dim_peso=data["codigo_dim_peso"],
-            codigo_imagen=data["codigo_imagen"],
+            codigo_imagen=imagen.codigo_imagen,
             codigo_electronica=data["codigo_electronica"],
-            codigo_motor=data["codigo_motor"],
+            codigo_motor=motor.codigo_motor,
             codigo_tipo_motor=data["codigo_tipo_motor"],
             codigo_transmision=data["codigo_transmision"],
-            codigo_color_bench=data["codigo_color_bench"],
+            codigo_color_bench=color.codigo_color_bench,
             codigo_chasis=data["codigo_chasis"],
-            codigo_modelo_comercial=data["codigo_modelo_comercial"],
-            codigo_marca=data["codigo_marca"],
+            codigo_modelo_comercial=modelo.codigo_modelo_comercial,
+            codigo_marca=modelo.codigo_marca,
             codigo_cliente_canal=data["codigo_cliente_canal"],
             codigo_mod_vers_repuesto=data["codigo_mod_vers_repuesto"],
             empresa=data["empresa"],
             cod_producto=data["cod_producto"],
-            codigo_version=data["codigo_version"],
+            codigo_version=version.codigo_version,
             nombre_modelo_version=data["nombre_modelo_version"],
             anio_modelo_version=data["anio_modelo_version"],
             precio_producto_modelo=data["precio_producto_modelo"],
@@ -1569,12 +1598,12 @@ def insert_modelo_version():
         )
 
         db.session.add(nuevo)
+        db.session.flush()
+        codigo_modelo_version = nuevo.codigo_modelo_version
         db.session.commit()
-        db.session.refresh(nuevo)
-
         return jsonify({
             "message": "Modelo versión insertado correctamente",
-            "codigo_modelo_version": nuevo.codigo_modelo_version
+            "codigo_modelo_version": codigo_modelo_version
         })
 
     except Exception as e:
@@ -2253,6 +2282,78 @@ def get_segmentos():
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
+@bench.route('/get_modelo_version', methods=['GET'])
+@jwt_required()
+def get_modelo_version():
+    try:
+        resultados = db.session.query(
+            ModeloVersion.codigo_modelo_version,
+            ModeloVersion.nombre_modelo_version,
+            ModeloVersion.anio_modelo_version,
+            ModeloVersion.precio_producto_modelo,
+            ModeloVersion.precio_venta_distribuidor,
+            DimensionPeso.codigo_dim_peso,
+            Imagenes.descripcion_imagen,
+            ElectronicaOtros.codigo_electronica,
+            Motor.nombre_motor,
+            Motor.codigo_motor,
+            Motor.codigo_tipo_motor,
+            Transmision.codigo_transmision,
+            Transmision.descripcion_transmision,
+            Color.nombre_color,
+            Chasis.codigo_chasis,
+            ModeloComercial.nombre_modelo.label("nombre_modelo_comercial"),
+            Marca.nombre_marca,
+            ClienteCanal.codigo_cliente_canal,
+            ClienteCanal.cod_producto,
+            ClienteCanal.empresa,
+            Version.nombre_version
+        ).join(DimensionPeso, ModeloVersion.codigo_dim_peso == DimensionPeso.codigo_dim_peso) \
+         .join(Imagenes, ModeloVersion.codigo_imagen == Imagenes.codigo_imagen) \
+         .join(ElectronicaOtros, ModeloVersion.codigo_electronica == ElectronicaOtros.codigo_electronica) \
+         .join(Motor, (ModeloVersion.codigo_motor == Motor.codigo_motor) & (ModeloVersion.codigo_tipo_motor == Motor.codigo_tipo_motor)) \
+         .join(Transmision, ModeloVersion.codigo_transmision == Transmision.codigo_transmision) \
+         .join(Color, ModeloVersion.codigo_color_bench == Color.codigo_color_bench) \
+         .join(Chasis, ModeloVersion.codigo_chasis == Chasis.codigo_chasis) \
+         .join(ModeloComercial, (ModeloVersion.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
+                                (ModeloVersion.codigo_marca == ModeloComercial.codigo_marca)) \
+         .join(Marca, ModeloVersion.codigo_marca == Marca.codigo_marca) \
+         .join(ClienteCanal, (ModeloVersion.codigo_cliente_canal == ClienteCanal.codigo_cliente_canal) &
+                             (ModeloVersion.codigo_mod_vers_repuesto == ClienteCanal.codigo_mod_vers_repuesto) &
+                             (ModeloVersion.empresa == ClienteCanal.empresa) &
+                             (ModeloVersion.cod_producto == ClienteCanal.cod_producto) &
+                             (ModeloVersion.codigo_modelo_comercial == ClienteCanal.codigo_modelo_comercial) &
+                             (ModeloVersion.codigo_marca == ClienteCanal.codigo_marca)) \
+         .join(Version, ModeloVersion.codigo_version == Version.codigo_version) \
+         .all()
+
+        return jsonify([{
+            "codigo_modelo_version": r.codigo_modelo_version,
+            "nombre_modelo_version": r.nombre_modelo_version,
+            "anio_modelo_version": r.anio_modelo_version,
+            "precio_producto_modelo": r.precio_producto_modelo,
+            "precio_venta_distribuidor": r.precio_venta_distribuidor,
+            "codigo_dim_peso": r.codigo_dim_peso,
+            "descripcion_imagen": r.descripcion_imagen,
+            "codigo_electronica": r.codigo_electronica,
+            "nombre_motor": r.nombre_motor,
+            "codigo_motor": r.codigo_motor,
+            "codigo_tipo_motor": r.codigo_tipo_motor,
+            "codigo_transmision": r.codigo_transmision,
+            "descripcion_transmision": r.descripcion_transmision,
+            "nombre_color": r.nombre_color,
+            "codigo_chasis": r.codigo_chasis,
+            "nombre_modelo_comercial": r.nombre_modelo_comercial,
+            "nombre_marca": r.nombre_marca,
+            "codigo_cliente_canal": r.codigo_cliente_canal,
+            "cod_producto": r.cod_producto,
+            "empresa": r.empresa,
+            "nombre_version": r.nombre_version
+        } for r in resultados]), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 # ACTUALIZAR/ MODIFICAR DATOS -------------------------------------------------------------------------->
 
@@ -2910,6 +3011,49 @@ def update_segmento(codigo_segmento):
 
         db.session.commit()
         return jsonify({"message": "Segmento actualizado correctamente"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_modelo_version/<int:codigo_modelo_version>', methods=["PUT"])
+@jwt_required()
+def update_modelo_version(codigo_modelo_version):
+    try:
+        data = request.json
+        modelo_version = db.session.query(ModeloVersion).filter_by(codigo_modelo_version=codigo_modelo_version).first()
+        if not modelo_version:
+            return jsonify({"error": "Modelo versión no encontrado"}), 404
+
+        imagen = db.session.query(Imagenes).filter_by(descripcion_imagen=data["descripcion_imagen"]).first()
+        motor = db.session.query(Motor).filter_by(nombre_motor=data["nombre_motor"]).first()
+        color = db.session.query(Color).filter_by(nombre_color=data["nombre_color"]).first()
+        modelo = db.session.query(ModeloComercial).filter_by(nombre_modelo=data["nombre_modelo_comercial"]).first()
+        version = db.session.query(Version).filter_by(nombre_version=data["nombre_version"]).first()
+
+        modelo_version.codigo_dim_peso = data["codigo_dim_peso"]
+        modelo_version.codigo_imagen = imagen.codigo_imagen
+        modelo_version.codigo_electronica = data["codigo_electronica"]
+        modelo_version.codigo_motor = motor.codigo_motor
+        modelo_version.codigo_tipo_motor = data["codigo_tipo_motor"]
+        modelo_version.codigo_transmision = data["codigo_transmision"]
+        modelo_version.codigo_color_bench = color.codigo_color_bench
+        modelo_version.codigo_chasis = data["codigo_chasis"]
+        modelo_version.codigo_modelo_comercial = modelo.codigo_modelo_comercial
+        modelo_version.codigo_marca = modelo.codigo_marca
+        modelo_version.codigo_cliente_canal = data["codigo_cliente_canal"]
+        modelo_version.codigo_mod_vers_repuesto = data["codigo_mod_vers_repuesto"]
+        modelo_version.empresa = data["empresa"]
+        modelo_version.cod_producto = data["cod_producto"]
+        modelo_version.codigo_version = version.codigo_version
+        modelo_version.nombre_modelo_version = data["nombre_modelo_version"]
+        modelo_version.anio_modelo_version = data["anio_modelo_version"]
+        modelo_version.precio_producto_modelo = data["precio_producto_modelo"]
+        modelo_version.precio_venta_distribuidor = data["precio_venta_distribuidor"]
+
+        db.session.commit()
+
+        return jsonify({"message": "Modelo versión actualizado correctamente"})
+
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
