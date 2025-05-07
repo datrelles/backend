@@ -164,7 +164,6 @@ def insert_dimension():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-
 @bench.route('/insert_electronica_otros', methods=["POST"])
 @jwt_required()
 @cross_origin()
@@ -354,7 +353,6 @@ def insert_tipo_motor():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-
 @bench.route('/insert_motor', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -444,7 +442,6 @@ def insert_motor():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-
 @bench.route('/insert_color', methods=["POST"])
 @jwt_required()
 def insert_color():
@@ -491,7 +488,6 @@ def insert_color():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
-
 
 @bench.route('/insert_canal', methods=["POST"])
 @jwt_required()
@@ -718,7 +714,6 @@ def insert_producto_externo():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
-
 
 @bench.route('/insert_linea', methods=["POST"])
 @jwt_required()
@@ -1018,7 +1013,6 @@ def insert_modelo_homologado():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
-
 
 @bench.route('/insert_matriculacion_marca', methods=["POST"])
 @jwt_required()
@@ -1406,7 +1400,6 @@ def insert_modelo_version_repuesto():
         db.session.rollback()
         return jsonify({"error": f"Error inesperado: {str(e)}"}), 500
 
-
 @bench.route('/insert_cliente_canal', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -1421,80 +1414,68 @@ def insert_cliente_canal():
 
         insertados = 0
         errores = []
-        duplicados = []
 
         for item in data:
-            clientes_canal = item.get("clientes_canal", [])
-            for cliente in clientes_canal:
-                codigo_canal = cliente.get("codigo_canal")
-                nombre_producto = cliente.get("nombre_producto")
-                nombre_modelo_comercial = cliente.get("nombre_modelo_comercial")
-                nombre_version = cliente.get("nombre_version")
-                descripcion = cliente.get("descripcion_cliente_canal")
+            codigo_canal = item.get("codigo_canal")
+            descripcion = item.get("descripcion_cliente_canal")
+            cod_modelo_vers_repuesto = item.get("codigo_mod_vers_repuesto")
+            cod_producto = item.get("cod_producto")
+            empresa = item.get("empresa")
+            codigo_modelo_comercial = item.get("codigo_modelo_comercial")
+            codigo_marca = item.get("codigo_marca")
 
-                if not (nombre_producto and nombre_modelo_comercial and nombre_version):
-                    errores.append({"error": "Faltan campos obligatorios", "cliente": cliente})
-                    continue
+            # Resolviendo por nombres si no se pasan los códigos directamente
+            if not all([cod_modelo_vers_repuesto, cod_producto, empresa, codigo_modelo_comercial, codigo_marca]):
+                nombre_producto = item.get("nombre_producto")
+                nombre_modelo = item.get("nombre_modelo_comercial")
+                nombre_version = item.get("nombre_version")
 
-                # Buscar códigos internos
-                prod = db.session.query(Producto).filter_by(nombre=nombre_producto).first()
-                modelo = db.session.query(ModeloComercial).filter_by(nombre_modelo=nombre_modelo_comercial).first()
-                version = db.session.query(Version).filter_by(nombre_version=nombre_version).first()
-
-                if not all([prod, modelo, version]):
-                    errores.append({"error": "Producto/modelo/version no encontrado", "cliente": cliente})
-                    continue
-
-                # Buscar código_mod_vers_repuesto relacionado
-                mv = db.session.query(ModeloVersionRepuesto).filter_by(
-                    cod_producto=prod.cod_producto,
-                    empresa=prod.empresa,
-                    codigo_modelo_comercial=modelo.codigo_modelo_comercial,
-                    codigo_marca=modelo.codigo_marca,
-                    codigo_version=version.codigo_version
-                ).first()
-
-                if not mv:
-                    errores.append({"error": "Modelo versión repuesto no encontrado", "cliente": cliente})
-                    continue
-
-                # Validar duplicado
-                existe = db.session.query(ClienteCanal).filter_by(
-                    codigo_canal=codigo_canal,
-                    codigo_mod_vers_repuesto=mv.codigo_mod_vers_repuesto,
-                    cod_producto=prod.cod_producto,
-                    empresa=prod.empresa,
-                    codigo_modelo_comercial=modelo.codigo_modelo_comercial,
-                    codigo_marca=modelo.codigo_marca
-                ).first()
-
-                if existe:
-                    duplicados.append({"error": "Registro duplicado", "cliente": cliente})
-                    continue
-
-                # Insertar con código generado automáticamente
-                nuevo = ClienteCanal(
-                    codigo_canal=codigo_canal,
-                    codigo_mod_vers_repuesto=mv.codigo_mod_vers_repuesto,
-                    cod_producto=prod.cod_producto,
-                    empresa=prod.empresa,
-                    codigo_modelo_comercial=modelo.codigo_modelo_comercial,
-                    codigo_marca=modelo.codigo_marca,
-                    descripcion_cliente_canal=descripcion
+                # Buscar modelo_version_repuesto por nombres
+                modelo = (
+                    db.session.query(ModeloVersionRepuesto)
+                    .join(Producto, (ModeloVersionRepuesto.cod_producto == Producto.cod_producto) & (ModeloVersionRepuesto.empresa == Producto.empresa))
+                    .join(ModeloComercial, ModeloVersionRepuesto.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial)
+                    .join(Version, ModeloVersionRepuesto.codigo_version == Version.codigo_version)
+                    .filter(
+                        Producto.nombre == nombre_producto,
+                        ModeloComercial.nombre_modelo == nombre_modelo,
+                        Version.nombre_version == nombre_version
+                    ).first()
                 )
-                db.session.add(nuevo)
-                insertados += 1
 
-        db.session.commit()
+                if modelo:
+                    cod_modelo_vers_repuesto = modelo.codigo_mod_vers_repuesto
+                    cod_producto = modelo.cod_producto
+                    empresa = modelo.empresa
+                    codigo_modelo_comercial = modelo.codigo_modelo_comercial
+                    codigo_marca = modelo.codigo_marca
+                else:
+                    errores.append({"error": "No se pudo resolver modelo_version_repuesto", "cliente": item})
+                    continue
 
-        if insertados == 0:
-            return jsonify({"error": "No se insertó ningún registro", "detalles": errores + duplicados}), 409
+            campos_obligatorios = [codigo_canal, cod_modelo_vers_repuesto, cod_producto, empresa, codigo_modelo_comercial, codigo_marca]
+            if any(c is None or c == '' for c in campos_obligatorios):
+                errores.append({"error": "Faltan campos obligatorios", "cliente": item})
+                continue
 
-        return jsonify({
-            "message": f"{insertados} registro(s) insertado(s)",
-            "duplicados": duplicados,
-            "errores": errores
-        }), 201
+            nuevo = ClienteCanal(
+                codigo_canal=codigo_canal,
+                codigo_mod_vers_repuesto=cod_modelo_vers_repuesto,
+                empresa=empresa,
+                cod_producto=cod_producto,
+                codigo_modelo_comercial=codigo_modelo_comercial,
+                codigo_marca=codigo_marca,
+                descripcion_cliente_canal=descripcion
+            )
+            db.session.add(nuevo)
+            insertados += 1
+
+        if insertados:
+            db.session.commit()
+            return jsonify({"message": "Registros insertados correctamente", "insertados": insertados}), 201
+        else:
+            db.session.rollback()
+            return jsonify({"error": "No se insertó ningún registro", "detalles": errores}), 409
 
     except Exception as e:
         db.session.rollback()
@@ -2092,6 +2073,11 @@ def get_modelos_version_repuesto():
     try:
         resultados = db.session.query(
             ModeloVersionRepuesto.codigo_mod_vers_repuesto,
+            ModeloVersionRepuesto.codigo_modelo_comercial,
+            ModeloVersionRepuesto.codigo_marca,
+            ModeloVersionRepuesto.codigo_version,
+            ModeloVersionRepuesto.empresa,
+            ModeloVersionRepuesto.codigo_prod_externo,
             Producto.cod_producto,
             Producto.nombre.label("nombre_producto"),
             ProductoExterno.nombre_producto.label("nombre_producto_externo"),
@@ -2113,6 +2099,11 @@ def get_modelos_version_repuesto():
         return jsonify([{
             "codigo_mod_vers_repuesto": r.codigo_mod_vers_repuesto,
             "cod_producto": r.cod_producto,
+            "codigo_modelo_comercial": r.codigo_modelo_comercial,
+            "codigo_marca": r.codigo_marca,
+            "codigo_version": r.codigo_version,
+            "empresa": r.empresa,
+            "codigo_prod_externo": r.codigo_prod_externo,
             "nombre_producto": r.nombre_producto,
             "nombre_producto_externo": r.nombre_producto_externo,
             "nombre_modelo_comercial": r.nombre_modelo_comercial,
@@ -2133,8 +2124,8 @@ def get_modelos_version_repuesto():
 def get_cliente_canal():
     try:
         registros = db.session.query(ClienteCanal).all()
-
         resultados = []
+
         for cliente in registros:
             modelo = db.session.query(ModeloComercial).filter_by(
                 codigo_modelo_comercial=cliente.codigo_modelo_comercial,
@@ -2146,16 +2137,31 @@ def get_cliente_canal():
                 empresa=cliente.empresa
             ).first()
 
+            canal = db.session.query(Canal).filter_by(
+                codigo_canal=cliente.codigo_canal
+            ).first()
+
+            modelo_version = db.session.query(ModeloVersionRepuesto).filter_by(
+                codigo_mod_vers_repuesto=cliente.codigo_mod_vers_repuesto
+            ).first()
+
             version = db.session.query(Version).filter_by(
-                codigo_version=cliente.codigo_mod_vers_repuesto
+                codigo_version=modelo_version.codigo_version
+            ).first() if modelo_version else None
+
+            empresa_data = db.session.query(Empresa).filter_by(
+                empresa=cliente.empresa
             ).first()
 
             resultados.append({
                 "codigo_cliente_canal": cliente.codigo_cliente_canal,
                 "codigo_canal": cliente.codigo_canal,
+                "nombre_canal": canal.nombre_canal if canal else None,
+                "codigo_mod_vers_repuesto": cliente.codigo_mod_vers_repuesto,
                 "descripcion_cliente_canal": cliente.descripcion_cliente_canal,
                 "cod_producto": cliente.cod_producto,
                 "empresa": cliente.empresa,
+                "nombre_empresa": empresa_data.nombre if empresa_data else None,
                 "nombre_producto": producto.nombre if producto else None,
                 "codigo_modelo_comercial": cliente.codigo_modelo_comercial,
                 "nombre_modelo_comercial": modelo.nombre_modelo if modelo else None,
@@ -2169,8 +2175,6 @@ def get_cliente_canal():
 
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
-
-
 
 @bench.route('/get_productos', methods=['GET'])
 @jwt_required()
@@ -2796,3 +2800,43 @@ def update_modelo_version_repuesto(codigo):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_cliente_canal/<int:codigo>', methods=['PUT'])
+@jwt_required()
+@cross_origin()
+def update_cliente_canal(codigo):
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"error": "Datos JSON no proporcionados"}), 400
+
+        cliente = db.session.query(ClienteCanal).filter_by(codigo_cliente_canal=codigo).first()
+       # registro = db.session.query(ModeloVersionRepuesto).filter_by(codigo_mod_vers_repuesto=codigo).first()
+
+        if not cliente:
+            return jsonify({"error": f"Cliente canal con ID {codigo} no encontrado"}), 404
+
+        # Campos requeridos (ajusta según tus validaciones)
+        campos_obligatorios = ['codigo_canal', 'codigo_mod_vers_repuesto', 'cod_producto', 'empresa']
+        for campo in campos_obligatorios:
+            if campo not in data:
+                return jsonify({"error": f"Campo obligatorio '{campo}' faltante"}), 400
+
+        # Actualizar los campos
+        cliente.codigo_canal = data.get('codigo_canal')
+        cliente.codigo_mod_vers_repuesto = data.get('codigo_mod_vers_repuesto')
+        cliente.cod_producto = data.get('cod_producto')
+        cliente.empresa = data.get('empresa')
+        cliente.codigo_modelo_comercial = data.get('codigo_modelo_comercial')
+        cliente.codigo_marca = data.get('codigo_marca')
+        cliente.codigo_version = data.get('codigo_version')  # si corresponde en tu modelo
+        cliente.descripcion_cliente_canal = data.get('descripcion_cliente_canal', '')
+
+        db.session.commit()
+
+        return jsonify({"mensaje": "Registro actualizado correctamente"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Error al actualizar: {str(e)}"}), 500
