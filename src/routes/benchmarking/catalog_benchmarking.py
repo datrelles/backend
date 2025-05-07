@@ -1158,14 +1158,14 @@ def insert_segmento():
         data = request.json
         user = get_jwt_identity()
 
-        nombre = data.get("nombre_segmento")
+        nombre = data.get("nombre_segmento", "").strip()
         estado = data.get("estado_segmento")
         linea = data.get("codigo_linea")
         modelo = data.get("codigo_modelo_comercial")
         marca = data.get("codigo_marca")
-        descripcion = data.get("descripcion_segmento")
+        descripcion = data.get("descripcion_segmento", "").strip()
 
-        if not all([nombre, estado in [0, 1], linea, modelo, marca]):
+        if not nombre or estado not in [0, 1] or not all([linea, modelo, marca]):
             return jsonify({"error": "Todos los campos obligatorios deben ser enviados"}), 400
 
         # Validar claves foráneas
@@ -1180,6 +1180,7 @@ def insert_segmento():
         ).first():
             return jsonify({"error": "El modelo comercial no existe para esa marca"}), 404
 
+        # Validar unicidad
         existe = db.session.query(Segmento).filter(
             func.lower(Segmento.nombre_segmento) == nombre.lower(),
             Segmento.codigo_modelo_comercial == modelo
@@ -1187,7 +1188,12 @@ def insert_segmento():
         if existe:
             return jsonify({"error": "Ya existe un segmento con ese nombre para ese modelo"}), 409
 
+        # Obtener nuevo código incremental
+        max_codigo = db.session.query(func.max(Segmento.codigo_segmento)).scalar() or 0
+        nuevo_codigo = max_codigo + 1
+
         nuevo = Segmento(
+            codigo_segmento=nuevo_codigo,
             codigo_linea=linea,
             codigo_modelo_comercial=modelo,
             codigo_marca=marca,
@@ -1200,12 +1206,11 @@ def insert_segmento():
 
         db.session.add(nuevo)
         db.session.commit()
-        db.session.refresh(nuevo)
 
         return jsonify({
             "message": "Segmento insertado correctamente",
             "codigo_segmento": nuevo.codigo_segmento
-        })
+        }), 201
 
     except Exception as e:
         db.session.rollback()
@@ -2206,6 +2211,47 @@ def get_productos():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@bench.route('/get_segmentos', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_segmentos():
+    try:
+        segmentos = db.session.query(Segmento).all()
+        resultados = []
+
+        for seg in segmentos:
+            modelo = db.session.query(ModeloComercial).filter_by(
+                codigo_modelo_comercial=seg.codigo_modelo_comercial,
+                codigo_marca=seg.codigo_marca
+            ).first()
+
+            marca = db.session.query(Marca).filter_by(codigo_marca=seg.codigo_marca).first()
+            linea = db.session.query(Linea).filter_by(codigo_linea=seg.codigo_linea).first()
+            linea_padre = db.session.query(Linea).filter_by(codigo_linea=linea.codigo_linea_padre).first() if linea and linea.codigo_linea_padre else None
+
+            resultados.append({
+                "codigo_segmento": seg.codigo_segmento,
+                "codigo_linea": seg.codigo_linea,
+                "nombre_linea": linea.nombre_linea if linea else None,
+                "codigo_linea_padre": linea.codigo_linea_padre if linea else None,
+                "nombre_linea_padre": linea_padre.nombre_linea if linea_padre else None,
+                "codigo_modelo_comercial": seg.codigo_modelo_comercial,
+                "nombre_modelo_comercial": modelo.nombre_modelo if modelo else None,
+                "codigo_marca": seg.codigo_marca,
+                "nombre_marca": marca.nombre_marca if marca else None,
+                "nombre_segmento": seg.nombre_segmento,
+                "estado_segmento": seg.estado_segmento,
+                "descripcion_segmento": seg.descripcion_segmento,
+                "usuario_crea": seg.usuario_crea,
+                "fecha_creacion": seg.fecha_creacion.strftime('%Y-%m-%d %H:%M:%S') if seg.fecha_creacion else None,
+                "usuario_modifica": seg.usuario_modifica,
+                "fecha_modificacion": seg.fecha_modificacion.strftime('%Y-%m-%d %H:%M:%S') if seg.fecha_modificacion else None
+            })
+
+        return jsonify(resultados), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
 
 # ACTUALIZAR/ MODIFICAR DATOS -------------------------------------------------------------------------->
@@ -2840,3 +2886,30 @@ def update_cliente_canal(codigo):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Error al actualizar: {str(e)}"}), 500
+
+@bench.route('/update_segmento/<int:codigo_segmento>', methods=['PUT'])
+@jwt_required()
+def update_segmento(codigo_segmento):
+    data = request.get_json()
+
+    segmento = db.session.query(Segmento).filter_by(codigo_segmento=codigo_segmento).first()
+    if not segmento:
+        return jsonify({"error": "Segmento no encontrado"}), 404
+
+    try:
+        segmento.codigo_linea = data.get('codigo_linea')
+        segmento.codigo_linea_padre = data.get('codigo_linea_padre')
+        segmento.codigo_modelo_comercial = data.get('codigo_modelo_comercial')
+        segmento.codigo_marca = data.get('codigo_marca')
+        segmento.nombre_segmento = data.get('nombre_segmento')
+        segmento.descripcion_segmento = data.get('descripcion_segmento', '')
+        segmento.estado_segmento = data.get('estado_segmento')
+
+        segmento.fecha_modificacion = datetime.now()
+        segmento.usuario_modifica = get_jwt_identity()
+
+        db.session.commit()
+        return jsonify({"message": "Segmento actualizado correctamente"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
