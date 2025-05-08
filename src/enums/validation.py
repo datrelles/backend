@@ -8,44 +8,44 @@ class CustomEnum(Enum):
 
 
 class categoria_excepcion(CustomEnum):
-    faltante = 'faltante'
-    vacio = 'vacio'
-    tipo = 'tipo'
-    valor_positivo = 'valor_positivo'
-    longitud = 'longitud'
-    digitos = 'digitos'
-    valores_permitidos = 'valores_permitidos'
-    no_requeridos = 'no_requeridos'
+    FALTANTE = 'faltante'
+    VACIO = 'vacio'
+    TIPO = 'tipo'
+    VALOR_POSITIVO = 'valor_positivo'
+    LONGITUD = 'longitud'
+    DIGITOS = 'digitos'
+    VALORES_PERMITIDOS = 'valores_permitidos'
+    NO_REQUERIDOS = 'no_requeridos'
 
 
 class tipo_estado(CustomEnum):
-    activo = 1
-    inactivo = 0
+    ACTIVO = 1
+    INACTIVO = 0
 
 
-class tipo_operador(CustomEnum):
-    parametro = 'PAR'
-    valor = 'VAL'
-    operador = 'OPE'
+class tipo_factor(CustomEnum):
+    PARAMETRO = 'PAR'
+    VALOR_FIJO = 'VAL'
+    OPERADOR = 'OPE'
 
 
 class operador(CustomEnum):
-    suma = '+'
-    resta = '-'
-    multiplicacion = '*'
-    division = '/'
+    SUMA = '+'
+    RESTA = '-'
+    MULTIPLICACION = '*'
+    DIVISION = '/'
 
 
 class tipo_retorno(CustomEnum):
-    numero = 'NUMBER'
-    varchar = 'VARCHAR2'
+    NUMERO = 'NUMBER'
+    VARCHAR = 'VARCHAR2'
 
 
 class tipo_objeto(CustomEnum):
-    funcion = 'FUN'
+    FUNCION = 'FUN'
 
 
 class tipo_parametro(CustomEnum):
-    variable = 'VARIABLE'
-    caracter = 'CARACTER'
-    numero = 'NUMERO'
+    VARIABLE = 'VARIABLE'
+    CARACTER = 'CARACTER'
+    NUMERO = 'NUMERO'

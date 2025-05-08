@@ -28,22 +28,22 @@ def validar_number(clave, valor, digitos_enteros, digitos_decimales=0, es_requer
                    valores_permitidos=None, es_exacta=False):
     if es_requerido:
         if valor is None:
-            raise validation_error(campo=clave, categoria=categoria_excepcion.faltante.value)
+            raise validation_error(campo=clave, categoria=categoria_excepcion.FALTANTE.value)
         if valor == '':
-            raise validation_error(campo=clave, categoria=categoria_excepcion.vacio.value)
+            raise validation_error(campo=clave, categoria=categoria_excepcion.VACIO.value)
     else:
         if valor is None or valor == '':
             return None
     try:
         valor = float(valor) if '.' in str(valor) else int(valor)
     except Exception as e:
-        raise validation_error(campo=clave, categoria=categoria_excepcion.tipo.value)
+        raise validation_error(campo=clave, categoria=categoria_excepcion.TIPO.value)
     if es_positivo and valor < 0:
-        raise validation_error(campo=clave, categoria=categoria_excepcion.valor_positivo.value)
+        raise validation_error(campo=clave, categoria=categoria_excepcion.VALOR_POSITIVO.value)
     if not validar_digitos(valor, digitos_enteros, digitos_decimales, es_exacta):
-        raise validation_error(campo=clave, categoria=categoria_excepcion.digitos.value,
+        raise validation_error(campo=clave, categoria=categoria_excepcion.DIGITOS.value,
                                enteros=digitos_enteros, decimales=digitos_decimales)
     if valores_permitidos and not valor in valores_permitidos:
-        raise validation_error(campo=clave, categoria=categoria_excepcion.valores_permitidos.value,
+        raise validation_error(campo=clave, categoria=categoria_excepcion.VALORES_PERMITIDOS.value,
                                valores_permitidos=valores_permitidos)
     return valor

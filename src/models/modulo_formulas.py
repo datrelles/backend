@@ -4,7 +4,7 @@ from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, validates
 from src.config.database import db
-from src.enums import tipo_estado, tipo_retorno, tipo_objeto, tipo_parametro
+from src.enums import tipo_estado, tipo_retorno, tipo_objeto, tipo_parametro, tipo_factor
 from src.validations import validar_varchar, validar_fecha, validar_number
 from src.models.custom_base import custom_base
 
@@ -54,8 +54,8 @@ class st_proceso(custom_base):
         return validar_estado(key, value)
 
 
-class st_formula(custom_base):
-    __tablename__ = 'st_formulas_procesos'
+class st_formula_proceso(custom_base):
+    __tablename__ = 'st_formula_proceso'
     __table_args__ = {'schema': schema_name}
 
     empresa = Column(NUMBER(precision=2), primary_key=True)
@@ -94,8 +94,8 @@ class st_formula(custom_base):
         return validar_varchar(key, value, 2000)
 
 
-class st_parametro(custom_base):
-    __tablename__ = 'st_parametros_formulas'
+class st_parametro_proceso(custom_base):
+    __tablename__ = 'st_parametro_proceso'
     __table_args__ = {'schema': schema_name}
 
     empresa = Column(NUMBER(precision=2), primary_key=True)
@@ -129,8 +129,8 @@ class st_parametro(custom_base):
         return validar_estado(key, value)
 
 
-class st_parametros_x_proceso(custom_base):
-    __tablename__ = 'st_parametros_x_proceso'
+class st_parametro_por_proceso(custom_base):
+    __tablename__ = 'st_parametro_por_proceso'
     __table_args__ = (
         PrimaryKeyConstraint('empresa', 'cod_proceso', 'cod_parametro'),
         {'schema': schema_name}
@@ -139,15 +139,15 @@ class st_parametros_x_proceso(custom_base):
     empresa = Column(NUMBER(precision=2))
     cod_proceso = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_proceso.cod_proceso'), nullable=False)
     proceso = relationship('st_proceso')
-    cod_parametro = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_parametros_formulas.cod_parametro'),
+    cod_parametro = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_parametro_proceso.cod_parametro'),
                            nullable=False)
-    parametro = relationship('st_parametro')
-    cod_formula = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_formulas_procesos.cod_formula'))
-    formula = relationship('st_formula')
-    factores_calculo = relationship('st_factores_calculo_parametros',
-                                    primaryjoin="and_(st_parametros_x_proceso.empresa == st_factores_calculo_parametros.empresa, "
-                                                "st_parametros_x_proceso.cod_proceso == st_factores_calculo_parametros.cod_proceso, "
-                                                "st_parametros_x_proceso.cod_parametro == st_factores_calculo_parametros.cod_parametro)",
+    parametro = relationship('st_parametro_proceso')
+    cod_formula = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_formula_proceso.cod_formula'))
+    formula = relationship('st_formula_proceso')
+    factores_calculo = relationship('st_factor_calculo_parametro',
+                                    primaryjoin="and_(st_parametro_por_proceso.empresa == st_factor_calculo_parametro.empresa, "
+                                                "st_parametro_por_proceso.cod_proceso == st_factor_calculo_parametro.cod_proceso, "
+                                                "st_parametro_por_proceso.cod_parametro == st_factor_calculo_parametro.cod_parametro)",
                                     )
     orden_calculo = Column(NUMBER(precision=5))
     estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
@@ -196,22 +196,22 @@ class st_parametros_x_proceso(custom_base):
         return validar_number(key, value, 5)
 
 
-class st_factores_calculo_parametros(custom_base):
-    __tablename__ = 'st_factores_calc_parametros'
+class st_factor_calculo_parametro(custom_base):
+    __tablename__ = 'st_factor_calculo_parametro'
     __table_args__ = (
         PrimaryKeyConstraint('empresa', 'cod_proceso', 'cod_parametro', 'orden'),
         {'schema': schema_name}
     )
 
-    empresa = Column(NUMBER(precision=2), ForeignKey(f'{schema_name}.st_parametros_x_proceso.empresa'), nullable=False)
-    cod_proceso = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_parametros_x_proceso.cod_proceso'), nullable=False)
-    cod_parametro = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_parametros_x_proceso.cod_parametro'),
+    empresa = Column(NUMBER(precision=2), ForeignKey(f'{schema_name}.st_parametro_por_proceso.empresa'), nullable=False)
+    cod_proceso = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_parametro_por_proceso.cod_proceso'), nullable=False)
+    cod_parametro = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_parametro_por_proceso.cod_parametro'),
                            nullable=False)
     orden = Column(NUMBER(precision=3))
-    tipo_operador = Column(VARCHAR(3), nullable=False)
-    operador = Column(VARCHAR(1))
+    tipo_factor = Column(VARCHAR(3), nullable=False)
+    cod_parametro_tipo = Column(VARCHAR(8))
     valor_fijo = Column(NUMBER(precision=30, scale=8))
-    cod_parametro_operador = Column(VARCHAR(8))
+    operador = Column(VARCHAR(1))
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
@@ -232,6 +232,10 @@ class st_factores_calculo_parametros(custom_base):
     @validates('orden')
     def validar_orden(self, key, value):
         return (validar_number(key, value, 3))
+
+    @validates('tipo_factor')
+    def validar_tipo_factor(self, key, value):
+        return validar_varchar(key, value, 3, valores_permitidos=tipo_factor.values())
 
     @validates('valor_fijo')
     def validar_valor_fijo(self, key, value):
