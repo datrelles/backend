@@ -16,6 +16,7 @@ from src.models.catalogos_bench import Chasis, DimensionPeso, ElectronicaOtros, 
     Color, Canal, MarcaRepuesto, ProductoExterno, Linea, Marca, ModeloSRI, ModeloHomologado, MatriculacionMarca, \
     ModeloComercial, Segmento, Version, ModeloVersionRepuesto, ClienteCanal, ModeloVersion, Benchmarking
 from src.models.productos import Producto
+from src.models.proveedores import TgModeloItem
 from src.models.users import Empresa
 
 bench = Blueprint('routes_bench', __name__)
@@ -2216,19 +2217,33 @@ def get_cliente_canal():
 def get_productos():
     try:
         EmpresaAlias = aliased(Empresa)
+        ModeloItemAlias = aliased(TgModeloItem)
 
         productos = db.session.query(
             Producto.cod_producto,
+            Producto.cod_modelo,
+            Producto.cod_item,
+            ModeloItemAlias.nombre.label("nombre_item"),
             Producto.nombre.label("nombre_producto"),
             Producto.empresa,
             EmpresaAlias.nombre.label("nombre_empresa")
         ).join(
             EmpresaAlias, Producto.empresa == EmpresaAlias.empresa
-        ).filter(Producto.activo == 'S').all()
+        ).join(
+            ModeloItemAlias,
+            (Producto.empresa == ModeloItemAlias.empresa) &
+            (Producto.cod_modelo == ModeloItemAlias.cod_modelo) &
+            (Producto.cod_item == ModeloItemAlias.cod_item)
+        ).filter(
+            Producto.activo == 'S'
+        ).all()
 
         resultado = [
             {
                 "cod_producto": p.cod_producto,
+                "cod_modelo": p.cod_modelo,
+                "cod_item": p.cod_item,
+                "nombre_item": p.nombre_item.strip(),
                 "nombre_producto": p.nombre_producto.strip(),
                 "empresa": int(p.empresa),
                 "nombre_empresa": p.nombre_empresa
@@ -2237,6 +2252,7 @@ def get_productos():
         ]
 
         return jsonify(resultado), 200
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
