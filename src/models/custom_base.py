@@ -1,7 +1,7 @@
 from collections.abc import Iterable
-
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
+from sqlalchemy import text
 from src.exceptions import validation_error
 
 base = declarative_base(metadata=db.metadata)
@@ -44,3 +44,7 @@ class custom_base(base):
             data[arg] = ([item.to_dict() for item in atributo]) if isinstance(atributo,
                                                                               Iterable) else atributo.to_dict()
         return data
+
+    @staticmethod
+    def execute_sql(sql, **kwargs):
+        return db.session.execute(text(sql), kwargs).scalar()
