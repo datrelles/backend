@@ -47,7 +47,7 @@ def get_procesos(empresa):
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_proceso.query()
-    procesos = query.filter(st_proceso.empresa == empresa).all()
+    procesos = query.filter(st_proceso.empresa == empresa).order_by(st_proceso.cod_proceso).all()
     return jsonify(st_proceso.to_list(procesos))
 
 
@@ -162,7 +162,7 @@ def get_formulas_proceso(empresa):
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_formula_proceso.query()
-    formulas = query.filter(st_formula_proceso.empresa == empresa).all()
+    formulas = query.filter(st_formula_proceso.empresa == empresa).order_by(st_formula_proceso.cod_formula).all()
     return jsonify(st_formula_proceso.to_list(formulas))
 
 
@@ -281,7 +281,8 @@ def get_parametros_proceso(empresa):
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_parametro_proceso.query()
-    parametros = query.filter(st_parametro_proceso.empresa == empresa).all()
+    parametros = query.filter(st_parametro_proceso.empresa == empresa).order_by(
+        st_parametro_proceso.cod_parametro).all()
     return jsonify(st_parametro_proceso.to_list(parametros))
 
 
@@ -750,7 +751,7 @@ def get_funciones(empresa):
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_funcion.query()
-    funciones = query.filter(st_funcion.empresa == empresa).order_by(func.lower(st_funcion.nombre)).all()
+    funciones = query.filter(st_funcion.empresa == empresa).order_by(st_funcion.cod_funcion).all()
     return jsonify(st_funcion.to_list(funciones))
 
 
@@ -771,7 +772,7 @@ def get_funciones_por_modulo(empresa, cod_modulo):
         return jsonify({'mensaje': mensaje}), 404
     query = st_funcion.query()
     funciones = query.filter(st_funcion.empresa == empresa, st_funcion.cod_modulo == cod_modulo).order_by(
-        st_funcion.cod_modulo, st_funcion.nombre).all()
+        st_funcion.cod_funcion).all()
     return jsonify(st_funcion.to_list(funciones))
 
 
