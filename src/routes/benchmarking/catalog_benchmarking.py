@@ -2106,6 +2106,8 @@ def get_modelos_comerciales():
 @cross_origin()
 def get_modelos_version_repuesto():
     try:
+        ModeloItemAlias = aliased(TgModeloItem)
+
         resultados = db.session.query(
             ModeloVersionRepuesto.codigo_mod_vers_repuesto,
             ModeloVersionRepuesto.codigo_modelo_comercial,
@@ -2120,6 +2122,7 @@ def get_modelos_version_repuesto():
             Marca.nombre_marca.label("nombre_marca"),
             Version.nombre_version,
             Empresa.nombre.label("nombre_empresa"),
+            ModeloItemAlias.nombre.label("nombre_item"),  # <<-- agregado
             ModeloVersionRepuesto.precio_producto_modelo,
             ModeloVersionRepuesto.precio_venta_distribuidor,
             ModeloVersionRepuesto.descripcion
@@ -2129,6 +2132,7 @@ def get_modelos_version_repuesto():
          .join(Marca, ModeloVersionRepuesto.codigo_marca == Marca.codigo_marca)\
          .join(Version, ModeloVersionRepuesto.codigo_version == Version.codigo_version)\
          .join(Empresa, ModeloVersionRepuesto.empresa == Empresa.empresa)\
+         .join(ModeloItemAlias, (Producto.empresa == ModeloItemAlias.empresa) & (Producto.cod_modelo == ModeloItemAlias.cod_modelo) & (Producto.cod_item == ModeloItemAlias.cod_item))\
          .all()
 
         return jsonify([{
@@ -2145,6 +2149,7 @@ def get_modelos_version_repuesto():
             "nombre_marca": r.nombre_marca,
             "nombre_version": r.nombre_version,
             "nombre_empresa": r.nombre_empresa,
+            "nombre_item": r.nombre_item,
             "precio_producto_modelo": r.precio_producto_modelo,
             "precio_venta_distribuidor": r.precio_venta_distribuidor,
             "descripcion": r.descripcion
@@ -2309,25 +2314,30 @@ def get_modelo_version():
             ModeloVersion.precio_producto_modelo,
             ModeloVersion.precio_venta_distribuidor,
             DimensionPeso.codigo_dim_peso,
-            Imagenes.descripcion_imagen,
+            Imagenes.path_imagen,
             ElectronicaOtros.codigo_electronica,
             Motor.nombre_motor,
             Motor.codigo_motor,
             Motor.codigo_tipo_motor,
+            TipoMotor.nombre_tipo.label("nombre_tipo"),
             Transmision.codigo_transmision,
-            Transmision.descripcion_transmision,
+            Transmision.caja_cambios,
             Color.nombre_color,
             Chasis.codigo_chasis,
             ModeloComercial.nombre_modelo.label("nombre_modelo_comercial"),
             Marca.nombre_marca,
             ClienteCanal.codigo_cliente_canal,
+            Canal.nombre_canal,
             ClienteCanal.cod_producto,
+            Producto.nombre.label("nombre_producto"),
             ClienteCanal.empresa,
+            Empresa.nombre.label("nombre_empresa"),
             Version.nombre_version
         ).join(DimensionPeso, ModeloVersion.codigo_dim_peso == DimensionPeso.codigo_dim_peso) \
          .join(Imagenes, ModeloVersion.codigo_imagen == Imagenes.codigo_imagen) \
          .join(ElectronicaOtros, ModeloVersion.codigo_electronica == ElectronicaOtros.codigo_electronica) \
          .join(Motor, (ModeloVersion.codigo_motor == Motor.codigo_motor) & (ModeloVersion.codigo_tipo_motor == Motor.codigo_tipo_motor)) \
+         .join(TipoMotor, Motor.codigo_tipo_motor == TipoMotor.codigo_tipo_motor) \
          .join(Transmision, ModeloVersion.codigo_transmision == Transmision.codigo_transmision) \
          .join(Color, ModeloVersion.codigo_color_bench == Color.codigo_color_bench) \
          .join(Chasis, ModeloVersion.codigo_chasis == Chasis.codigo_chasis) \
@@ -2340,6 +2350,9 @@ def get_modelo_version():
                              (ModeloVersion.cod_producto == ClienteCanal.cod_producto) &
                              (ModeloVersion.codigo_modelo_comercial == ClienteCanal.codigo_modelo_comercial) &
                              (ModeloVersion.codigo_marca == ClienteCanal.codigo_marca)) \
+         .join(Canal, ClienteCanal.codigo_cliente_canal == Canal.codigo_canal) \
+         .join(Producto, (ClienteCanal.cod_producto == Producto.cod_producto) & (ClienteCanal.empresa == Producto.empresa)) \
+         .join(Empresa, ClienteCanal.empresa == Empresa.empresa) \
          .join(Version, ModeloVersion.codigo_version == Version.codigo_version) \
          .all()
 
@@ -2350,25 +2363,30 @@ def get_modelo_version():
             "precio_producto_modelo": r.precio_producto_modelo,
             "precio_venta_distribuidor": r.precio_venta_distribuidor,
             "codigo_dim_peso": r.codigo_dim_peso,
-            "descripcion_imagen": r.descripcion_imagen,
+            "path_imagen": r.path_imagen,
             "codigo_electronica": r.codigo_electronica,
             "nombre_motor": r.nombre_motor,
             "codigo_motor": r.codigo_motor,
             "codigo_tipo_motor": r.codigo_tipo_motor,
+            "nombre_tipo_motor": r.nombre_tipo,
             "codigo_transmision": r.codigo_transmision,
-            "descripcion_transmision": r.descripcion_transmision,
+            "caja_cambios": r.caja_cambios,
             "nombre_color": r.nombre_color,
             "codigo_chasis": r.codigo_chasis,
             "nombre_modelo_comercial": r.nombre_modelo_comercial,
             "nombre_marca": r.nombre_marca,
             "codigo_cliente_canal": r.codigo_cliente_canal,
+            "nombre_canal": r.nombre_canal,
             "cod_producto": r.cod_producto,
+            "nombre_producto": r.nombre_producto,
             "empresa": r.empresa,
+            "nombre_empresa": r.nombre_empresa,
             "nombre_version": r.nombre_version
         } for r in resultados]), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 # ACTUALIZAR/ MODIFICAR DATOS -------------------------------------------------------------------------->
