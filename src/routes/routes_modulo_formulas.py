@@ -70,7 +70,7 @@ def post_proceso(empresa, data):
         return jsonify({'mensaje': mensaje}), 409
     db.session.add(proceso)
     db.session.commit()
-    mensaje = f'Se registró el proceso {data['cod_proceso']}'
+    mensaje = f'Se registró el proceso {proceso.cod_proceso}'
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
 
@@ -185,7 +185,7 @@ def post_formula_proceso(empresa, data):
         return jsonify({'mensaje': mensaje}), 409
     db.session.add(formula)
     db.session.commit()
-    mensaje = f'Se registró la fórmula {data['cod_formula']}'
+    mensaje = f'Se registró la fórmula {formula.cod_formula}'
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
 
@@ -304,7 +304,7 @@ def post_parametro_proceso(empresa, data):
         return jsonify({'mensaje': mensaje}), 409
     db.session.add(parametro)
     db.session.commit()
-    mensaje = f'Se registró el parámetro {data['cod_parametro']}'
+    mensaje = f'Se registró el parámetro {parametro.cod_parametro}'
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
 
@@ -798,7 +798,7 @@ def post_funcion(empresa, data):
         return jsonify({'mensaje': mensaje}), 409
     db.session.add(funcion)
     db.session.commit()
-    mensaje = f'Se registró la función {data['cod_funcion']}'
+    mensaje = f'Se registró la función {funcion.cod_funcion}'
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
 

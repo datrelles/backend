@@ -17,7 +17,8 @@ def validar_empresa(clave, valor):
 
 
 def validar_cod(clave, valor, es_requerido=True):
-    return validar_varchar(clave, valor, 8, es_requerido=es_requerido)
+    codigo = validar_varchar(clave, valor, 8, es_requerido=es_requerido)
+    return codigo.upper() if codigo else codigo
 
 
 def validar_estado(clave, valor, es_requerido=True):
