@@ -7,6 +7,7 @@ from src.config.database import db
 from sqlalchemy import text, and_, func
 from src.decorators import validate_json, handle_exceptions
 from src.enums import tipo_factor, operador, tipo_parametro
+from src.models.custom_base import custom_base
 from src.models.modulo_formulas import st_proceso, st_formula_proceso, st_parametro_proceso, st_parametro_por_proceso, \
     st_factor_calculo_parametro, st_funcion, validar_cod, tg_sistema, st_parametro_funcion, validar_estado
 from src.validations import validar_varchar, validar_number
@@ -1074,3 +1075,52 @@ def delete_parametro_funcion(empresa, cod_funcion, secuencia):
     mensaje = f'Se eliminó el parámetro {secuencia} de la función'
     logger.info(mensaje)
     return '', 204
+
+
+@formulas_b.route("/empresas/<empresa>/funciones-bd/<cod_funcion>", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("probar función")
+def execute_funcion_bd(empresa, cod_funcion):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_funcion = validar_cod('cod_funcion', cod_funcion)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    sql = f"SELECT PK_FORMULAS.ST_EJECUTAR_FUNCION({empresa}, '', '', '{cod_funcion}') FROM DUAL"
+    result = custom_base.execute_sql(sql)
+    return jsonify({"mensaje": result})
+
+
+@formulas_b.route("/empresas/<empresa>/formulas-bd/<cod_formula>", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("probar fórmula")
+def execute_formula_bd(empresa, cod_formula):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_formula = validar_cod('cod_formula', cod_formula)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    sql = f"SELECT PK_FORMULAS.ST_EJECUTAR_FORMULA({empresa}, '', '', '{cod_formula}') FROM DUAL"
+    result = custom_base.execute_sql(sql)
+    return jsonify({"mensaje": result})
+
+
+@formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>/parametros/<cod_parametro>/factores-bd", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("probar factores de cálculo")
+def execute_factores_bd(empresa, cod_proceso, cod_parametro):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_proceso = validar_cod('cod_proceso', cod_proceso)
+    cod_parametro = validar_cod('cod_parametro', cod_parametro)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    sql = f"SELECT PK_FORMULAS.ST_EJECUTAR_FACTORES({empresa}, '{cod_proceso}', '{cod_parametro}') FROM DUAL"
+    result = custom_base.execute_sql(sql)
+    return jsonify({"mensaje": result})
