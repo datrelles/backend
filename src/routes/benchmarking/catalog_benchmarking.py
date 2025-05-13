@@ -1492,19 +1492,22 @@ def insert_cliente_canal():
 def insert_modelo_version():
     try:
         data = request.json
+
         campos_requeridos = [
-            "descripcion_imagen",
+            "codigo_imagen",
             "codigo_dim_peso",
             "codigo_electronica",
-            "nombre_motor",
+            "codigo_motor",
             "codigo_tipo_motor",
             "codigo_transmision",
-            "nombre_color",
+            "codigo_color_bench",
             "codigo_chasis",
-            "nombre_modelo_comercial",
-            "nombre_marca", "nombre_version",
+            "codigo_modelo_comercial",
+            "codigo_marca",
+            "codigo_version",
             "codigo_cliente_canal",
-            "empresa", "cod_producto",
+            "empresa",
+            "cod_producto",
             "codigo_mod_vers_repuesto",
             "nombre_modelo_version",
             "anio_modelo_version",
@@ -1514,84 +1517,81 @@ def insert_modelo_version():
 
         faltantes = [campo for campo in campos_requeridos if data.get(campo) in [None, ""]]
         if faltantes:
-            return jsonify({"error": f"Campo requerido faltante: {faltantes}"}), 400
+            return jsonify({
+                "error": "No se insertó ningún registro",
+                "detalles": [{
+                    "error": "Faltan campos obligatorios",
+                    "repuestos": data
+                }]
+            }), 400
 
         # Validación año
         if not (1950 <= int(data["anio_modelo_version"]) <= 2100):
             return jsonify({"error": "Año de modelo fuera de rango (1950-2100)"}), 400
 
-        # Validar nombre único
+        # Validar unicidad por nombre del modelo versión
         nombre_existente = db.session.query(ModeloVersion).filter(
             func.lower(ModeloVersion.nombre_modelo_version) == data["nombre_modelo_version"].lower()
         ).first()
         if nombre_existente:
             return jsonify({"error": "Ya existe un modelo con ese nombre"}), 409
 
-        imagen = db.session.query(Imagenes).filter_by(descripcion_imagen=data["descripcion_imagen"]).first()
+        imagen = db.session.query(Imagenes).filter_by(codigo_imagen=data["codigo_imagen"]).first()
+        motor = db.session.query(Motor).filter_by(codigo_motor=data["codigo_motor"]).first()
+        color = db.session.query(Color).filter_by(codigo_color_bench=data["codigo_color_bench"]).first()
+        modelo = db.session.query(ModeloComercial).filter_by(codigo_modelo_comercial=data["codigo_modelo_comercial"]).first()
+        version = db.session.query(Version).filter_by(codigo_version=data["codigo_version"]).first()
+
         if not imagen:
             return jsonify({"error": "Imagen no encontrada"}), 404
-
-        motor = db.session.query(Motor).filter_by(nombre_motor=data["nombre_motor"]).first()
         if not motor:
             return jsonify({"error": "Motor no encontrado"}), 404
-
-        color = db.session.query(Color).filter_by(nombre_color=data["nombre_color"]).first()
         if not color:
             return jsonify({"error": "Color no encontrado"}), 404
-
-        modelo = db.session.query(ModeloComercial).filter_by(
-            nombre_modelo=data["nombre_modelo_comercial"]
-        ).first()
-        if not modelo:
-            return jsonify({"error": "Modelo comercial no encontrado"}), 404
-
-        if modelo.codigo_marca is None:
-            return jsonify({"error": "Marca no asociada al modelo comercial"}), 404
-
-        version = db.session.query(Version).filter_by(nombre_version=data["nombre_version"]).first()
+        if not modelo or modelo.codigo_marca != data["codigo_marca"]:
+            return jsonify({"error": "Modelo comercial o marca inválida"}), 404
         if not version:
             return jsonify({"error": "Versión no encontrada"}), 404
 
+        # Validaciones de existencia en otras tablas
         def validar_existencia(model, **kwargs):
             return db.session.query(model).filter_by(**kwargs).first() is not None
 
-        if not validar_existencia(DimensionPeso, codigo_dim_peso=data["codigo_dim_peso"]):
-            return jsonify({"error": "Dimensión/peso no encontrado"}), 404
+        validaciones = [
+            (DimensionPeso, {"codigo_dim_peso": data["codigo_dim_peso"]}),
+            (ElectronicaOtros, {"codigo_electronica": data["codigo_electronica"]}),
+            (Transmision, {"codigo_transmision": data["codigo_transmision"]}),
+            (Chasis, {"codigo_chasis": data["codigo_chasis"]}),
+            (ClienteCanal, {
+                "codigo_cliente_canal": data["codigo_cliente_canal"],
+                "codigo_mod_vers_repuesto": data["codigo_mod_vers_repuesto"],
+                "empresa": data["empresa"],
+                "cod_producto": data["cod_producto"],
+                "codigo_modelo_comercial": data["codigo_modelo_comercial"],
+                "codigo_marca": data["codigo_marca"]
+            })
+        ]
 
-        if not validar_existencia(ElectronicaOtros, codigo_electronica=data["codigo_electronica"]):
-            return jsonify({"error": "Electrónica no encontrada"}), 404
-
-        if not validar_existencia(Transmision, codigo_transmision=data["codigo_transmision"]):
-            return jsonify({"error": "Transmisión no encontrada"}), 404
-
-        if not validar_existencia(Chasis, codigo_chasis=data["codigo_chasis"]):
-            return jsonify({"error": "Chasis no encontrado"}), 404
-
-        if not validar_existencia(ClienteCanal,
-                                  codigo_cliente_canal=data["codigo_cliente_canal"],
-                                  codigo_mod_vers_repuesto=data["codigo_mod_vers_repuesto"],
-                                  empresa=data["empresa"],
-                                  cod_producto=data["cod_producto"],
-                                  codigo_modelo_comercial=modelo.codigo_modelo_comercial,
-                                  codigo_marca=modelo.codigo_marca):
-            return jsonify({"error": "Cliente-canal no válido"}), 404
+        for model, filtro in validaciones:
+            if not validar_existencia(model, **filtro):
+                return jsonify({"error": f"Entidad no encontrada: {model.__name__}"}), 404
 
         nuevo = ModeloVersion(
             codigo_dim_peso=data["codigo_dim_peso"],
-            codigo_imagen=imagen.codigo_imagen,
+            codigo_imagen=data["codigo_imagen"],
             codigo_electronica=data["codigo_electronica"],
-            codigo_motor=motor.codigo_motor,
+            codigo_motor=data["codigo_motor"],
             codigo_tipo_motor=data["codigo_tipo_motor"],
             codigo_transmision=data["codigo_transmision"],
-            codigo_color_bench=color.codigo_color_bench,
+            codigo_color_bench=data["codigo_color_bench"],
             codigo_chasis=data["codigo_chasis"],
-            codigo_modelo_comercial=modelo.codigo_modelo_comercial,
-            codigo_marca=modelo.codigo_marca,
+            codigo_modelo_comercial=data["codigo_modelo_comercial"],
+            codigo_marca=data["codigo_marca"],
             codigo_cliente_canal=data["codigo_cliente_canal"],
             codigo_mod_vers_repuesto=data["codigo_mod_vers_repuesto"],
             empresa=data["empresa"],
             cod_producto=data["cod_producto"],
-            codigo_version=version.codigo_version,
+            codigo_version=data["codigo_version"],
             nombre_modelo_version=data["nombre_modelo_version"],
             anio_modelo_version=data["anio_modelo_version"],
             precio_producto_modelo=data["precio_producto_modelo"],
@@ -1600,11 +1600,11 @@ def insert_modelo_version():
 
         db.session.add(nuevo)
         db.session.flush()
-        codigo_modelo_version = nuevo.codigo_modelo_version
         db.session.commit()
+
         return jsonify({
             "message": "Modelo versión insertado correctamente",
-            "codigo_modelo_version": codigo_modelo_version
+            "codigo_modelo_version": nuevo.codigo_modelo_version
         })
 
     except Exception as e:
