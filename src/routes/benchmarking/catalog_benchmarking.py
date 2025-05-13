@@ -2295,6 +2295,8 @@ def get_modelo_version():
             ModeloVersion.precio_venta_distribuidor,
             DimensionPeso.codigo_dim_peso,
             Imagenes.path_imagen,
+            Imagenes.descripcion_imagen,
+            Imagenes.codigo_imagen,
             ElectronicaOtros.codigo_electronica,
             Motor.nombre_motor,
             Motor.codigo_motor,
@@ -2303,6 +2305,7 @@ def get_modelo_version():
             Transmision.codigo_transmision,
             Transmision.caja_cambios,
             Color.nombre_color,
+            Color.codigo_color_bench,
             Chasis.codigo_chasis,
             ModeloComercial.nombre_modelo.label("nombre_modelo_comercial"),
             Marca.nombre_marca,
@@ -2344,12 +2347,15 @@ def get_modelo_version():
             "precio_venta_distribuidor": r.precio_venta_distribuidor,
             "codigo_dim_peso": r.codigo_dim_peso,
             "path_imagen": r.path_imagen,
+            "descripcion_imagen": r.descripcion_imagen,
+            "codigo_imagen": r.codigo_imagen,
             "codigo_electronica": r.codigo_electronica,
             "nombre_motor": r.nombre_motor,
             "codigo_motor": r.codigo_motor,
             "codigo_tipo_motor": r.codigo_tipo_motor,
             "nombre_tipo_motor": r.nombre_tipo,
             "codigo_transmision": r.codigo_transmision,
+            "codigo_color_bench": r.codigo_color_bench,
             "caja_cambios": r.caja_cambios,
             "nombre_color": r.nombre_color,
             "codigo_chasis": r.codigo_chasis,
@@ -3029,27 +3035,46 @@ def update_modelo_version(codigo_modelo_version):
         if not modelo_version:
             return jsonify({"error": "Modelo versión no encontrado"}), 404
 
-        imagen = db.session.query(Imagenes).filter_by(descripcion_imagen=data["descripcion_imagen"]).first()
-        motor = db.session.query(Motor).filter_by(nombre_motor=data["nombre_motor"]).first()
-        color = db.session.query(Color).filter_by(nombre_color=data["nombre_color"]).first()
-        modelo = db.session.query(ModeloComercial).filter_by(nombre_modelo=data["nombre_modelo_comercial"]).first()
-        version = db.session.query(Version).filter_by(nombre_version=data["nombre_version"]).first()
+        campos_requeridos = [
+            "codigo_imagen", "codigo_dim_peso", "codigo_electronica", "codigo_motor", "codigo_tipo_motor",
+            "codigo_transmision", "codigo_color_bench", "codigo_chasis", "codigo_modelo_comercial",
+            "codigo_marca", "codigo_version", "codigo_cliente_canal", "codigo_mod_vers_repuesto",
+            "empresa", "cod_producto", "nombre_modelo_version", "anio_modelo_version",
+            "precio_producto_modelo", "precio_venta_distribuidor"
+        ]
+        faltantes = [campo for campo in campos_requeridos if data.get(campo) in [None, ""]]
+        if faltantes:
+            return jsonify({"error": f"Faltan campos requeridos: {faltantes}"}), 400
+
+        def validar_existencia(model, campo, valor):
+            return db.session.query(model).filter(getattr(model, campo) == valor).first()
+
+        if not validar_existencia(Imagenes, "codigo_imagen", data["codigo_imagen"]):
+            return jsonify({"error": "Imagen no encontrada"}), 404
+        if not validar_existencia(Motor, "codigo_motor", data["codigo_motor"]):
+            return jsonify({"error": "Motor no encontrado"}), 404
+        if not validar_existencia(Color, "codigo_color_bench", data["codigo_color_bench"]):
+            return jsonify({"error": "Color no encontrado"}), 404
+        if not validar_existencia(ModeloComercial, "codigo_modelo_comercial", data["codigo_modelo_comercial"]):
+            return jsonify({"error": "Modelo comercial no encontrado"}), 404
+        if not validar_existencia(Version, "codigo_version", data["codigo_version"]):
+            return jsonify({"error": "Versión no encontrada"}), 404
 
         modelo_version.codigo_dim_peso = data["codigo_dim_peso"]
-        modelo_version.codigo_imagen = imagen.codigo_imagen
+        modelo_version.codigo_imagen = data["codigo_imagen"]
         modelo_version.codigo_electronica = data["codigo_electronica"]
-        modelo_version.codigo_motor = motor.codigo_motor
+        modelo_version.codigo_motor = data["codigo_motor"]
         modelo_version.codigo_tipo_motor = data["codigo_tipo_motor"]
         modelo_version.codigo_transmision = data["codigo_transmision"]
-        modelo_version.codigo_color_bench = color.codigo_color_bench
+        modelo_version.codigo_color_bench = data["codigo_color_bench"]
         modelo_version.codigo_chasis = data["codigo_chasis"]
-        modelo_version.codigo_modelo_comercial = modelo.codigo_modelo_comercial
-        modelo_version.codigo_marca = modelo.codigo_marca
+        modelo_version.codigo_modelo_comercial = data["codigo_modelo_comercial"]
+        modelo_version.codigo_marca = data["codigo_marca"]
         modelo_version.codigo_cliente_canal = data["codigo_cliente_canal"]
         modelo_version.codigo_mod_vers_repuesto = data["codigo_mod_vers_repuesto"]
         modelo_version.empresa = data["empresa"]
         modelo_version.cod_producto = data["cod_producto"]
-        modelo_version.codigo_version = version.codigo_version
+        modelo_version.codigo_version = data["codigo_version"]
         modelo_version.nombre_modelo_version = data["nombre_modelo_version"]
         modelo_version.anio_modelo_version = data["anio_modelo_version"]
         modelo_version.precio_producto_modelo = data["precio_producto_modelo"]
