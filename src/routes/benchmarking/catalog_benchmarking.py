@@ -1692,7 +1692,8 @@ def get_or_create(model, defaults=None, **kwargs):
 @jwt_required()
 def get_chasis():
     try:
-        chasis_list = db.session.query(Chasis).all()
+        #chasis_list = db.session.query(Chasis).all()
+        chasis_list = db.session.query(Chasis).order_by(Chasis.codigo_chasis.asc()).all()
 
         resultado = []
         for ch in chasis_list:
@@ -1721,7 +1722,8 @@ def get_chasis():
 @jwt_required()
 def get_dimensiones():
     try:
-        dimensiones = db.session.query(DimensionPeso).all()
+       # dimensiones = db.session.query(DimensionPeso).all()
+        dimensiones = db.session.query(DimensionPeso).order_by(DimensionPeso.codigo_dim_peso.asc()).all()
 
         resultado = []
         for dim in dimensiones:
@@ -1746,7 +1748,8 @@ def get_dimensiones():
 @jwt_required()
 def get_electronica():
     try:
-        electronica = db.session.query(ElectronicaOtros).all()
+        #electronica = db.session.query(ElectronicaOtros).all()
+        electronica = db.session.query(ElectronicaOtros).order_by(ElectronicaOtros.codigo_electronica.asc()).all()
 
         resultado = []
         for elect in electronica:
@@ -1792,7 +1795,8 @@ def get_tipo_motor():
 @jwt_required()
 def get_motores():
     try:
-        motores = db.session.query(Motor).all()
+        #motores = db.session.query(Motor).all()
+        motores = db.session.query(Motor).order_by(Motor.codigo_motor.asc()).all()
 
         resultado = []
         for m in motores:
@@ -1844,7 +1848,8 @@ def get_color():
 @jwt_required()
 def get_imagenes():
     try:
-        img = db.session.query(Imagenes).all()
+        #img = db.session.query(Imagenes).all()
+        img = db.session.query(Imagenes).order_by(Imagenes.codigo_imagen.asc()).all()
 
         resultado = []
         for im in img:
@@ -1867,7 +1872,8 @@ def get_imagenes():
 @jwt_required()
 def get_transmision():
     try:
-        trans = db.session.query(Transmision).all()
+        #trans = db.session.query(Transmision).all()
+        trans = db.session.query(Transmision).order_by(Transmision.caja_cambios.asc()).all()
 
         resultado = []
         for tr in trans:
@@ -1890,7 +1896,8 @@ def get_transmision():
 @jwt_required()
 def get_canal():
     try:
-        canal = db.session.query(Canal).all()
+        #canal = db.session.query(Canal).all()
+        canal = db.session.query(Canal).order_by(Canal.codigo_canal.asc()).all()
 
         resultado = []
         for c in canal:
@@ -1914,7 +1921,8 @@ def get_canal():
 @jwt_required()
 def get_lineas():
     try:
-        lineas = db.session.query(Linea).all()
+        #lineas = db.session.query(Linea).all()
+        lineas = db.session.query(Linea).order_by(Linea.codigo_linea.asc()).all()
 
         resultado = []
         for l in lineas:
@@ -2079,7 +2087,7 @@ def get_marca():
 @jwt_required()
 def get_modelos_comerciales():
     try:
-        registros = db.session.query(ModeloComercial).all()
+        registros = db.session.query(ModeloComercial).order_by(ModeloComercial.nombre_modelo.asc()).all()
         resultados = []
 
         for modelo in registros:
@@ -2163,7 +2171,8 @@ def get_modelos_version_repuesto():
 @cross_origin()
 def get_cliente_canal():
     try:
-        registros = db.session.query(ClienteCanal).all()
+        #registros = db.session.query(ClienteCanal).all()
+        registros = db.session.query(ClienteCanal).order_by(ClienteCanal.codigo_cliente_canal.asc()).all()
         resultados = []
 
         for cliente in registros:
@@ -2266,7 +2275,8 @@ def get_productos():
 @cross_origin()
 def get_segmentos():
     try:
-        segmentos = db.session.query(Segmento).all()
+        #segmentos = db.session.query(Segmento).all()
+        segmentos = db.session.query(Segmento).order_by(Segmento.nombre_segmento.asc()).all()
         resultados = []
 
         for seg in segmentos:
