@@ -2,7 +2,6 @@ import logging
 import os
 from datetime import datetime
 
-import pandas as pd
 import unicodedata
 from flask import request, Blueprint, jsonify
 from flask_cors import cross_origin
@@ -370,7 +369,6 @@ def insert_motor():
         insertados = 0
         duplicados = []
 
-        # Traemos todos los registros actuales
         registros_actuales = db.session.query(Motor).join(TipoMotor).all()
 
         for item in data:
@@ -394,7 +392,6 @@ def insert_motor():
                 db.session.add(tipo_motor)
                 db.session.flush()
 
-            # Comparar con registros existentes
             existe = any(
                 r.codigo_tipo_motor == tipo_motor.codigo_tipo_motor and
                 normalize(r.nombre_motor) == normalize(item.get("nombre_motor")) and
@@ -458,7 +455,6 @@ def insert_color():
         if not isinstance(data, list):
             return jsonify({"error": "Formato de datos inválido. Se esperaba una lista o un objeto con 'color'."}), 400
 
-        # Validar campos obligatorios y duplicados en base de datos
         nombres_color = [item.get("nombre_color", "").strip().lower() for item in data]
         if not all(nombres_color):
             return jsonify({"error": "Todos los registros deben tener 'nombre_color'"}), 400
@@ -474,7 +470,6 @@ def insert_color():
         if duplicados:
             return jsonify({"error": f"Los siguientes colores ya existen: {', '.join(duplicados)}"}), 409
 
-        # Insertar todos
         for item in data:
             nuevo = Color(
                 nombre_color=item["nombre_color"].strip(),
@@ -509,7 +504,6 @@ def insert_canal():
 
         for item in data:
             estado = item.get("estado_canal")
-
 
             if isinstance(estado, str):
                 estado_normalizado = estado.strip().lower()
@@ -676,7 +670,6 @@ def insert_producto_externo():
                     duplicados.append(item)
                     continue
 
-            # Validar duplicado
             existe = any(
                 r.nombre_producto.lower() == nombre_producto.lower() and
                 r.codigo_marca_rep == codigo_marca_rep
@@ -723,7 +716,6 @@ def insert_linea():
         data = request.json
         user = get_jwt_identity()
 
-        # Verifica si es carga masiva (lista) o individual (dict)
         if isinstance(data, list):
             nuevas_lineas = []
             errores = []
@@ -761,7 +753,7 @@ def insert_linea():
                     if padre:
                         nueva.codigo_linea_padre = padre.codigo_linea
                     else:
-                        nueva.codigo_linea_padre = nueva.codigo_linea  # Se convierte en su propio padre
+                        nueva.codigo_linea_padre = nueva.codigo_linea
                 else:
                     nueva.codigo_linea_padre = nueva.codigo_linea
 
@@ -826,7 +818,6 @@ def insert_marca():
         if not nombre or estado not in [0, 1]:
             return jsonify({"error": "Los campos 'nombre_marca' y 'estado_marca' (0 o 1) son obligatorios"}), 400
 
-        # Validación de nombre único (case-insensitive)
         existe = db.session.query(Marca).filter(
             func.lower(Marca.nombre_marca) == nombre.lower()
         ).first()
@@ -867,7 +858,6 @@ def insert_benchmarking():
         if not empresa or not ram_inicial:
             return jsonify({"error": "Campos 'empresa' y 'ram_inicial' son obligatorios"}), 400
 
-        # Obtener siguiente valor de secuencia
         result = db.session.execute(text("SELECT stock.seq_st_benchmarking.NEXTVAL FROM dual"))
         codigo_benchmarking = result.scalar()
 
@@ -965,7 +955,6 @@ def insert_modelo_homologado():
 
             modelo_sri = None
 
-            # 🔍 Resolver por nombre si no viene el código
             if not codigo_sri and nombre_modelo:
                 modelo_sri = db.session.query(ModeloSRI).filter(
                     func.lower(func.trim(func.replace(ModeloSRI.nombre_modelo, '\u00A0', ' '))) == nombre_modelo
@@ -979,7 +968,6 @@ def insert_modelo_homologado():
                 errores.append({**item, "error": "Modelo SRI no encontrado"})
                 continue
 
-            # Validación de duplicado
             ya_existe = db.session.query(ModeloHomologado).filter_by(
                 codigo_modelo_sri=modelo_sri.codigo_modelo_sri
             ).first()
@@ -1029,14 +1017,12 @@ def insert_matriculacion_marca():
         if not codigo_homologado or not placa:
             return jsonify({"error": "Los campos 'codigo_modelo_homologado' y 'placa' son obligatorios"}), 400
 
-        # Validar existencia de modelo homologado
         existe_modelo = db.session.query(ModeloHomologado).filter_by(
             codigo_modelo_homologado=codigo_homologado
         ).first()
         if not existe_modelo:
             return jsonify({"error": "El código de modelo homologado no existe"}), 404
 
-        # Validar placa única (case-insensitive)
         existe_placa = db.session.query(MatriculacionMarca).filter(
             func.upper(MatriculacionMarca.placa) == placa.upper()
         ).first()
@@ -1169,7 +1155,6 @@ def insert_segmento():
         if not nombre or estado not in [0, 1] or not all([linea, modelo, marca]):
             return jsonify({"error": "Todos los campos obligatorios deben ser enviados"}), 400
 
-        # Validar claves foráneas
         if not db.session.query(Linea).filter_by(codigo_linea=linea).first():
             return jsonify({"error": "La línea no existe"}), 404
 
@@ -1181,7 +1166,6 @@ def insert_segmento():
         ).first():
             return jsonify({"error": "El modelo comercial no existe para esa marca"}), 404
 
-        # Validar unicidad
         existe = db.session.query(Segmento).filter(
             func.lower(Segmento.nombre_segmento) == nombre.lower(),
             Segmento.codigo_modelo_comercial == modelo
@@ -1189,7 +1173,6 @@ def insert_segmento():
         if existe:
             return jsonify({"error": "Ya existe un segmento con ese nombre para ese modelo"}), 409
 
-        # Obtener nuevo código incremental
         max_codigo = db.session.query(func.max(Segmento.codigo_segmento)).scalar() or 0
         nuevo_codigo = max_codigo + 1
 
@@ -1310,7 +1293,6 @@ def insert_modelo_version_repuesto():
             codigo_marca = item.get("codigo_marca")
             codigo_version = item.get("codigo_version")
 
-            # Resolver producto y empresa desde nombre
             if not cod_producto or not empresa:
                 if item.get("nombre_producto"):
                     prod = db.session.query(Producto).filter_by(nombre=item["nombre_producto"]).first()
@@ -1322,7 +1304,6 @@ def insert_modelo_version_repuesto():
                         errores.append({"error": "Producto no encontrado", "repuestos": item})
                         continue
 
-            # Resolver producto externo
             if not codigo_prod_externo and item.get("nombre_producto_externo"):
                 ext = db.session.query(ProductoExterno).filter_by(nombre_producto=item["nombre_producto_externo"]).first()
                 if ext:
@@ -1331,7 +1312,6 @@ def insert_modelo_version_repuesto():
                     errores.append({"error": "Producto externo no encontrado", "repuestos": item})
                     continue
 
-            # Resolver modelo comercial y marca
             if not codigo_modelo_comercial or not codigo_marca:
                 if item.get("nombre_modelo_comercial"):
                     modelo = db.session.query(ModeloComercial).filter_by(nombre_modelo=item["nombre_modelo_comercial"]).first()
@@ -1342,7 +1322,6 @@ def insert_modelo_version_repuesto():
                         errores.append({"error": "Modelo comercial no encontrado", "repuestos": item})
                         continue
 
-            # Resolver versión
             if not codigo_version and item.get("nombre_version"):
                 version = db.session.query(Version).filter_by(nombre_version=item["nombre_version"]).first()
                 if version:
@@ -1365,7 +1344,6 @@ def insert_modelo_version_repuesto():
                 errores.append({"error": "Faltan campos obligatorios", "repuestos": item})
                 continue
 
-            # Verificar duplicado
             existe = db.session.query(ModeloVersionRepuesto).filter_by(
                 cod_producto=cod_producto,
                 codigo_modelo_comercial=codigo_modelo_comercial,
@@ -1376,7 +1354,6 @@ def insert_modelo_version_repuesto():
                 duplicados.append({"error": "Registro duplicado", "repuestos": item})
                 continue
 
-            # Insertar
             nuevo = ModeloVersionRepuesto(
                 codigo_prod_externo=codigo_prod_externo,
                 codigo_version=codigo_version,
@@ -1430,13 +1407,11 @@ def insert_cliente_canal():
             codigo_modelo_comercial = item.get("codigo_modelo_comercial")
             codigo_marca = item.get("codigo_marca")
 
-            # Resolviendo por nombres si no se pasan los códigos directamente
             if not all([cod_modelo_vers_repuesto, cod_producto, empresa, codigo_modelo_comercial, codigo_marca]):
                 nombre_producto = item.get("nombre_producto")
                 nombre_modelo = item.get("nombre_modelo_comercial")
                 nombre_version = item.get("nombre_version")
 
-                # Buscar modelo_version_repuesto por nombres
                 modelo = (
                     db.session.query(ModeloVersionRepuesto)
                     .join(Producto, (ModeloVersionRepuesto.cod_producto == Producto.cod_producto) & (ModeloVersionRepuesto.empresa == Producto.empresa))
@@ -1525,11 +1500,9 @@ def insert_modelo_version():
                 }]
             }), 400
 
-        # Validación año
         if not (1950 <= int(data["anio_modelo_version"]) <= 2100):
             return jsonify({"error": "Año de modelo fuera de rango (1950-2100)"}), 400
 
-        # Validar unicidad por nombre del modelo versión
         nombre_existente = db.session.query(ModeloVersion).filter(
             func.lower(ModeloVersion.nombre_modelo_version) == data["nombre_modelo_version"].lower()
         ).first()
@@ -1553,7 +1526,6 @@ def insert_modelo_version():
         if not version:
             return jsonify({"error": "Versión no encontrada"}), 404
 
-        # Validaciones de existencia en otras tablas
         def validar_existencia(model, **kwargs):
             return db.session.query(model).filter_by(**kwargs).first() is not None
 
@@ -1692,7 +1664,6 @@ def get_or_create(model, defaults=None, **kwargs):
 @jwt_required()
 def get_chasis():
     try:
-        #chasis_list = db.session.query(Chasis).all()
         chasis_list = db.session.query(Chasis).order_by(Chasis.codigo_chasis.asc()).all()
 
         resultado = []
@@ -1722,7 +1693,6 @@ def get_chasis():
 @jwt_required()
 def get_dimensiones():
     try:
-       # dimensiones = db.session.query(DimensionPeso).all()
         dimensiones = db.session.query(DimensionPeso).order_by(DimensionPeso.codigo_dim_peso.asc()).all()
 
         resultado = []
@@ -2130,7 +2100,7 @@ def get_modelos_version_repuesto():
             Marca.nombre_marca.label("nombre_marca"),
             Version.nombre_version,
             Empresa.nombre.label("nombre_empresa"),
-            ModeloItemAlias.nombre.label("nombre_item"),  # <<-- agregado
+            ModeloItemAlias.nombre.label("nombre_item"),
             ModeloVersionRepuesto.precio_producto_modelo,
             ModeloVersionRepuesto.precio_venta_distribuidor,
             ModeloVersionRepuesto.descripcion
@@ -2474,7 +2444,6 @@ def update_electronica_otros(codigo):
         if not registro:
             return jsonify({"error": "Registro no encontrado"}), 404
 
-        # Verificar si los nuevos datos duplican otro registro existente
         with db.session.no_autoflush:
             duplicado = db.session.query(ElectronicaOtros).filter(
                 func.lower(func.trim(ElectronicaOtros.capacidad_combustible)) == normalize(data.get("capacidad_combustible")),
@@ -2489,7 +2458,6 @@ def update_electronica_otros(codigo):
         if duplicado:
             return jsonify({"error": "Ya existe un registro con los mismos datos"}), 409
 
-        # Actualizar campos
         registro.capacidad_combustible = data.get("capacidad_combustible")
         registro.tablero = data.get("tablero")
         registro.luces_delanteras = data.get("luces_delanteras")
@@ -2833,7 +2801,6 @@ def update_modelo_sri(codigo_modelo_sri):
         anio = data.get("anio_modelo")
         estado = data.get("estado_modelo")
 
-        # Validar campos si existen en el payload
         if nombre:
             existe_nombre = db.session.query(ModeloSRI).filter(
                 func.lower(ModeloSRI.nombre_modelo) == nombre.lower(),
@@ -2950,7 +2917,6 @@ def update_modelo_version_repuesto(codigo):
     try:
         data = request.get_json()
 
-        # Validaciones mínimas requeridas
         required_fields = ["cod_producto", "codigo_marca", "codigo_modelo_comercial", "empresa",
                            "codigo_version", "codigo_prod_externo", "descripcion",
                            "precio_producto_modelo", "precio_venta_distribuidor"]
@@ -2962,7 +2928,6 @@ def update_modelo_version_repuesto(codigo):
         if not registro:
             return jsonify({"error": "Registro no encontrado"}), 404
 
-        # Validar FKs antes de asignar
         producto = db.session.query(Producto).filter_by(empresa=data["empresa"], cod_producto=data["cod_producto"]).first()
         modelo = db.session.query(ModeloComercial).filter_by(
             codigo_modelo_comercial=data["codigo_modelo_comercial"],
@@ -2974,7 +2939,6 @@ def update_modelo_version_repuesto(codigo):
         if not all([producto, modelo, version, prod_ext]):
             return jsonify({"error": "Alguna FK referenciada no existe"}), 409
 
-        # Actualizar datos
         registro.cod_producto = data["cod_producto"]
         registro.codigo_marca = data["codigo_marca"]
         registro.codigo_modelo_comercial = data["codigo_modelo_comercial"]
@@ -3003,18 +2967,15 @@ def update_cliente_canal(codigo):
             return jsonify({"error": "Datos JSON no proporcionados"}), 400
 
         cliente = db.session.query(ClienteCanal).filter_by(codigo_cliente_canal=codigo).first()
-       # registro = db.session.query(ModeloVersionRepuesto).filter_by(codigo_mod_vers_repuesto=codigo).first()
 
         if not cliente:
             return jsonify({"error": f"Cliente canal con ID {codigo} no encontrado"}), 404
 
-        # Campos requeridos (ajusta según tus validaciones)
         campos_obligatorios = ['codigo_canal', 'codigo_mod_vers_repuesto', 'cod_producto', 'empresa']
         for campo in campos_obligatorios:
             if campo not in data:
                 return jsonify({"error": f"Campo obligatorio '{campo}' faltante"}), 400
 
-        # Actualizar los campos
         cliente.codigo_canal = data.get('codigo_canal')
         cliente.codigo_mod_vers_repuesto = data.get('codigo_mod_vers_repuesto')
         cliente.cod_producto = data.get('cod_producto')
