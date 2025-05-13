@@ -1088,7 +1088,7 @@ def execute_funcion_bd(empresa, cod_funcion):
         mensaje = f'Empresa {empresa} inexistente'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"SELECT PK_FORMULAS.ST_EJECUTAR_FUNCION({empresa}, '', '', '{cod_funcion}') FROM DUAL"
+    sql = f"SELECT PK_FORMULAS.EJECUTAR_FUNCION({empresa}, '', '', '{cod_funcion}') FROM DUAL"
     result = custom_base.execute_sql(sql)
     return jsonify({"mensaje": result})
 
@@ -1104,7 +1104,7 @@ def execute_formula_bd(empresa, cod_formula):
         mensaje = f'Empresa {empresa} inexistente'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"SELECT PK_FORMULAS.ST_EJECUTAR_FORMULA({empresa}, '', '', '{cod_formula}') FROM DUAL"
+    sql = f"SELECT PK_FORMULAS.EJECUTAR_FORMULA({empresa}, '', '', '{cod_formula}') FROM DUAL"
     result = custom_base.execute_sql(sql)
     return jsonify({"mensaje": result})
 
@@ -1121,6 +1121,6 @@ def execute_factores_bd(empresa, cod_proceso, cod_parametro):
         mensaje = f'Empresa {empresa} inexistente'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"SELECT PK_FORMULAS.ST_EJECUTAR_FACTORES({empresa}, '{cod_proceso}', '{cod_parametro}') FROM DUAL"
+    sql = f"SELECT PK_FORMULAS.EJECUTAR_FACTORES({empresa}, '{cod_proceso}', '{cod_parametro}') FROM DUAL"
     result = custom_base.execute_sql(sql)
     return jsonify({"mensaje": result})
