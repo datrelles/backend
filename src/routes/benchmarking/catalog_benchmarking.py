@@ -377,12 +377,20 @@ def insert_motor():
                 duplicados.append(item)
                 continue
 
+            # Si no lo encontraste inicialmente
             tipo_motor = db.session.query(TipoMotor).filter(
                 func.lower(func.replace(func.replace(
                     func.replace(func.replace(func.replace(TipoMotor.nombre_tipo, 'á', 'a'), 'é', 'e'), 'í', 'i'), 'ó',
-                    'o'), 'ú', 'u')) ==
-                normalize(nombre_tipo_motor)
+                    'o'), 'ú', 'u')
+                ) == normalize(nombre_tipo_motor)
             ).first()
+
+            # Si sigue sin encontrarse, y tienes `codigo_tipo_motor` ya seteado por el frontend:
+            if not tipo_motor and item.get("codigo_tipo_motor"):
+                tipo_motor = db.session.query(TipoMotor).get(item.get("codigo_tipo_motor"))
+
+            if not tipo_motor:
+                raise ValueError("No se pudo encontrar o crear el tipo de motor necesario para insertar el motor.")
 
             if not tipo_motor:
                 tipo_motor = TipoMotor(
@@ -390,8 +398,7 @@ def insert_motor():
                     descripcion_tipo_motor=item.get("descripcion_tipo_motor")
                 )
                 db.session.add(tipo_motor)
-                db.session.flush()
-
+                db.session.commit()
             existe = any(
                 r.codigo_tipo_motor == tipo_motor.codigo_tipo_motor and
                 normalize(r.nombre_motor) == normalize(item.get("nombre_motor")) and
@@ -2316,27 +2323,24 @@ def get_modelo_version():
             ClienteCanal.empresa,
             Empresa.nombre.label("nombre_empresa"),
             Version.nombre_version
-        ).join(DimensionPeso, ModeloVersion.codigo_dim_peso == DimensionPeso.codigo_dim_peso) \
-         .join(Imagenes, ModeloVersion.codigo_imagen == Imagenes.codigo_imagen) \
-         .join(ElectronicaOtros, ModeloVersion.codigo_electronica == ElectronicaOtros.codigo_electronica) \
-         .join(Motor, (ModeloVersion.codigo_motor == Motor.codigo_motor) & (ModeloVersion.codigo_tipo_motor == Motor.codigo_tipo_motor)) \
-         .join(TipoMotor, Motor.codigo_tipo_motor == TipoMotor.codigo_tipo_motor) \
-         .join(Transmision, ModeloVersion.codigo_transmision == Transmision.codigo_transmision) \
-         .join(Color, ModeloVersion.codigo_color_bench == Color.codigo_color_bench) \
-         .join(Chasis, ModeloVersion.codigo_chasis == Chasis.codigo_chasis) \
+        ).join(ClienteCanal, ModeloVersion.codigo_cliente_canal == ClienteCanal.codigo_cliente_canal) \
          .join(ModeloComercial, (ModeloVersion.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
-                                (ModeloVersion.codigo_marca == ModeloComercial.codigo_marca)) \
+                               (ModeloVersion.codigo_marca == ModeloComercial.codigo_marca)) \
          .join(Marca, ModeloVersion.codigo_marca == Marca.codigo_marca) \
-         .join(ClienteCanal, (ModeloVersion.codigo_cliente_canal == ClienteCanal.codigo_cliente_canal) &
-                             (ModeloVersion.codigo_mod_vers_repuesto == ClienteCanal.codigo_mod_vers_repuesto) &
-                             (ModeloVersion.empresa == ClienteCanal.empresa) &
-                             (ModeloVersion.cod_producto == ClienteCanal.cod_producto) &
-                             (ModeloVersion.codigo_modelo_comercial == ClienteCanal.codigo_modelo_comercial) &
-                             (ModeloVersion.codigo_marca == ClienteCanal.codigo_marca)) \
-         .join(Canal, ClienteCanal.codigo_cliente_canal == Canal.codigo_canal) \
-         .join(Producto, (ClienteCanal.cod_producto == Producto.cod_producto) & (ClienteCanal.empresa == Producto.empresa)) \
          .join(Empresa, ClienteCanal.empresa == Empresa.empresa) \
-         .join(Version, ModeloVersion.codigo_version == Version.codigo_version) \
+         .outerjoin(DimensionPeso, ModeloVersion.codigo_dim_peso == DimensionPeso.codigo_dim_peso) \
+         .outerjoin(Imagenes, ModeloVersion.codigo_imagen == Imagenes.codigo_imagen) \
+         .outerjoin(ElectronicaOtros, ModeloVersion.codigo_electronica == ElectronicaOtros.codigo_electronica) \
+         .outerjoin(Motor, (ModeloVersion.codigo_motor == Motor.codigo_motor) &
+                          (ModeloVersion.codigo_tipo_motor == Motor.codigo_tipo_motor)) \
+         .outerjoin(TipoMotor, Motor.codigo_tipo_motor == TipoMotor.codigo_tipo_motor) \
+         .outerjoin(Transmision, ModeloVersion.codigo_transmision == Transmision.codigo_transmision) \
+         .outerjoin(Color, ModeloVersion.codigo_color_bench == Color.codigo_color_bench) \
+         .outerjoin(Chasis, ModeloVersion.codigo_chasis == Chasis.codigo_chasis) \
+         .outerjoin(Canal, ClienteCanal.codigo_cliente_canal == Canal.codigo_canal) \
+         .outerjoin(Producto, (ClienteCanal.cod_producto == Producto.cod_producto) &
+                              (ClienteCanal.empresa == Producto.empresa)) \
+         .outerjoin(Version, ModeloVersion.codigo_version == Version.codigo_version) \
          .all()
 
         return jsonify([{

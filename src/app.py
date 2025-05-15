@@ -21,6 +21,10 @@ from datetime import datetime, timedelta
 import jwt
 from flask_jwt_extended import create_access_token, unset_jwt_cookies, jwt_required, JWTManager, get_jwt_identity
 import urllib3
+
+from src.routes.benchmarking.bench_models import bench_model
+from src.routes.benchmarking.bench_repuestos import bench_rep
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 ###################################################
 
@@ -88,6 +92,8 @@ app.register_blueprint(rmwa, url_prefix="/warranty")
 app.register_blueprint(net, url_prefix="/net")
 app.register_blueprint(bench, url_prefix="/bench")
 app.register_blueprint(s3, url_prefix="/s3")
+app.register_blueprint(bench_model, url_prefix="/bench_model")
+app.register_blueprint(bench_rep, url_prefix="/bench_rep")
 
 
 #############################################################################
