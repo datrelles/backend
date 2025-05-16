@@ -1,7 +1,7 @@
 import logging
 import os
 from datetime import datetime
-
+import re
 import unicodedata
 from flask import request, Blueprint, jsonify
 from flask_cors import cross_origin
@@ -47,6 +47,22 @@ def insert_chasis():
 
         registros = db.session.query(Chasis).all()
 
+        def estandarizar_neumatico(valor):
+            if not valor:
+                return ''
+
+            valor = valor.replace(" ", "").replace("\\", "/")
+
+            match = re.match(r"(\d{2,3})[/-](\d{2,3})[/-](\d{2,3})", valor)
+            if match:
+                return f"{match.group(1)}/{match.group(2)}-{match.group(3)}"
+
+            match = re.match(r"(\d{2,3})/(\d{2,3})-(\d{2,3})", valor)
+            if match:
+                return valor
+
+            return valor
+
         for item in data:
             existe = any(
                 normalize(r.aros_rueda_delantera) == normalize(item.get("aros_rueda_delantera")) and
@@ -67,8 +83,8 @@ def insert_chasis():
             chasis = Chasis(
                 aros_rueda_delantera=item.get("aros_rueda_delantera"),
                 aros_rueda_posterior=item.get("aros_rueda_posterior"),
-                neumatico_delantero=item.get("neumatico_delantero"),
-                neumatico_trasero=item.get("neumatico_trasero"),
+                neumatico_delantero=estandarizar_neumatico(item.get("neumatico_delantero")),
+                neumatico_trasero=estandarizar_neumatico(item.get("neumatico_trasero")),
                 suspension_delantera=item.get("suspension_delantera"),
                 suspension_trasera=item.get("suspension_trasera"),
                 frenos_delanteros=item.get("frenos_delanteros"),
