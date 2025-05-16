@@ -230,7 +230,7 @@ class ProductoExterno(Base):
     __tablename__ = 'st_producto_externo'
     __table_args__ = (
         CheckConstraint("estado_prod_externo IN (0, 1)", name="ck_st_prod_ext_estado"),
-        UniqueConstraint("nombre_producto", "codigo_marca_rep", "empresa", name="uq_st_prod_ext_nombre"),
+        UniqueConstraint("nombre_producto", "codigo_marca_rep", name="uq_st_prod_ext_nombre"),
         {'schema': 'stock'}
     )
 
@@ -250,11 +250,7 @@ class ProductoExterno(Base):
     fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
     fecha_modificacion = Column(DateTime, nullable=True)
 
-    empresa = Column(
-        NUMBER(2),
-        ForeignKey('computo.empresa.empresa'),  # asegúrate que esta referencia sea válida
-        nullable=False
-    )
+
 
 class Linea(Base):
     __tablename__ = 'st_linea'

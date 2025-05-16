@@ -661,9 +661,8 @@ def insert_producto_externo():
             nombre_producto = item.get("nombre_producto")
             estado = item.get("estado_prod_externo")
             descripcion_producto = item.get("descripcion_producto")
-            empresa = item.get("empresa")
 
-            if not codigo_marca_rep or not nombre_producto or empresa is None:
+            if not codigo_marca_rep or not nombre_producto is None:
                 duplicados.append(item)
                 continue
 
@@ -695,7 +694,6 @@ def insert_producto_externo():
                 nombre_producto=nombre_producto,
                 estado_prod_externo=estado,
                 descripcion_producto=descripcion_producto,
-                empresa=empresa,
                 usuario_crea=user,
                 fecha_creacion=datetime.now()
             )
@@ -1961,7 +1959,6 @@ def get_productos_externos():
                 "nombre_producto": r.nombre_producto,
                 "estado_prod_externo": r.estado_prod_externo,
                 "descripcion_producto": r.descripcion_producto,
-                "empresa": r.empresa,
                 "usuario_crea": r.usuario_crea,
                 "usuario_modifica": r.usuario_modifica,
                 "fecha_creacion": r.fecha_creacion.isoformat() if r.fecha_creacion else None,
@@ -2669,7 +2666,7 @@ def update_producto_externo(codigo_prod_externo):
         nombre_producto = data.get("nombre_producto", registro.nombre_producto)
         estado = data.get("estado_prod_externo", registro.estado_prod_externo)
         descripcion_producto = data.get("descripcion_producto", registro.descripcion_producto)
-        empresa = data.get("empresa", registro.empresa)
+
 
         if isinstance(estado, str):
             estado_normalizado = estado.strip().lower()
@@ -2695,7 +2692,6 @@ def update_producto_externo(codigo_prod_externo):
         registro.nombre_producto = nombre_producto
         registro.estado_prod_externo = estado
         registro.descripcion_producto = descripcion_producto
-        registro.empresa = empresa
         registro.usuario_modifica = user
         registro.fecha_modificacion = datetime.now()
 

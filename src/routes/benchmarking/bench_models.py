@@ -3,6 +3,8 @@ import re
 from flask import Blueprint, jsonify, request
 from flask_cors import cross_origin
 from flask_jwt_extended import jwt_required
+from sqlalchemy import func
+
 from src.config.database import db
 from src.models.catalogos_bench import ModeloVersion, Motor, TipoMotor, Chasis, ElectronicaOtros, DimensionPeso, \
     Transmision, ClienteCanal, Segmento, ModeloComercial, Marca, Linea
@@ -50,7 +52,7 @@ def comparar_modelos():
             else:
                 return None
 
-        mejor_si_menor = {"peso_seco"}
+        mejor_si_menor = {"peso_seco", "altura_total", "ancho_total", "longitud_total"}
         mejor_si_diferente = {"frenos_traseros", "caja_cambios"}
         mejor_si_mayor = {"caballos_fuerza", "torque_maximo", "velocidad_maxima", "cilindrada", "garantia", "capacidad_combustible"}
 
@@ -209,6 +211,134 @@ def get_modelos_por_linea(codigo_linea):
         ]
 
         return jsonify(modelos), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@bench_model.route('/get_modelos_por_linea_y_segmento', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def get_modelos_por_linea_y_segmento():
+    try:
+        data = request.get_json()
+        codigo_linea = data.get('codigo_linea')
+        nombre_segmento = data.get('nombre_segmento')
+
+        if not codigo_linea or not nombre_segmento:
+            return jsonify({"error": "Se requiere código de línea y nombre de segmento"}), 400
+
+        # Buscar todos los códigos de segmento con ese nombre dentro de la línea
+        segmentos = db.session.query(Segmento.codigo_segmento).filter(
+            Segmento.codigo_linea == codigo_linea,
+            func.lower(Segmento.nombre_segmento) == func.lower(nombre_segmento.strip())
+        ).all()
+
+        codigos_segmento = [s.codigo_segmento for s in segmentos]
+
+        if not codigos_segmento:
+            return jsonify([])
+
+        # Buscar modelos versión que correspondan a esos segmentos
+        resultados = db.session.query(
+            ModeloVersion.codigo_modelo_version,
+            ModeloVersion.nombre_modelo_version,
+            ModeloVersion.anio_modelo_version,
+            ModeloVersion.precio_producto_modelo,
+            ModeloComercial.nombre_modelo.label('nombre_modelo_comercial'),
+            Motor.nombre_motor
+        ).join(ClienteCanal, ModeloVersion.codigo_cliente_canal == ClienteCanal.codigo_cliente_canal) \
+         .join(Segmento, (Segmento.codigo_modelo_comercial == ClienteCanal.codigo_modelo_comercial) &
+                         (Segmento.codigo_marca == ClienteCanal.codigo_marca)) \
+         .join(ModeloComercial, ClienteCanal.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) \
+         .join(Motor, ModeloVersion.codigo_motor == Motor.codigo_motor) \
+         .filter(Segmento.codigo_segmento.in_(codigos_segmento)) \
+         .all()
+
+        modelos = [
+            {
+                "codigo_modelo_version": r[0],
+                "nombre_modelo_version": r[1],
+                "anio_modelo_version": r[2],
+                "precio_producto_modelo": r[3],
+                "nombre_modelo_comercial": r[4],
+                "nombre_motor": r[5]
+            }
+            for r in resultados
+        ]
+
+        return jsonify(modelos), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+@bench_model.route('/get_modelos_por_linea_segmento', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_modelos_por_linea_segmento():
+    try:
+        codigo_linea = request.args.get('codigo_linea', type=int)
+        nombre_segmento = request.args.get('nombre_segmento', type=str)
+
+        if not codigo_linea or not nombre_segmento:
+            return jsonify({"error": "Parámetros 'codigo_linea' y 'nombre_segmento' requeridos"}), 400
+
+        resultados = db.session.query(
+            ModeloVersion.codigo_modelo_version,
+            ModeloVersion.nombre_modelo_version,
+            ModeloVersion.anio_modelo_version,
+            ModeloVersion.precio_producto_modelo,
+            ModeloComercial.nombre_modelo.label('nombre_modelo_comercial'),
+            Motor.nombre_motor
+        ).join(ClienteCanal, ModeloVersion.codigo_cliente_canal == ClienteCanal.codigo_cliente_canal) \
+         .join(Segmento, (Segmento.codigo_modelo_comercial == ClienteCanal.codigo_modelo_comercial) &
+                         (Segmento.codigo_marca == ClienteCanal.codigo_marca)) \
+         .join(ModeloComercial, ClienteCanal.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) \
+         .join(Motor, ModeloVersion.codigo_motor == Motor.codigo_motor) \
+         .filter(Segmento.codigo_linea == codigo_linea) \
+         .filter(func.upper(Segmento.nombre_segmento) == func.upper(nombre_segmento.strip())) \
+         .all()
+
+        modelos = [{
+            "codigo_modelo_version": r[0],
+            "nombre_modelo_version": r[1],
+            "anio_modelo_version": r[2],
+            "precio_producto_modelo": r[3],
+            "nombre_modelo_comercial": r[4],
+            "nombre_motor": r[5]
+        } for r in resultados]
+
+        return jsonify(modelos), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bench_model.route('/get_segmentos_por_linea/<int:codigo_linea>', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_segmentos_por_linea(codigo_linea):
+    try:
+        # Obtener segmentos únicos por nombre y activos para esa línea
+        segmentos = db.session.query(
+            Segmento.nombre_segmento,
+            db.func.min(Segmento.codigo_segmento).label('codigo_segmento')
+        ).filter(
+            Segmento.codigo_linea == codigo_linea,
+            Segmento.estado_segmento == 1
+        ).group_by(
+            Segmento.nombre_segmento
+        ).order_by(
+            Segmento.nombre_segmento
+        ).all()
+
+        return jsonify([
+            {
+                "codigo_segmento": s.codigo_segmento,
+                "nombre_segmento": s.nombre_segmento
+            } for s in segmentos
+        ]), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
