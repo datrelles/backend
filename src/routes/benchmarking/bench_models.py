@@ -3,6 +3,8 @@ import re
 from flask import Blueprint, jsonify, request
 from flask_cors import cross_origin
 from flask_jwt_extended import jwt_required
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
 from sqlalchemy import func
 
 from src.config.database import db
@@ -450,3 +452,90 @@ def get_segmentos_por_linea(codigo_linea):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+from openpyxl import Workbook
+from flask import send_file
+import io
+
+@bench_model.route('/exportar_comparacion_xlsx', methods=["POST"])
+@jwt_required()
+@cross_origin()
+def exportar_comparacion_xlsx():
+    try:
+        data = request.get_json()
+        resultado = data.get("resultado")
+        modelos = data.get("modelos")
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Resumen Comparación"
+
+        modelo_dict = {
+            m["codigo_modelo_version"]: m["nombre_modelo_version"]
+            for m in modelos
+        }
+
+        for i, modelo in enumerate(resultado.get("comparables", []), start=1):
+            nombre_base = modelo_dict.get(resultado["base"], "Modelo Base")
+            nombre_comp = modelo_dict.get(modelo["modelo_version"], "Modelo Comparable")
+
+            # Encabezado general
+            ws.append([f"COMPARACIÓN: {nombre_base}"])
+            ws.merge_cells(start_row=ws.max_row, start_column=1, end_row=ws.max_row, end_column=5)
+            header_cell = ws.cell(row=ws.max_row, column=1)
+            header_cell.font = Font(size=14, bold=True)
+            header_cell.alignment = Alignment(horizontal="center")
+            header_cell.fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
+
+            # Encabezados de tabla
+            ws.append(["Categoría", "Campo", nombre_base, nombre_comp, "Estado"])
+            header_row = ws.max_row
+            for col in range(1, 6):
+                cell = ws.cell(row=header_row, column=col)
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+                cell.alignment = Alignment(horizontal="center")
+
+            # Contenido
+            mejor_en = modelo.get("mejor_en", {})
+            for categoria, campos in mejor_en.items():
+                for detalle in campos:
+                    fila = [
+                        categoria.capitalize(),
+                        detalle["campo"],
+                        detalle["base"],
+                        detalle["comparable"],
+                        detalle["estado"]
+                    ]
+                    ws.append(fila)
+
+                    estado_valor = detalle.get("estado", "").lower()
+                    estado_cell = ws.cell(row=ws.max_row, column=5)
+
+                    if estado_valor == "mejor":
+                        estado_cell.font = Font(color="006100", bold=True)
+                        estado_cell.fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+                    elif estado_valor == "peor":
+                        estado_cell.font = Font(color="9C0006", bold=True)
+                        estado_cell.fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+                    elif estado_valor == "igual":
+                        estado_cell.font = Font(color="1F1F1F")
+                        estado_cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+
+            ws.append([])
+
+        # Ajustar ancho de columnas
+        for col in range(1, 6):
+            ws.column_dimensions[get_column_letter(col)].width = 25
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name="comparacion_modelos.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
