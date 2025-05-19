@@ -830,36 +830,43 @@ def insert_linea():
 @jwt_required()
 def insert_marca():
     try:
-        data = request.json
         user = get_jwt_identity()
+        data = request.get_json()
 
-        nombre = data.get("nombre_marca")
-        estado = data.get("estado_marca")
+        if isinstance(data, dict) and "marca" in data:
+            data = data["marca"]
+        elif isinstance(data, dict):
+            data = [data]
 
-        if not nombre or estado not in [0, 1]:
-            return jsonify({"error": "Los campos 'nombre_marca' y 'estado_marca' (0 o 1) son obligatorios"}), 400
+        if not isinstance(data, list):
+            return jsonify({"error": "Formato de datos inválido. Se esperaba una lista o un objeto con 'marca'."}), 400
 
-        existe = db.session.query(Marca).filter(
-            func.lower(Marca.nombre_marca) == nombre.lower()
-        ).first()
-        if existe:
-            return jsonify({"error": "Ya existe una marca con ese nombre"}), 409
+        nombres_marca = [item.get("nombre_marca", "").strip().lower() for item in data]
+        if not all(nombres_marca):
+            return jsonify({"error": "Todos los registros deben tener 'nombre_marca'"}), 400
 
-        nueva = Marca(
-            nombre_marca=nombre,
-            estado_marca=estado,
-            usuario_crea=user,
-            fecha_creacion=datetime.now()
-        )
+        if len(nombres_marca) != len(set(nombres_marca)):
+            return jsonify({"error": "Existen marcas duplicadas en la carga"}), 409
 
-        db.session.add(nueva)
+        existentes = db.session.query(Marca.nombre_marca).filter(
+            func.lower(Marca.nombre_marca).in_(nombres_marca)
+        ).all()
+        duplicados = [row[0] for row in existentes]
+
+        if duplicados:
+            return jsonify({"error": f"Los siguientes marcas ya existen: {', '.join(duplicados)}"}), 409
+
+        for item in data:
+            nuevo = Marca(
+                nombre_marca=item["nombre_marca"].strip(),
+                estado_marca=item["estado_marca"],
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+            db.session.add(nuevo)
+
         db.session.commit()
-        db.session.refresh(nueva)
-
-        return jsonify({
-            "message": "Marca insertada correctamente",
-            "codigo_marca": nueva.codigo_marca
-        })
+        return jsonify({"message": "Marcas insertadas correctamente"}), 200
 
     except Exception as e:
         db.session.rollback()
@@ -1817,7 +1824,7 @@ def get_motores():
 @jwt_required()
 def get_color():
     try:
-        color = db.session.query(Color).all()
+        color = db.session.query(Color).order_by(Color.codigo_color_bench.asc()).all()
 
         resultado = []
         for c in color:
@@ -2058,14 +2065,18 @@ def get_modelos_homologados():
 @jwt_required()
 def get_marca():
     try:
-        marca = db.session.query(Marca).all()
+        marca = db.session.query(Marca).order_by(Marca.codigo_marca.asc()).all()
 
         resultado = []
         for m in marca:
             resultado.append({
                 "codigo_marca": m.codigo_marca,
                 "nombre_marca": m.nombre_marca,
-                "estado_marca": m.estado_marca
+                "estado_marca": m.estado_marca,
+                "usuario_crea": m.usuario_crea,
+                "usuario_modifica": m.usuario_modifica,
+                "fecha_creacion": m.fecha_creacion.isoformat() if m.fecha_creacion else None,
+                "fecha_modificacion": m.fecha_modificacion.isoformat() if m.fecha_modificacion else None
             })
 
         return jsonify(resultado)
@@ -2389,7 +2400,6 @@ def get_modelo_version():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 
 # ACTUALIZAR/ MODIFICAR DATOS -------------------------------------------------------------------------->
@@ -3099,6 +3109,29 @@ def update_modelo_version(codigo_modelo_version):
         db.session.commit()
 
         return jsonify({"message": "Modelo versión actualizado correctamente"})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_marca/<int:codigo_marca>', methods=["PUT"])
+@jwt_required()
+def update_marca(codigo_marca):
+    try:
+        data = request.json
+        user = get_jwt_identity()
+
+        marca = db.session.query(Marca).filter_by(codigo_marca=codigo_marca).first()
+        if not marca:
+            return jsonify({"error": "Datos de marcas no encontrados"}), 404
+
+        marca.nombre_marca = data.get("nombre_marca", marca.nombre_marca)
+        marca.estado_marca = data.get("estado_marca", marca.estado_marca)
+        marca.usuario_modifica = user
+        marca.fecha_modificacion = datetime.now()
+
+        db.session.commit()
+        return jsonify({"message": "Datos de marca actualizados correctamente", "codigo_marca": marca.codigo_marca})
 
     except Exception as e:
         db.session.rollback()

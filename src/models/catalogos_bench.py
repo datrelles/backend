@@ -250,8 +250,6 @@ class ProductoExterno(Base):
     fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
     fecha_modificacion = Column(DateTime, nullable=True)
 
-
-
 class Linea(Base):
     __tablename__ = 'st_linea'
     __table_args__ = (
