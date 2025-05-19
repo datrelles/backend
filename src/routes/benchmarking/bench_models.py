@@ -7,7 +7,7 @@ from sqlalchemy import func
 
 from src.config.database import db
 from src.models.catalogos_bench import ModeloVersion, Motor, TipoMotor, Chasis, ElectronicaOtros, DimensionPeso, \
-    Transmision, ClienteCanal, Segmento, ModeloComercial, Marca, Linea
+    Transmision, ClienteCanal, Segmento, ModeloComercial, Version, Marca
 
 bench_model = Blueprint('routes_bench_model', __name__)
 logger = logging.getLogger(__name__)
@@ -46,22 +46,51 @@ def comparar_modelos():
 
         def extract_garantia_meses(texto):
             texto = texto.upper()
-            match_anos = re.search(r'(\d+(?:[\.,]\d+)?)\s*AÑOS?', texto)
-            match_meses = re.search(r'(\d+(?:[\.,]\d+)?)\s*MESES?', texto)
-            if match_anos:
-                return float(match_anos.group(1)) * 12
+            match_years = re.search(r'(\d+(?:[.,]\d+)?)\s*AÑOS?', texto)
+            match_meses = re.search(r'(\d+(?:[.,]\d+)?)\s*MESES?', texto)
+            if match_years:
+                return float(match_years.group(1)) * 12
             elif match_meses:
                 return float(match_meses.group(1))
             return None
 
-        def evaluar_neumatico(cadena):
+        def extract_cambios(val):
+            if not val:
+                return None
+            val = str(val).lower()
+            if 'automática' in val:
+                return 100
+            if 'semi' in val:
+                return 50
+            match = re.search(r'(\d+)', val)
+            return int(match.group(1)) if match else None
+
+        def evaluar_pneumatic(cadena):
             if not cadena:
                 return None
             match = re.match(r"(\d+)[/-](\d+)[/-](\d+)", cadena.replace(" ", ""))
             if not match:
                 return None
-            ancho, relacion, rin = map(int, match.groups())
-            return 2 * (ancho * (relacion / 100)) + (rin * 25.4)
+            ancho, relation, rin = map(int, match.groups())
+            return 2 * (ancho * (relation / 100)) + (rin * 25.4)
+
+        def evaluar_frenos(val):
+            val = (val or "").lower()
+            if "disco" in val:
+                return 2
+            if "tambor" in val:
+                return 1
+            return 0
+
+        def evaluar_aros(val):
+            val = (val or "").lower()
+            if "radios" in val:
+                return 1
+            if "aleación" in val:
+                return 2
+            if "aluminio" in val:
+                return 2
+            return 0
 
         # SEGMENTO
         segmento = db.session.query(Segmento.nombre_segmento).join(ClienteCanal,
@@ -71,20 +100,59 @@ def comparar_modelos():
         segmento_nombre = segmento[0].lower() if segmento else ""
 
         mejor_si_menor = set()
-        mejor_si_diferente = {"frenos_traseros", "caja_cambios"}
         mejor_si_mayor = set()
 
-        if segmento_nombre == "croos":
-            mejor_si_mayor.update({"cilindrada", "caballos_fuerza", "torque_maximo", "altura_total", "ancho_total", "longitud_total"})
+        if segmento_nombre == "cross":
+            mejor_si_mayor.update(
+                {
+                    "cilindrada", "caballos_fuerza",
+                    "torque_maximo","altura_total",
+                    "ancho_total","longitud_total",
+                    "garantia","neumatico_delantero",
+                    "capacidad_combustible","neumatico_trasero",
+                    "velocidad_maxima","caja_cambios",
+                    "frenos_traseros","frenos_delanteros"
+                }
+            )
         elif segmento_nombre == "scooter":
-            mejor_si_menor.update({"cilindrada", "caballos_fuerza", "torque_maximo", "altura_total", "ancho_total", "longitud_total","peso_seco"})
+            mejor_si_menor.update(
+                {
+                    "cilindrada", "caballos_fuerza",
+                    "torque_maximo", "altura_total",
+                    "ancho_total", "longitud_total",
+                    "peso_seco","frenos_traseros","frenos_delanteros"
+                }
+            )
+            mejor_si_mayor.update(
+                {
+                    "capacidad_combustible" ,"velocidad_maxima",
+                    "garantia", "caja_cambios", "neumatico_delantero",
+                    "neumatico_trasero"
+                }
+            )
         elif segmento_nombre == "advento":
-            mejor_si_mayor.update({"cilindrada", "altura_total", "ancho_total", "longitud_total"})
+            mejor_si_mayor.update(
+                {
+                    "cilindrada", "altura_total",
+                    "ancho_total", "longitud_total",
+                    "garantia","velocidad_maxima"
+                }
+            )
         elif segmento_nombre == "utilitaria":
-            mejor_si_menor.update({"cilindrada", "altura_total", "ancho_total", "longitud_total"})
+            mejor_si_menor.update(
+                {
+                    "cilindrada", "altura_total",
+                    "ancho_total", "longitud_total",
+                    "garantia","velocidad_maxima"
+                }
+            )
         elif segmento_nombre == "deportiva":
-            mejor_si_menor.update({"cilindrada", "altura_total", "ancho_total", "longitud_total"})
-
+            mejor_si_menor.update(
+                {
+                    "cilindrada", "altura_total",
+                    "ancho_total", "longitud_total"
+                }
+            )
         def evaluar_estado(campo, base_val, comp_val):
             extractores = {
                 "caballos_fuerza": extract_hp,
@@ -93,9 +161,31 @@ def comparar_modelos():
                 "capacidad_combustible": extract_litros,
                 "garantia": extract_garantia_meses,
                 "cilindrada": extract_cc,
-                "neumatico_delantero": evaluar_neumatico,
-                "neumatico_trasero": evaluar_neumatico
+                "neumatico_delantero": evaluar_pneumatic,
+                "neumatico_trasero": evaluar_pneumatic,
+                "caja_cambios": extract_cambios,
+                "frenos_traseros": evaluar_frenos
+
             }
+
+            if campo in ["aros_rueda_delantera", "aros_rueda_posterior"]:
+                base = evaluar_aros(base_val)
+                comp = evaluar_aros(comp_val)
+
+                return (
+                    "mejor" if comp > base else
+                    "peor" if comp < base else
+                    "igual"
+                )
+
+            if campo == "frenos_traseros":
+                base = evaluar_frenos(base_val)
+                comp = evaluar_frenos(comp_val)
+
+                if segmento_nombre == "scooter":
+                    return "igual"
+                elif segmento_nombre == "croos":
+                    return "mejor" if comp > base else "peor" if comp < base else "igual"
 
             if campo in extractores:
                 base = extractores[campo](base_val)
@@ -113,25 +203,22 @@ def comparar_modelos():
             if isinstance(base, (int, float)) and isinstance(comp, (int, float)):
                 if abs(base - comp) < 0.01:
                     return "igual"
-
             if campo in mejor_si_mayor:
                 return "mejor" if comp > base else "peor" if comp < base else "igual"
             if campo in mejor_si_menor:
                 return "mejor" if comp < base else "peor" if comp > base else "igual"
-            if campo in mejor_si_diferente:
-                return "mejor" if base != comp else "igual"
             return "igual"
 
-        def cargar_detalles(modelo):
+        def cargar_detalles(modelos):
             return {
-                "modelo_version": modelo.codigo_modelo_version,
-                "nombre_modelo_version": modelo.nombre_modelo_version,
-                "motor": db.session.query(Motor).get((modelo.codigo_motor, modelo.codigo_tipo_motor)),
-                "tipo_motor": db.session.query(TipoMotor).get(modelo.codigo_tipo_motor),
-                "chasis": db.session.query(Chasis).get(modelo.codigo_chasis),
-                "electronica": db.session.query(ElectronicaOtros).get(modelo.codigo_electronica),
-                "dimensiones": db.session.query(DimensionPeso).get(modelo.codigo_dim_peso),
-                "transmision": db.session.query(Transmision).get(modelo.codigo_transmision),
+                "modelo_version": modelos.codigo_modelo_version,
+                "nombre_modelo_version": modelos.nombre_modelo_version,
+                "motor": db.session.query(Motor).get((modelos.codigo_motor, modelos.codigo_tipo_motor)),
+                "tipo_motor": db.session.query(TipoMotor).get(modelos.codigo_tipo_motor),
+                "chasis": db.session.query(Chasis).get(modelos.codigo_chasis),
+                "electronica": db.session.query(ElectronicaOtros).get(modelos.codigo_electronica),
+                "dimensiones": db.session.query(DimensionPeso).get(modelos.codigo_dim_peso),
+                "transmision": db.session.query(Transmision).get(modelos.codigo_transmision),
             }
 
         base_modelo = db.session.query(ModeloVersion).filter_by(codigo_modelo_version=base_id).first()
@@ -157,35 +244,84 @@ def comparar_modelos():
                     "estado": estado
                 })
 
-            comparar("suspension_delantera", detalles_base["chasis"].suspension_delantera, detalles_comp["chasis"].suspension_delantera, "chasis")
-            comparar("suspension_trasera", detalles_base["chasis"].suspension_trasera, detalles_comp["chasis"].suspension_trasera, "chasis")
-            comparar("aros_rueda_delantera", detalles_base["chasis"].aros_rueda_delantera, detalles_comp["chasis"].aros_rueda_delantera, "chasis")
-            comparar("aros_rueda_posterior", detalles_base["chasis"].aros_rueda_posterior, detalles_comp["chasis"].aros_rueda_posterior, "chasis")
-            comparar("neumatico_delantero", detalles_base["chasis"].neumatico_delantero, detalles_comp["chasis"].neumatico_delantero, "chasis")
-            comparar("neumatico_trasero", detalles_base["chasis"].neumatico_trasero, detalles_comp["chasis"].neumatico_trasero, "chasis")
-            comparar("frenos_traseros", detalles_base["chasis"].frenos_traseros, detalles_comp["chasis"].frenos_traseros, "chasis")
-            comparar("frenos_delanteros", detalles_base["chasis"].frenos_delanteros, detalles_comp["chasis"].frenos_delanteros, "chasis")
+            comparar("suspension_delantera",
+                     detalles_base["chasis"].suspension_delantera,
+                     detalles_comp["chasis"].suspension_delantera, "chasis")
+            comparar("suspension_trasera",
+                     detalles_base["chasis"].suspension_trasera,
+                     detalles_comp["chasis"].suspension_trasera, "chasis")
+            comparar("aros_rueda_delantera",
+                     detalles_base["chasis"].aros_rueda_delantera,
+                     detalles_comp["chasis"].aros_rueda_delantera, "chasis")
+            comparar("aros_rueda_posterior",
+                     detalles_base["chasis"].aros_rueda_posterior,
+                     detalles_comp["chasis"].aros_rueda_posterior, "chasis")
+            comparar("neumatico_delantero",
+                     detalles_base["chasis"].neumatico_delantero,
+                     detalles_comp["chasis"].neumatico_delantero, "chasis")
+            comparar("neumatico_trasero",
+                     detalles_base["chasis"].neumatico_trasero,
+                     detalles_comp["chasis"].neumatico_trasero, "chasis")
+            comparar("frenos_traseros",
+                     detalles_base["chasis"].frenos_traseros,
+                     detalles_comp["chasis"].frenos_traseros, "chasis")
+            comparar("frenos_delanteros",
+                     detalles_base["chasis"].frenos_delanteros,
+                     detalles_comp["chasis"].frenos_delanteros, "chasis")
 
-            comparar("cilindrada", detalles_base["motor"].cilindrada, detalles_comp["motor"].cilindrada, "motor")
-            comparar("caballos_fuerza", detalles_base["motor"].caballos_fuerza, detalles_comp["motor"].caballos_fuerza, "motor")
-            comparar("torque_maximo", detalles_base["motor"].torque_maximo, detalles_comp["motor"].torque_maximo, "motor")
-            comparar("sistema_combustible", detalles_base["motor"].sistema_combustible, detalles_comp["motor"].sistema_combustible, "motor")
-            comparar("arranque", detalles_base["motor"].arranque, detalles_comp["motor"].arranque, "motor")
-            comparar("sistema_refrigeracion", detalles_base["motor"].sistema_refrigeracion, detalles_comp["motor"].sistema_refrigeracion, "motor")
+            comparar("cilindrada",
+                     detalles_base["motor"].cilindrada,
+                     detalles_comp["motor"].cilindrada, "motor")
+            comparar("caballos_fuerza",
+                     detalles_base["motor"].caballos_fuerza,
+                     detalles_comp["motor"].caballos_fuerza, "motor")
+            comparar("torque_maximo",
+                     detalles_base["motor"].torque_maximo,
+                     detalles_comp["motor"].torque_maximo, "motor")
+            comparar("sistema_combustible",
+                     detalles_base["motor"].sistema_combustible,
+                     detalles_comp["motor"].sistema_combustible, "motor")
+            comparar("arranque",
+                     detalles_base["motor"].arranque,
+                     detalles_comp["motor"].arranque, "motor")
+            comparar("sistema_refrigeracion",
+                     detalles_base["motor"].sistema_refrigeracion,
+                     detalles_comp["motor"].sistema_refrigeracion, "motor")
 
-            comparar("altura_total", detalles_base["dimensiones"].altura_total, detalles_comp["dimensiones"].altura_total, "dimensiones")
-            comparar("longitud_total", detalles_base["dimensiones"].longitud_total, detalles_comp["dimensiones"].longitud_total, "dimensiones")
-            comparar("ancho_total", detalles_base["dimensiones"].ancho_total, detalles_comp["dimensiones"].ancho_total, "dimensiones")
-            comparar("peso_seco", detalles_base["dimensiones"].peso_seco, detalles_comp["dimensiones"].peso_seco, "dimensiones")
+            comparar("altura_total",
+                     detalles_base["dimensiones"].altura_total,
+                     detalles_comp["dimensiones"].altura_total, "dimensiones")
+            comparar("longitud_total",
+                     detalles_base["dimensiones"].longitud_total,
+                     detalles_comp["dimensiones"].longitud_total, "dimensiones")
+            comparar("ancho_total",
+                     detalles_base["dimensiones"].ancho_total,
+                     detalles_comp["dimensiones"].ancho_total, "dimensiones")
+            comparar("peso_seco",
+                     detalles_base["dimensiones"].peso_seco,
+                     detalles_comp["dimensiones"].peso_seco, "dimensiones")
 
-            comparar("capacidad_combustible", detalles_base["electronica"].capacidad_combustible, detalles_comp["electronica"].capacidad_combustible, "electronica")
-            comparar("tablero", detalles_base["electronica"].tablero, detalles_comp["electronica"].tablero, "electronica")
-            comparar("luces_delanteras", detalles_base["electronica"].luces_delanteras, detalles_comp["electronica"].luces_delanteras, "electronica")
-            comparar("luces_posteriores", detalles_base["electronica"].luces_posteriores, detalles_comp["electronica"].luces_posteriores, "electronica")
-            comparar("garantia", detalles_base["electronica"].garantia, detalles_comp["electronica"].garantia, "electronica")
-            comparar("velocidad_maxima", detalles_base["electronica"].velocidad_maxima, detalles_comp["electronica"].velocidad_maxima, "electronica")
+            comparar("capacidad_combustible",
+                     detalles_base["electronica"].capacidad_combustible,
+                     detalles_comp["electronica"].capacidad_combustible, "electronica")
+            comparar("tablero",
+                     detalles_base["electronica"].tablero, detalles_comp["electronica"].tablero, "electronica")
+            comparar("luces_delanteras",
+                     detalles_base["electronica"].luces_delanteras,
+                     detalles_comp["electronica"].luces_delanteras, "electronica")
+            comparar("luces_posteriores",
+                     detalles_base["electronica"].luces_posteriores,
+                     detalles_comp["electronica"].luces_posteriores, "electronica")
+            comparar("garantia",
+                     detalles_base["electronica"].garantia,
+                     detalles_comp["electronica"].garantia, "electronica")
+            comparar("velocidad_maxima",
+                     detalles_base["electronica"].velocidad_maxima,
+                     detalles_comp["electronica"].velocidad_maxima, "electronica")
 
-            comparar("caja_cambios", detalles_base["transmision"].caja_cambios, detalles_comp["transmision"].caja_cambios, "transmision")
+            comparar("caja_cambios",
+                     detalles_base["transmision"].caja_cambios,
+                     detalles_comp["transmision"].caja_cambios, "transmision")
 
             resultado.append({
                 "modelo_version": comp_id,
@@ -235,63 +371,6 @@ def get_modelos_por_linea(codigo_linea):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@bench_model.route('/get_modelos_por_linea_y_segmento', methods=['POST'])
-@jwt_required()
-@cross_origin()
-def get_modelos_por_linea_y_segmento():
-    try:
-        data = request.get_json()
-        codigo_linea = data.get('codigo_linea')
-        nombre_segmento = data.get('nombre_segmento')
-
-        if not codigo_linea or not nombre_segmento:
-            return jsonify({"error": "Se requiere código de línea y nombre de segmento"}), 400
-
-        # Buscar todos los códigos de segmento con ese nombre dentro de la línea
-        segmentos = db.session.query(Segmento.codigo_segmento).filter(
-            Segmento.codigo_linea == codigo_linea,
-            func.lower(Segmento.nombre_segmento) == func.lower(nombre_segmento.strip())
-        ).all()
-
-        codigos_segmento = [s.codigo_segmento for s in segmentos]
-
-        if not codigos_segmento:
-            return jsonify([])
-
-        # Buscar modelos versión que correspondan a esos segmentos
-        resultados = db.session.query(
-            ModeloVersion.codigo_modelo_version,
-            ModeloVersion.nombre_modelo_version,
-            ModeloVersion.anio_modelo_version,
-            ModeloVersion.precio_producto_modelo,
-            ModeloComercial.nombre_modelo.label('nombre_modelo_comercial'),
-            Motor.nombre_motor
-        ).join(ClienteCanal, ModeloVersion.codigo_cliente_canal == ClienteCanal.codigo_cliente_canal) \
-         .join(Segmento, (Segmento.codigo_modelo_comercial == ClienteCanal.codigo_modelo_comercial) &
-                         (Segmento.codigo_marca == ClienteCanal.codigo_marca)) \
-         .join(ModeloComercial, ClienteCanal.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) \
-         .join(Motor, ModeloVersion.codigo_motor == Motor.codigo_motor) \
-         .filter(Segmento.codigo_segmento.in_(codigos_segmento)) \
-         .all()
-
-        modelos = [
-            {
-                "codigo_modelo_version": r[0],
-                "nombre_modelo_version": r[1],
-                "anio_modelo_version": r[2],
-                "precio_producto_modelo": r[3],
-                "nombre_modelo_comercial": r[4],
-                "nombre_motor": r[5]
-            }
-            for r in resultados
-        ]
-
-        return jsonify(modelos), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 
 @bench_model.route('/get_modelos_por_linea_segmento', methods=['GET'])
 @jwt_required()
@@ -310,12 +389,18 @@ def get_modelos_por_linea_segmento():
             ModeloVersion.anio_modelo_version,
             ModeloVersion.precio_producto_modelo,
             ModeloComercial.nombre_modelo.label('nombre_modelo_comercial'),
-            Motor.nombre_motor
+            Motor.nombre_motor,
+            TipoMotor.nombre_tipo,
+            Version.nombre_version,
+            Marca.nombre_marca,
         ).join(ClienteCanal, ModeloVersion.codigo_cliente_canal == ClienteCanal.codigo_cliente_canal) \
          .join(Segmento, (Segmento.codigo_modelo_comercial == ClienteCanal.codigo_modelo_comercial) &
                          (Segmento.codigo_marca == ClienteCanal.codigo_marca)) \
          .join(ModeloComercial, ClienteCanal.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) \
          .join(Motor, ModeloVersion.codigo_motor == Motor.codigo_motor) \
+         .join(TipoMotor, Motor.codigo_tipo_motor == TipoMotor.codigo_tipo_motor) \
+         .join(Version, ModeloVersion.codigo_version == Version.codigo_version) \
+         .join(Marca, ModeloVersion.codigo_marca == Marca.codigo_marca) \
          .filter(Segmento.codigo_linea == codigo_linea) \
          .filter(func.upper(Segmento.nombre_segmento) == func.upper(nombre_segmento.strip())) \
          .all()
@@ -326,7 +411,10 @@ def get_modelos_por_linea_segmento():
             "anio_modelo_version": r[2],
             "precio_producto_modelo": r[3],
             "nombre_modelo_comercial": r[4],
-            "nombre_motor": r[5]
+            "nombre_motor": r[5],
+            "nombre_tipo": r[6],
+            "nombre_version": r[7],
+            "nombre_marca": r[8],
         } for r in resultados]
 
         return jsonify(modelos), 200
@@ -340,7 +428,6 @@ def get_modelos_por_linea_segmento():
 @cross_origin()
 def get_segmentos_por_linea(codigo_linea):
     try:
-        # Obtener segmentos únicos por nombre y activos para esa línea
         segmentos = db.session.query(
             Segmento.nombre_segmento,
             db.func.min(Segmento.codigo_segmento).label('codigo_segmento')

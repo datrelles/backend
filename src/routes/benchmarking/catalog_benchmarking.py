@@ -47,7 +47,7 @@ def insert_chasis():
 
         registros = db.session.query(Chasis).all()
 
-        def estandarizar_neumatico(valor):
+        def estandarizar_pneumatic(valor):
             if not valor:
                 return ''
 
@@ -83,8 +83,8 @@ def insert_chasis():
             chasis = Chasis(
                 aros_rueda_delantera=item.get("aros_rueda_delantera"),
                 aros_rueda_posterior=item.get("aros_rueda_posterior"),
-                neumatico_delantero=estandarizar_neumatico(item.get("neumatico_delantero")),
-                neumatico_trasero=estandarizar_neumatico(item.get("neumatico_trasero")),
+                neumatico_delantero=estandarizar_pneumatic(item.get("neumatico_delantero")),
+                neumatico_trasero=estandarizar_pneumatic(item.get("neumatico_trasero")),
                 suspension_delantera=item.get("suspension_delantera"),
                 suspension_trasera=item.get("suspension_trasera"),
                 frenos_delanteros=item.get("frenos_delanteros"),
@@ -693,16 +693,21 @@ def insert_producto_externo():
                     continue
 
             existe = any(
-                r.nombre_producto.lower() == nombre_producto.lower() and
-                r.codigo_marca_rep == codigo_marca_rep
+                (r.nombre_producto or "").lower() == (nombre_producto or "").lower()
+                and r.codigo_marca_rep == codigo_marca_rep
                 for r in registros_existentes
             )
+
             if existe:
                 duplicados.append(item)
                 continue
 
             numero_actual += 1
             nuevo_codigo = f"PE{str(numero_actual).zfill(5)}"
+
+            nombre_producto = item.get("nombre_producto")
+            if not isinstance(nombre_producto, str) or not nombre_producto.strip():
+                raise ValueError("El campo 'nombre_producto' es obligatorio y debe ser texto.")
 
             nuevo = ProductoExterno(
                 codigo_prod_externo=nuevo_codigo,
@@ -787,7 +792,10 @@ def insert_linea():
                 return jsonify({"message": "Se insertaron algunas líneas con errores", "detalles": errores}), 206
             return jsonify({"message": f"{len(nuevas_lineas)} líneas insertadas correctamente"})
 
-        # Inserción individual desde formulario
+        data = request.get_json()
+        if data is None:
+            return jsonify({"error": "El cuerpo de la solicitud no contiene JSON válido"}), 400
+
         nombre = data.get("nombre_linea")
         estado = data.get("estado_linea")
         descripcion = data.get("descripcion_linea", "")
@@ -1554,8 +1562,8 @@ def insert_modelo_version():
         if not version:
             return jsonify({"error": "Versión no encontrada"}), 404
 
-        def validar_existencia(model, **kwargs):
-            return db.session.query(model).filter_by(**kwargs).first() is not None
+        def validar_existencia(modelos, **kwargs):
+            return db.session.query(modelos).filter_by(**kwargs).first() is not None
 
         validaciones = [
             (DimensionPeso, {"codigo_dim_peso": data["codigo_dim_peso"]}),
@@ -2115,7 +2123,7 @@ def get_modelos_comerciales():
 @cross_origin()
 def get_modelos_version_repuesto():
     try:
-        ModeloItemAlias = aliased(TgModeloItem)
+        modelo_item_alias = aliased(TgModeloItem)
 
         resultados = db.session.query(
             ModeloVersionRepuesto.codigo_mod_vers_repuesto,
@@ -2131,7 +2139,7 @@ def get_modelos_version_repuesto():
             Marca.nombre_marca.label("nombre_marca"),
             Version.nombre_version,
             Empresa.nombre.label("nombre_empresa"),
-            ModeloItemAlias.nombre.label("nombre_item"),
+            modelo_item_alias.nombre.label("nombre_item"),
             ModeloVersionRepuesto.precio_producto_modelo,
             ModeloVersionRepuesto.precio_venta_distribuidor,
             ModeloVersionRepuesto.descripcion
@@ -2141,7 +2149,7 @@ def get_modelos_version_repuesto():
          .join(Marca, ModeloVersionRepuesto.codigo_marca == Marca.codigo_marca)\
          .join(Version, ModeloVersionRepuesto.codigo_version == Version.codigo_version)\
          .join(Empresa, ModeloVersionRepuesto.empresa == Empresa.empresa)\
-         .join(ModeloItemAlias, (Producto.empresa == ModeloItemAlias.empresa) & (Producto.cod_modelo == ModeloItemAlias.cod_modelo) & (Producto.cod_item == ModeloItemAlias.cod_item))\
+         .join(modelo_item_alias, (Producto.empresa == modelo_item_alias.empresa) & (Producto.cod_modelo == modelo_item_alias.cod_modelo) & (Producto.cod_item == modelo_item_alias.cod_item))\
          .all()
 
         return jsonify([{
@@ -2231,24 +2239,24 @@ def get_cliente_canal():
 @cross_origin()
 def get_productos():
     try:
-        EmpresaAlias = aliased(Empresa)
-        ModeloItemAlias = aliased(TgModeloItem)
+        empresa_alias = aliased(Empresa)
+        modelo_item_alias = aliased(TgModeloItem)
 
         productos = db.session.query(
             Producto.cod_producto,
             Producto.cod_modelo,
             Producto.cod_item,
-            ModeloItemAlias.nombre.label("nombre_item"),
+            modelo_item_alias.nombre.label("nombre_item"),
             Producto.nombre.label("nombre_producto"),
             Producto.empresa,
-            EmpresaAlias.nombre.label("nombre_empresa")
+            empresa_alias.nombre.label("nombre_empresa")
         ).join(
-            EmpresaAlias, Producto.empresa == EmpresaAlias.empresa
+            empresa_alias, Producto.empresa == empresa_alias.empresa
         ).join(
-            ModeloItemAlias,
-            (Producto.empresa == ModeloItemAlias.empresa) &
-            (Producto.cod_modelo == ModeloItemAlias.cod_modelo) &
-            (Producto.cod_item == ModeloItemAlias.cod_item)
+            modelo_item_alias,
+            (Producto.empresa == modelo_item_alias.empresa) &
+            (Producto.cod_modelo == modelo_item_alias.cod_modelo) &
+            (Producto.cod_item == modelo_item_alias.cod_item)
         ).filter(
             Producto.activo == 'S'
         ).all()
