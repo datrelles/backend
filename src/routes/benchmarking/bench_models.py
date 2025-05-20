@@ -95,9 +95,9 @@ def comparar_modelos():
             return 0
 
         # SEGMENTO
-        segmento = db.session.query(Segmento.nombre_segmento).join(ClienteCanal,
-            (Segmento.codigo_modelo_comercial == ClienteCanal.codigo_modelo_comercial) &
-            (Segmento.codigo_marca == ClienteCanal.codigo_marca))
+        segmento = db.session.query(Segmento.nombre_segmento).join(ModeloComercial,
+            (Segmento.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
+            (Segmento.codigo_marca == ModeloComercial.codigo_marca))
         segmento = segmento.filter(ClienteCanal.codigo_mod_vers_repuesto == base_id).first()
         segmento_nombre = segmento[0].lower() if segmento else ""
 
@@ -348,10 +348,8 @@ def get_modelos_por_linea(codigo_linea):
             ModeloVersion.precio_producto_modelo,
             ModeloComercial.nombre_modelo.label('nombre_modelo_comercial'),
             Motor.nombre_motor
-        ).join(ClienteCanal, ModeloVersion.codigo_cliente_canal == ClienteCanal.codigo_cliente_canal) \
-         .join(Segmento, (Segmento.codigo_modelo_comercial == ClienteCanal.codigo_modelo_comercial) &
-                         (Segmento.codigo_marca == ClienteCanal.codigo_marca)) \
-         .join(ModeloComercial, ClienteCanal.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) \
+        ).join(Segmento, (Segmento.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
+                         (Segmento.codigo_marca == ModeloComercial.codigo_marca)) \
          .join(Motor, ModeloVersion.codigo_motor == Motor.codigo_motor) \
          .filter(Segmento.codigo_linea == codigo_linea) \
          .all()
@@ -395,17 +393,18 @@ def get_modelos_por_linea_segmento():
             TipoMotor.nombre_tipo,
             Version.nombre_version,
             Marca.nombre_marca,
-        ).join(ClienteCanal, ModeloVersion.codigo_cliente_canal == ClienteCanal.codigo_cliente_canal) \
-         .join(Segmento, (Segmento.codigo_modelo_comercial == ClienteCanal.codigo_modelo_comercial) &
-                         (Segmento.codigo_marca == ClienteCanal.codigo_marca)) \
-         .join(ModeloComercial, ClienteCanal.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) \
-         .join(Motor, ModeloVersion.codigo_motor == Motor.codigo_motor) \
-         .join(TipoMotor, Motor.codigo_tipo_motor == TipoMotor.codigo_tipo_motor) \
-         .join(Version, ModeloVersion.codigo_version == Version.codigo_version) \
-         .join(Marca, ModeloVersion.codigo_marca == Marca.codigo_marca) \
-         .filter(Segmento.codigo_linea == codigo_linea) \
-         .filter(func.upper(Segmento.nombre_segmento) == func.upper(nombre_segmento.strip())) \
-         .all()
+        ) \
+            .join(ModeloComercial, (ModeloVersion.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
+                  (ModeloVersion.codigo_marca == ModeloComercial.codigo_marca)) \
+            .join(Segmento, (Segmento.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
+                  (Segmento.codigo_marca == ModeloComercial.codigo_marca)) \
+            .join(Motor, ModeloVersion.codigo_motor == Motor.codigo_motor) \
+            .join(TipoMotor, Motor.codigo_tipo_motor == TipoMotor.codigo_tipo_motor) \
+            .join(Version, ModeloVersion.codigo_version == Version.codigo_version) \
+            .join(Marca, ModeloVersion.codigo_marca == Marca.codigo_marca) \
+            .filter(Segmento.codigo_linea == codigo_linea) \
+            .filter(func.upper(Segmento.nombre_segmento) == func.upper(nombre_segmento.strip())) \
+            .all()
 
         modelos = [{
             "codigo_modelo_version": r[0],

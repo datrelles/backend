@@ -678,7 +678,7 @@ def insert_producto_externo():
             estado = item.get("estado_prod_externo")
             descripcion_producto = item.get("descripcion_producto")
 
-            if not codigo_marca_rep or not nombre_producto is None:
+            if not codigo_marca_rep or not nombre_producto or not nombre_producto.strip():
                 duplicados.append(item)
                 continue
 
@@ -692,8 +692,10 @@ def insert_producto_externo():
                     duplicados.append(item)
                     continue
 
+            nombre_normalizado = nombre_producto.strip().lower()
+
             existe = any(
-                (r.nombre_producto or "").lower() == (nombre_producto or "").lower()
+                (r.nombre_producto or "").strip().lower() == nombre_normalizado
                 and r.codigo_marca_rep == codigo_marca_rep
                 for r in registros_existentes
             )
@@ -705,14 +707,10 @@ def insert_producto_externo():
             numero_actual += 1
             nuevo_codigo = f"PE{str(numero_actual).zfill(5)}"
 
-            nombre_producto = item.get("nombre_producto")
-            if not isinstance(nombre_producto, str) or not nombre_producto.strip():
-                raise ValueError("El campo 'nombre_producto' es obligatorio y debe ser texto.")
-
             nuevo = ProductoExterno(
                 codigo_prod_externo=nuevo_codigo,
                 codigo_marca_rep=codigo_marca_rep,
-                nombre_producto=nombre_producto,
+                nombre_producto=nombre_producto.strip(),
                 estado_prod_externo=estado,
                 descripcion_producto=descripcion_producto,
                 usuario_crea=user,
@@ -937,6 +935,7 @@ def insert_modelo_sri():
             nombre = item.get("nombre_modelo")
             anio = item.get("anio_modelo")
             estado = item.get("estado_modelo")
+            cod_mdl_importacion = item.get("cod_mdl_importacion")
 
             if not nombre or estado not in [0, 1] or not (1950 <= int(anio) <= 2100):
                 duplicados.append(item)
@@ -950,6 +949,7 @@ def insert_modelo_sri():
                 nombre_modelo=nombre,
                 anio_modelo=anio,
                 estado_modelo=estado,
+                cod_mdl_importacion=cod_mdl_importacion,
                 usuario_crea=user,
                 fecha_creacion=datetime.now()
             )
@@ -1325,8 +1325,6 @@ def insert_modelo_version_repuesto():
             cod_producto = item.get("cod_producto")
             empresa = item.get("empresa")
             codigo_prod_externo = item.get("codigo_prod_externo")
-            codigo_modelo_comercial = item.get("codigo_modelo_comercial")
-            codigo_marca = item.get("codigo_marca")
             codigo_version = item.get("codigo_version")
 
             if not cod_producto or not empresa:
@@ -1348,15 +1346,6 @@ def insert_modelo_version_repuesto():
                     errores.append({"error": "Producto externo no encontrado", "repuestos": item})
                     continue
 
-            if not codigo_modelo_comercial or not codigo_marca:
-                if item.get("nombre_modelo_comercial"):
-                    modelo = db.session.query(ModeloComercial).filter_by(nombre_modelo=item["nombre_modelo_comercial"]).first()
-                    if modelo:
-                        codigo_modelo_comercial = modelo.codigo_modelo_comercial
-                        codigo_marca = modelo.codigo_marca
-                    else:
-                        errores.append({"error": "Modelo comercial no encontrado", "repuestos": item})
-                        continue
 
             if not codigo_version and item.get("nombre_version"):
                 version = db.session.query(Version).filter_by(nombre_version=item["nombre_version"]).first()
@@ -1372,7 +1361,7 @@ def insert_modelo_version_repuesto():
 
             campos_obligatorios = [
                 cod_producto, empresa, codigo_prod_externo,
-                codigo_modelo_comercial, codigo_marca, codigo_version,
+                codigo_version,
                 precio_producto_modelo, precio_venta_distribuidor
             ]
 
@@ -1382,8 +1371,6 @@ def insert_modelo_version_repuesto():
 
             existe = db.session.query(ModeloVersionRepuesto).filter_by(
                 cod_producto=cod_producto,
-                codigo_modelo_comercial=codigo_modelo_comercial,
-                codigo_marca=codigo_marca,
                 empresa=empresa
             ).first()
             if existe:
@@ -1395,8 +1382,6 @@ def insert_modelo_version_repuesto():
                 codigo_version=codigo_version,
                 empresa=empresa,
                 cod_producto=cod_producto,
-                codigo_modelo_comercial=codigo_modelo_comercial,
-                codigo_marca=codigo_marca,
                 descripcion=descripcion,
                 precio_producto_modelo=precio_producto_modelo,
                 precio_venta_distribuidor=precio_venta_distribuidor
@@ -1440,10 +1425,8 @@ def insert_cliente_canal():
             cod_modelo_vers_repuesto = item.get("codigo_mod_vers_repuesto")
             cod_producto = item.get("cod_producto")
             empresa = item.get("empresa")
-            codigo_modelo_comercial = item.get("codigo_modelo_comercial")
-            codigo_marca = item.get("codigo_marca")
 
-            if not all([cod_modelo_vers_repuesto, cod_producto, empresa, codigo_modelo_comercial, codigo_marca]):
+            if not all([cod_modelo_vers_repuesto, cod_producto, empresa]):
                 nombre_producto = item.get("nombre_producto")
                 nombre_modelo = item.get("nombre_modelo_comercial")
                 nombre_version = item.get("nombre_version")
@@ -1451,7 +1434,6 @@ def insert_cliente_canal():
                 modelo = (
                     db.session.query(ModeloVersionRepuesto)
                     .join(Producto, (ModeloVersionRepuesto.cod_producto == Producto.cod_producto) & (ModeloVersionRepuesto.empresa == Producto.empresa))
-                    .join(ModeloComercial, ModeloVersionRepuesto.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial)
                     .join(Version, ModeloVersionRepuesto.codigo_version == Version.codigo_version)
                     .filter(
                         Producto.nombre == nombre_producto,
@@ -1464,13 +1446,11 @@ def insert_cliente_canal():
                     cod_modelo_vers_repuesto = modelo.codigo_mod_vers_repuesto
                     cod_producto = modelo.cod_producto
                     empresa = modelo.empresa
-                    codigo_modelo_comercial = modelo.codigo_modelo_comercial
-                    codigo_marca = modelo.codigo_marca
                 else:
                     errores.append({"error": "No se pudo resolver modelo_version_repuesto", "cliente": item})
                     continue
 
-            campos_obligatorios = [codigo_canal, cod_modelo_vers_repuesto, cod_producto, empresa, codigo_modelo_comercial, codigo_marca]
+            campos_obligatorios = [codigo_canal, cod_modelo_vers_repuesto, cod_producto, empresa]
             if any(c is None or c == '' for c in campos_obligatorios):
                 errores.append({"error": "Faltan campos obligatorios", "cliente": item})
                 continue
@@ -1480,8 +1460,6 @@ def insert_cliente_canal():
                 codigo_mod_vers_repuesto=cod_modelo_vers_repuesto,
                 empresa=empresa,
                 cod_producto=cod_producto,
-                codigo_modelo_comercial=codigo_modelo_comercial,
-                codigo_marca=codigo_marca,
                 descripcion_cliente_canal=descripcion
             )
             db.session.add(nuevo)
@@ -1574,7 +1552,9 @@ def insert_modelo_version():
                 "codigo_cliente_canal": data["codigo_cliente_canal"],
                 "codigo_mod_vers_repuesto": data["codigo_mod_vers_repuesto"],
                 "empresa": data["empresa"],
-                "cod_producto": data["cod_producto"],
+                "cod_producto": data["cod_producto"]
+            }),
+            (ModeloComercial, {
                 "codigo_modelo_comercial": data["codigo_modelo_comercial"],
                 "codigo_marca": data["codigo_marca"]
             })
@@ -2036,6 +2016,7 @@ def get_modelos_sri():
                 "nombre_modelo": m.nombre_modelo,
                 "anio_modelo": m.anio_modelo,
                 "estado_modelo": m.estado_modelo,
+                "cod_mdl_importacion": m.cod_mdl_importacion,
                 "usuario_crea": m.usuario_crea,
                 "usuario_modifica": m.usuario_modifica,
                 "fecha_creacion": m.fecha_creacion.isoformat() if m.fecha_creacion else None,
@@ -2127,16 +2108,12 @@ def get_modelos_version_repuesto():
 
         resultados = db.session.query(
             ModeloVersionRepuesto.codigo_mod_vers_repuesto,
-            ModeloVersionRepuesto.codigo_modelo_comercial,
-            ModeloVersionRepuesto.codigo_marca,
             ModeloVersionRepuesto.codigo_version,
             ModeloVersionRepuesto.empresa,
             ModeloVersionRepuesto.codigo_prod_externo,
             Producto.cod_producto,
             Producto.nombre.label("nombre_producto"),
             ProductoExterno.nombre_producto.label("nombre_producto_externo"),
-            ModeloComercial.nombre_modelo.label("nombre_modelo_comercial"),
-            Marca.nombre_marca.label("nombre_marca"),
             Version.nombre_version,
             Empresa.nombre.label("nombre_empresa"),
             modelo_item_alias.nombre.label("nombre_item"),
@@ -2145,8 +2122,6 @@ def get_modelos_version_repuesto():
             ModeloVersionRepuesto.descripcion
         ).join(Producto, (ModeloVersionRepuesto.cod_producto == Producto.cod_producto) & (ModeloVersionRepuesto.empresa == Producto.empresa))\
          .join(ProductoExterno, ModeloVersionRepuesto.codigo_prod_externo == ProductoExterno.codigo_prod_externo)\
-         .join(ModeloComercial, ModeloVersionRepuesto.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial)\
-         .join(Marca, ModeloVersionRepuesto.codigo_marca == Marca.codigo_marca)\
          .join(Version, ModeloVersionRepuesto.codigo_version == Version.codigo_version)\
          .join(Empresa, ModeloVersionRepuesto.empresa == Empresa.empresa)\
          .join(modelo_item_alias, (Producto.empresa == modelo_item_alias.empresa) & (Producto.cod_modelo == modelo_item_alias.cod_modelo) & (Producto.cod_item == modelo_item_alias.cod_item))\
@@ -2155,15 +2130,11 @@ def get_modelos_version_repuesto():
         return jsonify([{
             "codigo_mod_vers_repuesto": r.codigo_mod_vers_repuesto,
             "cod_producto": r.cod_producto,
-            "codigo_modelo_comercial": r.codigo_modelo_comercial,
-            "codigo_marca": r.codigo_marca,
             "codigo_version": r.codigo_version,
             "empresa": r.empresa,
             "codigo_prod_externo": r.codigo_prod_externo,
             "nombre_producto": r.nombre_producto,
             "nombre_producto_externo": r.nombre_producto_externo,
-            "nombre_modelo_comercial": r.nombre_modelo_comercial,
-            "nombre_marca": r.nombre_marca,
             "nombre_version": r.nombre_version,
             "nombre_empresa": r.nombre_empresa,
             "nombre_item": r.nombre_item,
@@ -2185,10 +2156,6 @@ def get_cliente_canal():
         resultados = []
 
         for cliente in registros:
-            modelo = db.session.query(ModeloComercial).filter_by(
-                codigo_modelo_comercial=cliente.codigo_modelo_comercial,
-                codigo_marca=cliente.codigo_marca
-            ).first()
 
             producto = db.session.query(Producto).filter_by(
                 cod_producto=cliente.cod_producto,
@@ -2221,10 +2188,6 @@ def get_cliente_canal():
                 "empresa": cliente.empresa,
                 "nombre_empresa": empresa_data.nombre if empresa_data else None,
                 "nombre_producto": producto.nombre if producto else None,
-                "codigo_modelo_comercial": cliente.codigo_modelo_comercial,
-                "nombre_modelo_comercial": modelo.nombre_modelo if modelo else None,
-                "codigo_marca": cliente.codigo_marca,
-                "nombre_marca": modelo.marca.nombre_marca if modelo and modelo.marca else None,
                 "codigo_version": cliente.codigo_mod_vers_repuesto,
                 "nombre_version": version.nombre_version if version else None
             })
@@ -2840,6 +2803,7 @@ def update_modelo_sri(codigo_modelo_sri):
         nombre = data.get("nombre_modelo")
         anio = data.get("anio_modelo")
         estado = data.get("estado_modelo")
+        cod_mdl_importacion = data.get("cod_mdl_importacion")
 
         if nombre:
             existe_nombre = db.session.query(ModeloSRI).filter(
@@ -2849,6 +2813,7 @@ def update_modelo_sri(codigo_modelo_sri):
             if existe_nombre:
                 return jsonify({"error": "Ya existe otro modelo con ese nombre"}), 409
             modelo.nombre_modelo = nombre
+            modelo.cod_mdl_importacion = cod_mdl_importacion
 
         if anio and (1950 <= int(anio) <= 2100):
             modelo.anio_modelo = int(anio)
@@ -2957,7 +2922,7 @@ def update_modelo_version_repuesto(codigo):
     try:
         data = request.get_json()
 
-        required_fields = ["cod_producto", "codigo_marca", "codigo_modelo_comercial", "empresa",
+        required_fields = ["cod_producto", "empresa",
                            "codigo_version", "codigo_prod_externo", "descripcion",
                            "precio_producto_modelo", "precio_venta_distribuidor"]
         for field in required_fields:
@@ -2969,19 +2934,13 @@ def update_modelo_version_repuesto(codigo):
             return jsonify({"error": "Registro no encontrado"}), 404
 
         producto = db.session.query(Producto).filter_by(empresa=data["empresa"], cod_producto=data["cod_producto"]).first()
-        modelo = db.session.query(ModeloComercial).filter_by(
-            codigo_modelo_comercial=data["codigo_modelo_comercial"],
-            codigo_marca=data["codigo_marca"]
-        ).first()
         version = db.session.query(Version).filter_by(codigo_version=data["codigo_version"]).first()
         prod_ext = db.session.query(ProductoExterno).filter_by(codigo_prod_externo=data["codigo_prod_externo"]).first()
 
-        if not all([producto, modelo, version, prod_ext]):
+        if not all([producto,  version, prod_ext]):
             return jsonify({"error": "Alguna FK referenciada no existe"}), 409
 
         registro.cod_producto = data["cod_producto"]
-        registro.codigo_marca = data["codigo_marca"]
-        registro.codigo_modelo_comercial = data["codigo_modelo_comercial"]
         registro.empresa = data["empresa"]
         registro.codigo_version = data["codigo_version"]
         registro.codigo_prod_externo = data["codigo_prod_externo"]
@@ -3019,8 +2978,6 @@ def update_cliente_canal(codigo):
         cliente.codigo_canal = data.get('codigo_canal')
         cliente.codigo_mod_vers_repuesto = data.get('codigo_mod_vers_repuesto')
         cliente.cod_producto = data.get('cod_producto')
-        cliente.empresa = data.get('empresa')
-        cliente.codigo_modelo_comercial = data.get('codigo_modelo_comercial')
         cliente.codigo_marca = data.get('codigo_marca')
         cliente.codigo_version = data.get('codigo_version')  # si corresponde en tu modelo
         cliente.descripcion_cliente_canal = data.get('descripcion_cliente_canal', '')

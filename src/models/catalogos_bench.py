@@ -341,6 +341,7 @@ class ModeloSRI(Base):
     nombre_modelo = Column(VARCHAR(150), nullable=False)
     anio_modelo = Column(NUMBER(4), nullable=False)
     estado_modelo = Column(NUMBER(1), nullable=False)
+    cod_mdl_importacion = Column(VARCHAR(300))
     usuario_crea = Column(VARCHAR(50), nullable=False)
     usuario_modifica = Column(VARCHAR(50))
     fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
@@ -448,16 +449,10 @@ class ModeloVersionRepuesto(Base):
         PrimaryKeyConstraint(
             'codigo_mod_vers_repuesto',
             'cod_producto',
-            'codigo_modelo_comercial',
-            'codigo_marca',
             'empresa',
             name='pk_st_mod_vers_repuesto'
         ),
-        ForeignKeyConstraint(
-            ['codigo_modelo_comercial', 'codigo_marca'],
-            ['stock.st_modelo_comercial.codigo_modelo_comercial', 'stock.st_modelo_comercial.codigo_marca'],
-            name='fk_st_mod_ver_rep_modelo'
-        ),
+
         ForeignKeyConstraint(
             ['empresa', 'cod_producto'],
             ['stock.producto.empresa', 'stock.producto.cod_producto'],
@@ -471,24 +466,28 @@ class ModeloVersionRepuesto(Base):
     codigo_version = Column(NUMBER(14), ForeignKey('stock.st_version.codigo_version'), nullable=False)
     empresa = Column(NUMBER(2), nullable=False)
     cod_producto = Column(VARCHAR(14), nullable=False)
-    codigo_modelo_comercial = Column(NUMBER(14), nullable=False)
-    codigo_marca = Column(NUMBER(14), nullable=False)
     descripcion = Column(VARCHAR(150))
     precio_producto_modelo = Column(NUMBER(10,2), nullable=False)
     precio_venta_distribuidor = Column(NUMBER(10,2), nullable=False)
 
     producto_externo = relationship("ProductoExterno", backref="repuestos_version")
     version = relationship("Version", backref="repuestos_version")
-    modelo_comercial = relationship("ModeloComercial", backref="repuestos_version")
     producto = relationship(Producto, backref="repuestos_modelo_version")
 
 class ClienteCanal(Base):
     __tablename__ = 'st_cliente_canal'
     __table_args__ = (
+        PrimaryKeyConstraint(
+            'codigo_cliente_canal',
+            'codigo_mod_vers_repuesto',
+            'cod_producto',
+            'empresa',
+            name='pk_st_cliente_canal'
+        ),
         ForeignKeyConstraint(
-            ['codigo_mod_vers_repuesto', 'cod_producto', 'codigo_modelo_comercial', 'codigo_marca', 'empresa'],
-            ['stock.st_modelo_version_repuesto.codigo_mod_vers_repuesto', 'stock.st_modelo_version_repuesto.cod_producto',
-             'stock.st_modelo_version_repuesto.codigo_modelo_comercial', 'stock.st_modelo_version_repuesto.codigo_marca',
+            ['codigo_mod_vers_repuesto', 'cod_producto', 'empresa'],
+            ['stock.st_modelo_version_repuesto.codigo_mod_vers_repuesto',
+             'stock.st_modelo_version_repuesto.cod_producto',
              'stock.st_modelo_version_repuesto.empresa'],
             name='fk_st_cliente_canal_modvers'
         ),
@@ -496,12 +495,10 @@ class ClienteCanal(Base):
     )
 
     codigo_cliente_canal = Column(NUMBER(14), Sequence('seq_st_cliente_canal', schema='stock'), primary_key=True)
-    codigo_canal = Column(NUMBER(14), nullable=False)  # FK a ST_CANAL
-    codigo_mod_vers_repuesto = Column(NUMBER(14), nullable=False, primary_key=True)
-    empresa = Column(NUMBER(2), nullable=False, primary_key=True)
-    cod_producto = Column(VARCHAR(14), nullable=False, primary_key=True)
-    codigo_modelo_comercial = Column(NUMBER(14), nullable=False, primary_key=True)
-    codigo_marca = Column(NUMBER(14), nullable=False, primary_key=True)
+    codigo_canal = Column(NUMBER(14), nullable=False)
+    codigo_mod_vers_repuesto = Column(NUMBER(14), nullable=False)
+    empresa = Column(NUMBER(2), nullable=False)
+    cod_producto = Column(VARCHAR(14), nullable=False)
     descripcion_cliente_canal = Column(VARCHAR(150))
 
 class ModeloVersion(Base):
@@ -510,11 +507,18 @@ class ModeloVersion(Base):
         UniqueConstraint('nombre_modelo_version', name='uq_mv_nombre_modelo_version'),
         CheckConstraint('anio_modelo_version BETWEEN 1950 AND 2100', name='ck_mv_anio_modelo'),
         ForeignKeyConstraint(
-            ['codigo_cliente_canal', 'codigo_mod_vers_repuesto', 'empresa', 'cod_producto', 'codigo_modelo_comercial', 'codigo_marca'],
-            ['stock.st_cliente_canal.codigo_cliente_canal', 'stock.st_cliente_canal.codigo_mod_vers_repuesto',
-             'stock.st_cliente_canal.empresa', 'stock.st_cliente_canal.cod_producto',
-             'stock.st_cliente_canal.codigo_modelo_comercial', 'stock.st_cliente_canal.codigo_marca'],
+            ['codigo_cliente_canal', 'codigo_mod_vers_repuesto', 'cod_producto', 'empresa'],
+            ['stock.st_cliente_canal.codigo_cliente_canal',
+             'stock.st_cliente_canal.codigo_mod_vers_repuesto',
+             'stock.st_cliente_canal.cod_producto',
+             'stock.st_cliente_canal.empresa'],
             name='fk_mv_cliente_canal'
+        ),
+        ForeignKeyConstraint(
+            ['codigo_modelo_comercial', 'codigo_marca'],
+            ['stock.st_modelo_comercial.codigo_modelo_comercial',
+             'stock.st_modelo_comercial.codigo_marca'],
+            name='fk_mv_modelo_comercial'
         ),
         {'schema': 'stock'}
     )
@@ -528,17 +532,22 @@ class ModeloVersion(Base):
     codigo_transmision = Column(NUMBER(14), ForeignKey('stock.st_transmision.codigo_transmision'), nullable=False)
     codigo_color_bench = Column(NUMBER(14), ForeignKey('stock.st_color_bench.codigo_color_bench'), nullable=False)
     codigo_chasis = Column(NUMBER(14), ForeignKey('stock.st_chasis.codigo_chasis'), nullable=False)
+
     codigo_modelo_comercial = Column(NUMBER(14), nullable=False)
     codigo_marca = Column(NUMBER(14), nullable=False)
+
     codigo_cliente_canal = Column(NUMBER(14), nullable=False)
     codigo_mod_vers_repuesto = Column(NUMBER(14), nullable=False)
     empresa = Column(NUMBER(2), nullable=False)
     cod_producto = Column(VARCHAR(14), nullable=False)
     codigo_version = Column(NUMBER(14), ForeignKey('stock.st_version.codigo_version'), nullable=False)
+
     nombre_modelo_version = Column(VARCHAR(50), nullable=False)
     anio_modelo_version = Column(NUMBER(4), nullable=False)
     precio_producto_modelo = Column(NUMBER(10), nullable=False)
     precio_venta_distribuidor = Column(NUMBER(10), nullable=False)
+
+
 
 
 
