@@ -9,7 +9,7 @@ from sqlalchemy import func
 
 from src.config.database import db
 from src.models.catalogos_bench import ModeloVersion, Motor, TipoMotor, Chasis, ElectronicaOtros, DimensionPeso, \
-    Transmision, ClienteCanal, Segmento, ModeloComercial, Version, Marca
+    Transmision, ClienteCanal, Segmento, ModeloComercial, Version, Marca, Imagenes
 
 bench_model = Blueprint('routes_bench_model', __name__)
 logger = logging.getLogger(__name__)
@@ -393,6 +393,7 @@ def get_modelos_por_linea_segmento():
             TipoMotor.nombre_tipo,
             Version.nombre_version,
             Marca.nombre_marca,
+            Imagenes.path_imagen,
         ) \
             .join(ModeloComercial, (ModeloVersion.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
                   (ModeloVersion.codigo_marca == ModeloComercial.codigo_marca)) \
@@ -401,6 +402,7 @@ def get_modelos_por_linea_segmento():
             .join(Motor, ModeloVersion.codigo_motor == Motor.codigo_motor) \
             .join(TipoMotor, Motor.codigo_tipo_motor == TipoMotor.codigo_tipo_motor) \
             .join(Version, ModeloVersion.codigo_version == Version.codigo_version) \
+            .join(Imagenes, ModeloVersion.codigo_imagen == Imagenes.codigo_imagen) \
             .join(Marca, ModeloVersion.codigo_marca == Marca.codigo_marca) \
             .filter(Segmento.codigo_linea == codigo_linea) \
             .filter(func.upper(Segmento.nombre_segmento) == func.upper(nombre_segmento.strip())) \
@@ -416,6 +418,7 @@ def get_modelos_por_linea_segmento():
             "nombre_tipo": r[6],
             "nombre_version": r[7],
             "nombre_marca": r[8],
+            "path_imagen": r[9],
         } for r in resultados]
 
         return jsonify(modelos), 200
