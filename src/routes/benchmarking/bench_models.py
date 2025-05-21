@@ -6,6 +6,13 @@ from flask_jwt_extended import jwt_required
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from sqlalchemy import func
+from PIL import Image as PILImage
+from openpyxl.drawing.image import Image as ExcelImage
+import tempfile
+import requests
+from openpyxl.drawing.image import Image
+
+
 
 from src.config.database import db
 from src.models.catalogos_bench import ModeloVersion, Motor, TipoMotor, Chasis, ElectronicaOtros, DimensionPeso, \
@@ -471,63 +478,92 @@ def exportar_comparacion_xlsx():
         ws = wb.active
         ws.title = "Resumen Comparación"
 
-        modelo_dict = {
-            m["codigo_modelo_version"]: m["nombre_modelo_version"]
-            for m in modelos
-        }
+        modelo_dict = {m["codigo_modelo_version"]: m for m in modelos}
 
-        for i, modelo in enumerate(resultado.get("comparables", []), start=1):
-            nombre_base = modelo_dict.get(resultado["base"], "Modelo Base")
-            nombre_comp = modelo_dict.get(modelo["modelo_version"], "Modelo Comparable")
+        for modelo in resultado.get("comparables", []):
+            base = modelo_dict.get(resultado["base"])
+            comparable = modelo_dict.get(modelo["modelo_version"])
 
-            # Encabezado general
-            ws.append([f"COMPARACIÓN: {nombre_base}"])
+            nombre_base = base.get("nombre_modelo_comercial", "Base")
+            nombre_comp = comparable.get("nombre_modelo_comercial", "Comparable")
+
+            # Agregar título
+            ws.append([f"COMPARACIÓN: {nombre_base} VS {nombre_comp}"])
             ws.merge_cells(start_row=ws.max_row, start_column=1, end_row=ws.max_row, end_column=5)
-            header_cell = ws.cell(row=ws.max_row, column=1)
-            header_cell.font = Font(size=14, bold=True)
-            header_cell.alignment = Alignment(horizontal="center")
-            header_cell.fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
+            title_cell = ws.cell(row=ws.max_row, column=1)
+            title_cell.font = Font(size=14, bold=True, color="FFFFFF")
+            title_cell.alignment = Alignment(horizontal="center")
+            title_cell.fill = PatternFill(start_color="B22222", end_color="BDD7EE", fill_type="solid")
 
-            # Encabezados de tabla
-            ws.append(["Categoría", "Campo", nombre_base, nombre_comp, "Estado"])
-            header_row = ws.max_row
-            for col in range(1, 6):
-                cell = ws.cell(row=header_row, column=col)
-                cell.font = Font(bold=True, color="FFFFFF")
-                cell.fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
-                cell.alignment = Alignment(horizontal="center")
+            title_row = ws.max_row
+            image_row = title_row + 1
+            name_row = title_row + 15
+            header_row = title_row + 10
 
-            # Contenido
-            mejor_en = modelo.get("mejor_en", {})
-            for categoria, campos in mejor_en.items():
-                for detalle in campos:
-                    fila = [
-                        categoria.capitalize(),
-                        detalle["campo"],
-                        detalle["base"],
-                        detalle["comparable"],
-                        detalle["estado"]
-                    ]
-                    ws.append(fila)
+            # Colocar imágenes
+            for idx, m in enumerate([base, comparable]):
+                img_url = m.get("path_imagen")
+                col = 2 if idx == 0 else 4
+                if img_url:
+                    try:
+                        res = requests.get(img_url)
+                        if res.ok:
+                            img_data = io.BytesIO(res.content)
+                            img = Image(img_data)
+                            img.width = 350
+                            img.height = 250
+                            anchor = f"{get_column_letter(col)}{image_row}"
+                            ws.add_image(img, anchor)
+                    except Exception as e:
+                        print(f"Error imagen {img_url}: {e}")
 
-                    estado_valor = detalle.get("estado", "").lower()
-                    estado_cell = ws.cell(row=ws.max_row, column=5)
-
-                    if estado_valor == "mejor":
-                        estado_cell.font = Font(color="006100", bold=True)
-                        estado_cell.fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
-                    elif estado_valor == "peor":
-                        estado_cell.font = Font(color="9C0006", bold=True)
-                        estado_cell.fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
-                    elif estado_valor == "igual":
-                        estado_cell.font = Font(color="1F1F1F")
-                        estado_cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+            ws.cell(row=name_row, column=4, value=f"{nombre_comp} - {comparable.get('nombre_marca', '')}")
+            ws.cell(row=name_row, column=2, value=f"{nombre_base} - {base.get('nombre_marca', '')}")
 
             ws.append([])
 
-        # Ajustar ancho de columnas
-        for col in range(1, 6):
-            ws.column_dimensions[get_column_letter(col)].width = 25
+            # Encabezados
+            ws.append(["Categoría", "Campo", nombre_base, nombre_comp, "Comparativo"])
+            for col in range(1, 6):
+                cell = ws.cell(row=ws.max_row, column=col)
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(start_color="B22222", end_color="4F81BD", fill_type="solid")
+                cell.alignment = Alignment(horizontal="center")
+
+            icono_estado = {
+                "mejor": {"icono": "👍", "color": "006100"},
+                "peor": {"icono": "👎", "color": "9C0006"},
+                "igual": {"icono": "🟰", "color": "e5da00"},
+                "diferente": {"icono": "❗", "color": "b300ac"}
+            }
+
+            for categoria, campos in modelo.get("mejor_en", {}).items():
+                for detalle in campos:
+                    estado_valor = detalle.get("estado", "").lower()
+
+                    fila = [
+                        categoria.capitalize(),
+                        detalle["campo"].replace('_', ' ').upper(),
+                        detalle.get("base", ""),
+                        detalle.get("comparable", ""),
+                        ""
+                    ]
+                    ws.append(fila)
+
+                    row_idx = ws.max_row
+                    cell = ws.cell(row=row_idx, column=5)
+                    if estado_valor in icono_estado:
+                        props = icono_estado[estado_valor]
+                        cell.value = props["icono"]
+                        cell.font = Font(bold=True, color=props["color"])
+                    else:
+                        cell.value = "❗"
+
+        ws.column_dimensions[get_column_letter(1)].width = 15
+        ws.column_dimensions[get_column_letter(5)].width = 15
+
+        for col in range(2, 5):
+            ws.column_dimensions[get_column_letter(col)].width = 35
 
         output = io.BytesIO()
         wb.save(output)
