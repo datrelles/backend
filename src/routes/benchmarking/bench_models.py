@@ -6,14 +6,8 @@ from flask_jwt_extended import jwt_required
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from sqlalchemy import func
-from PIL import Image as PILImage
-from openpyxl.drawing.image import Image as ExcelImage
-import tempfile
 import requests
 from openpyxl.drawing.image import Image
-
-
-
 from src.config.database import db
 from src.models.catalogos_bench import ModeloVersion, Motor, TipoMotor, Chasis, ElectronicaOtros, DimensionPeso, \
     Transmision, ClienteCanal, Segmento, ModeloComercial, Version, Marca, Imagenes
@@ -54,7 +48,9 @@ def comparar_modelos():
             return float(match.group(1)) if match else None
 
         def extract_garantia_meses(texto):
-            texto = texto.upper()
+            if texto is None:
+                return None
+            texto = str(texto).upper()
             match_years = re.search(r'(\d+(?:[.,]\d+)?)\s*AÑOS?', texto)
             match_meses = re.search(r'(\d+(?:[.,]\d+)?)\s*MESES?', texto)
             if match_years:
@@ -83,24 +79,6 @@ def comparar_modelos():
             ancho, relation, rin = map(int, match.groups())
             return 2 * (ancho * (relation / 100)) + (rin * 25.4)
 
-        def evaluar_frenos(val):
-            val = (val or "").lower()
-            if "disco" in val:
-                return 2
-            if "tambor" in val:
-                return 1
-            return 0
-
-        def evaluar_aros(val):
-            val = (val or "").lower()
-            if "radios" in val:
-                return 1
-            if "aleación" in val:
-                return 2
-            if "aluminio" in val:
-                return 2
-            return 0
-
         # SEGMENTO
         segmento = db.session.query(Segmento.nombre_segmento).join(ModeloComercial,
             (Segmento.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
@@ -110,6 +88,7 @@ def comparar_modelos():
 
         mejor_si_menor = set()
         mejor_si_mayor = set()
+        mejor_si_diferente = set()
 
         if segmento_nombre == "cross":
             mejor_si_mayor.update(
@@ -117,19 +96,31 @@ def comparar_modelos():
                     "cilindrada", "caballos_fuerza",
                     "torque_maximo","altura_total",
                     "ancho_total","longitud_total",
-                    "garantia","neumatico_delantero",
-                    "capacidad_combustible","neumatico_trasero",
+                    "garantia",
+                    "capacidad_combustible",
                     "velocidad_maxima","caja_cambios",
-                    "frenos_traseros","frenos_delanteros"
+                    "neumatico_trasero","neumatico_delantero"
+                }
+            )
+            mejor_si_menor.update(
+                {
+                    "peso_seco"
+                }
+            )
+            mejor_si_diferente.update(
+                {
+                    "frenos_delanteros", "frenos_traseros",
+                    "aros_rueda_delantera",
+                    "aros_rueda_posterior", "suspension_delantera",
+                    "suspension_trasera"
                 }
             )
         elif segmento_nombre == "scooter":
             mejor_si_menor.update(
                 {
-                    "cilindrada", "caballos_fuerza",
+                    "cilindrada", "peso_seco","caballos_fuerza",
                     "torque_maximo", "altura_total",
-                    "ancho_total", "longitud_total",
-                    "peso_seco","frenos_traseros","frenos_delanteros"
+                    "ancho_total", "longitud_total"
                 }
             )
             mejor_si_mayor.update(
@@ -137,6 +128,13 @@ def comparar_modelos():
                     "capacidad_combustible" ,"velocidad_maxima",
                     "garantia", "caja_cambios", "neumatico_delantero",
                     "neumatico_trasero"
+                }
+            )
+            mejor_si_diferente.update(
+                {
+                    "frenos_delanteros","frenos_traseros",
+                    "aros_rueda_delantera","aros_rueda_posterior",
+                    "suspension_delantera","suspension_trasera"
                 }
             )
         elif segmento_nombre == "advento":
@@ -158,11 +156,47 @@ def comparar_modelos():
         elif segmento_nombre == "deportiva":
             mejor_si_menor.update(
                 {
-                    "cilindrada", "altura_total",
+                    "altura_total",
                     "ancho_total", "longitud_total"
                 }
             )
+            mejor_si_mayor.update(
+                {
+                    "garantia","velocidad_maxima",
+                    "capacidad_combustible","cilindrada",
+                    "caballos_fuerza","torque_maximo", "caja_cambios",
+                    "neumatico_delantero","neumatico_trasero"
+                }
+            )
+            mejor_si_diferente.update(
+                {
+                    "frenos_delanteros", "frenos_traseros",
+                    "aros_rueda_delantera","aros_rueda_posterior",
+                    "suspension_delantera","suspension_trasera"
+                }
+            )
+
         def evaluar_estado(campo, base_val, comp_val):
+            campos_diferentes = {
+                "suspension_delantera",
+                "suspension_trasera",
+                "aros_rueda_delantera",
+                "aros_rueda_posterior",
+                "frenos_traseros",
+                "frenos_delanteros",
+                "tablero",
+                "luces_delanteras",
+                "luces_posteriores",
+                "sistema_combustible",
+                "sistema_refrigeracion",
+                "arranque"
+            }
+
+            if campo in campos_diferentes:
+                base = str(base_val).strip().lower()
+                comp = str(comp_val).strip().lower()
+                return "igual" if base == comp else "diferente"
+
             extractores = {
                 "caballos_fuerza": extract_hp,
                 "torque_maximo": extract_nm,
@@ -172,29 +206,8 @@ def comparar_modelos():
                 "cilindrada": extract_cc,
                 "neumatico_delantero": evaluar_pneumatic,
                 "neumatico_trasero": evaluar_pneumatic,
-                "caja_cambios": extract_cambios,
-                "frenos_traseros": evaluar_frenos
-
+                "caja_cambios": extract_cambios
             }
-
-            if campo in ["aros_rueda_delantera", "aros_rueda_posterior"]:
-                base = evaluar_aros(base_val)
-                comp = evaluar_aros(comp_val)
-
-                return (
-                    "mejor" if comp > base else
-                    "peor" if comp < base else
-                    "igual"
-                )
-
-            if campo == "frenos_traseros":
-                base = evaluar_frenos(base_val)
-                comp = evaluar_frenos(comp_val)
-
-                if segmento_nombre == "scooter":
-                    return "igual"
-                elif segmento_nombre == "croos":
-                    return "mejor" if comp > base else "peor" if comp < base else "igual"
 
             if campo in extractores:
                 base = extractores[campo](base_val)
@@ -212,10 +225,12 @@ def comparar_modelos():
             if isinstance(base, (int, float)) and isinstance(comp, (int, float)):
                 if abs(base - comp) < 0.01:
                     return "igual"
+
             if campo in mejor_si_mayor:
                 return "mejor" if comp > base else "peor" if comp < base else "igual"
             if campo in mejor_si_menor:
                 return "mejor" if comp < base else "peor" if comp > base else "igual"
+
             return "igual"
 
         def cargar_detalles(modelos):
@@ -533,8 +548,8 @@ def exportar_comparacion_xlsx():
             icono_estado = {
                 "mejor": {"icono": "👍", "color": "006100"},
                 "peor": {"icono": "👎", "color": "9C0006"},
-                "igual": {"icono": "🟰", "color": "e5da00"},
-                "diferente": {"icono": "❗", "color": "b300ac"}
+                "igual": {"icono": "👍👍", "color": "ff9800"},
+                "diferente": {"icono": "👍👎", "color": "b300ac"}
             }
 
             for categoria, campos in modelo.get("mejor_en", {}).items():
