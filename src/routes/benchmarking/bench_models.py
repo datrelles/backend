@@ -21,7 +21,7 @@ def comparar_modelos():
     try:
         data = request.get_json()
         base_id = data.get("modelo_base")
-        comparables_ids = data.get("comparables", [])[:3]
+        comparables_ids = data.get("comparables", [])
 
         if not base_id or not comparables_ids:
             return jsonify({"error": "Se requiere modelo base y al menos un modelo comparable"}), 400
