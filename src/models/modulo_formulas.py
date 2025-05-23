@@ -4,7 +4,8 @@ from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, validates
 from src.config.database import db
-from src.enums import tipo_estado, tipo_retorno, tipo_objeto, tipo_parametro, tipo_factor
+from src.enums import tipo_estado, tipo_retorno, tipo_objeto, tipo_parametro, tipo_factor, operador
+from src.enums.validation import paquete_funcion_bd
 from src.validations import validar_varchar, validar_fecha, validar_number
 from src.models.custom_base import custom_base
 
@@ -62,9 +63,9 @@ class st_formula_proceso(custom_base):
     empresa = Column(NUMBER(precision=2), primary_key=True)
     cod_formula = Column(VARCHAR(8), primary_key=True)
     nombre = Column(VARCHAR(100), nullable=False)
-    observaciones = Column(VARCHAR(800))
-    estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
     definicion = Column(VARCHAR(2000), nullable=False)
+    descripcion = Column(VARCHAR(800))
+    estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
@@ -82,17 +83,17 @@ class st_formula_proceso(custom_base):
     def validar_nombre(self, key, value):
         return validar_varchar(key, value, 100)
 
-    @validates('observaciones')
-    def validar_observaciones(self, key, value):
+    @validates('definicion')
+    def validar_definicion(self, key, value):
+        return validar_varchar(key, value, 2000)
+
+    @validates('descripcion')
+    def validar_descripcion(self, key, value):
         return validar_varchar(key, value, 800, es_requerido=False)
 
     @validates('estado')
     def validar_estado(self, key, value):
         return validar_estado(key, value)
-
-    @validates('definicion')
-    def validar_definicion(self, key, value):
-        return validar_varchar(key, value, 2000)
 
 
 class st_parametro_proceso(custom_base):
@@ -102,6 +103,7 @@ class st_parametro_proceso(custom_base):
     empresa = Column(NUMBER(precision=2), primary_key=True)
     cod_parametro = Column(VARCHAR(8), primary_key=True)
     nombre = Column(VARCHAR(60), nullable=False)
+    color = Column(VARCHAR(6), nullable=False)
     descripcion = Column(VARCHAR(1000))
     estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
@@ -121,13 +123,17 @@ class st_parametro_proceso(custom_base):
     def validar_nombre(self, key, value):
         return validar_varchar(key, value, 60)
 
-    @validates('descripcion')
-    def validar_descripcion(self, key, value):
-        return validar_varchar(key, value, 1000, es_requerido=False)
+    @validates('color')
+    def validar_color(self, key, value):
+        return validar_varchar(key, value, 8)
 
     @validates('estado')
     def validar_estado(self, key, value):
         return validar_estado(key, value)
+
+    @validates('descripcion')
+    def validar_descripcion(self, key, value):
+        return validar_varchar(key, value, 1000, es_requerido=False)
 
 
 class st_parametro_por_proceso(custom_base):
@@ -150,11 +156,11 @@ class st_parametro_por_proceso(custom_base):
                                                 "st_parametro_por_proceso.cod_proceso == st_factor_calculo_parametro.cod_proceso, "
                                                 "st_parametro_por_proceso.cod_parametro == st_factor_calculo_parametro.cod_parametro)",
                                     )
+    orden_imprime = Column(NUMBER(precision=5), nullable=False)
     orden_calculo = Column(NUMBER(precision=5))
-    estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
     fecha_calculo_inicio = Column(DateTime)
     fecha_calculo_fin = Column(DateTime)
-    orden_imprime = Column(NUMBER(precision=5), nullable=False)
+    estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
@@ -176,13 +182,13 @@ class st_parametro_por_proceso(custom_base):
     def validar_cod_formula(self, key, value):
         return validar_cod(key, value, es_requerido=False)
 
+    @validates('orden_imprime')
+    def validar_orden_imprime(self, key, value):
+        return validar_number(key, value, 5)
+
     @validates('orden_calculo')
     def validar_orden_calculo(self, key, value):
         return validar_number(key, value, 5, es_requerido=False)
-
-    @validates('estado')
-    def validar_estado(self, key, value):
-        return validar_estado(key, value)
 
     @validates('fecha_calculo_inicio')
     def validar_fecha_calculo_inicio(self, key, value):
@@ -192,9 +198,9 @@ class st_parametro_por_proceso(custom_base):
     def validar_fecha_calculo_fin(self, key, value):
         return validar_fecha(key, value, es_requerido=False)
 
-    @validates('orden_imprime')
-    def validar_orden_imprime(self, key, value):
-        return validar_number(key, value, 5)
+    @validates('estado')
+    def validar_estado(self, key, value):
+        return validar_estado(key, value)
 
 
 class st_factor_calculo_parametro(custom_base):
@@ -209,9 +215,9 @@ class st_factor_calculo_parametro(custom_base):
     cod_parametro = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_parametro_por_proceso.cod_parametro'),
                            nullable=False)
     orden = Column(NUMBER(precision=3))
-    tipo_factor = Column(VARCHAR(3), nullable=False)
     cod_parametro_tipo = Column(VARCHAR(8))
-    valor_fijo = Column(NUMBER(precision=30, scale=8))
+    tipo_factor = Column(VARCHAR(3), nullable=False)
+    numero = Column(NUMBER(precision=22, scale=8))
     operador = Column(VARCHAR(1))
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
@@ -234,12 +240,16 @@ class st_factor_calculo_parametro(custom_base):
     def validar_orden(self, key, value):
         return (validar_number(key, value, 3))
 
+    @validates('cod_parametro_tipo')
+    def validar_cod_parametro_tipo(self, key, value):
+        return validar_cod(key, value, es_requerido=False)
+
     @validates('tipo_factor')
     def validar_tipo_factor(self, key, value):
         return validar_varchar(key, value, 3, valores_permitidos=tipo_factor.values())
 
-    @validates('valor_fijo')
-    def validar_valor_fijo(self, key, value):
+    @validates('numero')
+    def validar_numero(self, key, value):
         return validar_number(key, value, 22, 8, False, es_positivo=False)
 
 
@@ -262,12 +272,13 @@ class st_funcion(custom_base):
     empresa = Column(NUMBER(precision=2))
     cod_funcion = Column(VARCHAR(8))
     cod_modulo = Column(VARCHAR(3), ForeignKey(f'computo.tg_sistema.cod_sistema'), nullable=False)
+    paquete = Column(VARCHAR(30), nullable=False)
     nombre = Column(VARCHAR(60), nullable=False)
-    nombre_base_datos = Column(VARCHAR(60), nullable=False)
-    estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
-    observaciones = Column(VARCHAR(1000))
+    nombre_base_datos = Column(VARCHAR(30), nullable=False)
     tipo_retorno = Column(VARCHAR(8), nullable=False)
     tipo_objeto = Column(VARCHAR(3), nullable=False, server_default="FUN")
+    descripcion = Column(VARCHAR(1000))
+    estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
@@ -285,21 +296,17 @@ class st_funcion(custom_base):
     def validar_cod_modulo(self, key, value):
         return validar_varchar(key, value, 3)
 
+    @validates('paquete')
+    def validar_paquete(self, key, value):
+        return validar_varchar(key, value, 30, valores_permitidos=paquete_funcion_bd.values())
+
     @validates('nombre')
     def validar_nombre(self, key, value):
         return validar_varchar(key, value, 60)
 
     @validates('nombre_base_datos')
     def validar_nombre_base_datos(self, key, value):
-        return validar_varchar(key, value, 60)
-
-    @validates('estado')
-    def validar_estado(self, key, value):
-        return validar_estado(key, value)
-
-    @validates('observaciones')
-    def validar_observaciones(self, key, value):
-        return validar_varchar(key, value, 1000, es_requerido=False)
+        return validar_varchar(key, value, 30)
 
     @validates('tipo_retorno')
     def validar_tipo_retorno(self, key, value):
@@ -308,6 +315,14 @@ class st_funcion(custom_base):
     @validates('tipo_objeto')
     def validar_tipo_objeto(self, key, value):
         return validar_varchar(key, value, 3, valores_permitidos=tipo_objeto.values())
+
+    @validates('descripcion')
+    def validar_descripcion(self, key, value):
+        return validar_varchar(key, value, 1000, es_requerido=False)
+
+    @validates('estado')
+    def validar_estado(self, key, value):
+        return validar_estado(key, value)
 
 
 class st_parametro_funcion(custom_base):
@@ -321,9 +336,9 @@ class st_parametro_funcion(custom_base):
     cod_funcion = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_funcion.cod_funcion'))
     secuencia = Column(NUMBER(precision=10))
     tipo_parametro = Column(VARCHAR(30), nullable=False)
+    numero = Column(NUMBER(precision=22, scale=8))
+    texto = Column(VARCHAR(20))
     variable = Column(VARCHAR(10))
-    fijo_caracter = Column(VARCHAR(20))
-    fijo_numero = Column(NUMBER(precision=30, scale=8))
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
@@ -345,14 +360,14 @@ class st_parametro_funcion(custom_base):
     def validar_tipo_parametro(self, key, value):
         return validar_varchar(key, value, 30, valores_permitidos=tipo_parametro.values())
 
+    @validates('numero')
+    def validar_numero(self, key, value):
+        return validar_number(key, value, 22, 8, es_requerido=False, es_positivo=False)
+
+    @validates('texto')
+    def validar_texto(self, key, value):
+        return validar_varchar(key, value, 20, es_requerido=False)
+
     @validates('variable')
     def validar_variable(self, key, value):
         return validar_varchar(key, value, 10, es_requerido=False)
-
-    @validates('fijo_caracter')
-    def validar_fijo_caracter(self, key, value):
-        return validar_varchar(key, value, 20, es_requerido=False)
-
-    @validates('fijo_numero')
-    def validar_fijo_numero(self, key, value):
-        return validar_number(key, value, 22, 8, es_requerido=False, es_positivo=False)

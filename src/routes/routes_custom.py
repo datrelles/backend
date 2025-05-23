@@ -951,7 +951,7 @@ def obtener_tipo_aforo_param():
             empresa = aforo.empresa if aforo.empresa else ""
             cod_aforo = aforo.cod_aforo
             nombre = aforo.nombre if aforo.nombre else ""
-            valor = aforo.VALOR_FIJO
+            valor = aforo.NUMERO
             observacion = aforo.observacion if aforo.observacion else ""
             usuario_crea = aforo.usuario_crea if aforo.usuario_crea else ""
             fecha_crea = datetime.strftime(aforo.fecha_crea, "%d/%m/%Y") if aforo.fecha_crea else ""

@@ -721,7 +721,7 @@ def obtener_tipo_aforo():
             empresa = aforo.empresa if aforo.empresa else ""
             cod_aforo = aforo.cod_aforo
             nombre = aforo.nombre if aforo.nombre else ""
-            valor = aforo.VALOR_FIJO
+            valor = aforo.NUMERO
             observacion = aforo.observacion if aforo.observacion else ""
             usuario_crea = aforo.usuario_crea if aforo.usuario_crea else ""
             fecha_crea = datetime.strftime(aforo.fecha_crea, "%d/%m/%Y") if aforo.fecha_crea else ""
@@ -1537,7 +1537,7 @@ def crear_o_actualizar_registro_tracking_embarque(session):
             # Verificar si el objeto tiene los atributos esperados
             if hasattr(target, 'codigo_bl_house') and hasattr(target, 'empresa') and hasattr(target,
                                                                                              'adicionado_por') and hasattr(
-                    target, 'cod_modelo'):
+                target, 'cod_modelo'):
                 codigo_bl_house = target.codigo_bl_house
                 empresa = target.empresa
                 cod_item = target.cod_item
@@ -1864,7 +1864,7 @@ def actualizar_embarque(codigo_bl_house, empresa):
         # Obtener el valor del campo valor en la tabla StTipoAforo
         tipo_aforo = db.session.query(StTipoAforo).filter_by(cod_aforo=embarque.cod_aforo).first()
         if tipo_aforo:
-            valor_aforo = tipo_aforo.VALOR_FIJO
+            valor_aforo = tipo_aforo.NUMERO
         else:
             valor_aforo = None
 
@@ -1896,7 +1896,7 @@ def actualizar_tipo_aforo(empresa, cod_aforo):
 
         data = request.get_json()
         aforo.nombre = data.get('nombre', aforo.nombre).upper()
-        aforo.VALOR_FIJO = data.get('valor', aforo.VALOR_FIJO)
+        aforo.NUMERO = data.get('valor', aforo.NUMERO)
         aforo.observacion = data.get('observacion', aforo.observacion)
         aforo.usuario_modifica = data.get('usuario_modifica', aforo.usuario_modifica).upper()
         aforo.fecha_modifica = fecha_modifica
@@ -2032,7 +2032,7 @@ def eliminar_embarque(codigo_bl_house, empresa):
         existe_packing = db.session.query(StPackinglist).filter_by(codigo_bl_house=codigo_bl_house).first()
         if existe_packing:
             return jsonify({
-                               'error': 'Existen registros en StPackinglist que dependen de este embarque. No se puede eliminar.'}), 400
+                'error': 'Existen registros en StPackinglist que dependen de este embarque. No se puede eliminar.'}), 400
 
         embarque = db.session.query(StEmbarquesBl).filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).first()
         if not embarque:
@@ -2337,7 +2337,7 @@ def actualizar_anticipo_forma_de_pago_general(secuencia, cod_proforma):
         proforma_actualizada.empresa = data['empresa']
         proforma_actualizada.tipo_proforma = data['tipo_proforma']
         proforma_actualizada.fecha_vencimiento = datetime.strptime(data['fecha_vencimiento'], '%Y-%m-%d')
-        proforma_actualizada.VALOR_FIJO = float(data['valor'])
+        proforma_actualizada.NUMERO = float(data['valor'])
         proforma_actualizada.saldo = data['saldo']
         proforma_actualizada.descripcion = data['descripcion']
         proforma_actualizada.cod_forma_pago = data['cod_forma_pago']
@@ -2366,7 +2366,7 @@ def obtener_proformas_por_cod_proforma(cod_proforma):
             'secuencia': proforma.secuencia,
             'tipo_proforma': proforma.tipo_proforma,
             'fecha_vencimiento': proforma.fecha_vencimiento.strftime('%Y-%m-%d'),
-            'valor': proforma.VALOR_FIJO,
+            'valor': proforma.NUMERO,
             'saldo': proforma.saldo,
             'descripcion': proforma.descripcion,
             'cod_forma_pago': proforma.cod_forma_pago,
@@ -2410,7 +2410,7 @@ def obtener_anticipos_por_cod_proforma(cod_proforma):
             'secuencia': proforma.secuencia,
             'tipo_proforma': proforma.tipo_proforma,
             'fecha_vencimiento': proforma.fecha_vencimiento.strftime('%Y-%m-%d'),
-            'valor': proforma.VALOR_FIJO,
+            'valor': proforma.NUMERO,
             'saldo': proforma.saldo,
             'descripcion': proforma.descripcion,
             'cod_forma_pago': proforma.cod_forma_pago,
@@ -4035,7 +4035,7 @@ def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod
 
             if existing_entry:
                 # If the record exists, update its price and other necessary fields
-                existing_entry.VALOR_FIJO = record[13]
+                existing_entry.NUMERO = record[13]
                 existing_entry.precio = record[16]
                 # existing_entry.secuencia_generacion = record[19]
                 existing_entry.aud_fecha = record[23]
@@ -4563,7 +4563,7 @@ def get_modelo_crecimiento_bi():
             records_data.append({
                 "empresa": record.empresa,
                 "cod_modelo": record.cod_modelo,
-                "valor": record.VALOR_FIJO,
+                "valor": record.NUMERO,
                 "periodo": record.periodo,
                 "cod_despiece": record.cod_despiece,
                 "nivel": record.nivel,
@@ -4608,7 +4608,7 @@ def update_modelo_crecimiento_bi():
         if anio is not None:
             record.anio = anio
         if valor is not None:
-            record.VALOR_FIJO = valor
+            record.NUMERO = valor
 
         # Guardar los cambios en la base de datos
         db.session.commit()

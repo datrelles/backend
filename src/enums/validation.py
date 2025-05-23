@@ -25,7 +25,7 @@ class tipo_estado(CustomEnum):
 
 class tipo_factor(CustomEnum):
     PARAMETRO = 'PAR'
-    VALOR_FIJO = 'VAL'
+    NUMERO = 'NUM'
     OPERADOR = 'OPE'
 
 
@@ -37,8 +37,9 @@ class operador(CustomEnum):
 
 
 class tipo_retorno(CustomEnum):
-    NUMERO = 'NUMBER'
-    VARCHAR = 'VARCHAR2'
+    NUMERO = 'NUM'
+    TEXTO = 'TEX'
+    FECHA = 'FEC'
 
 
 class tipo_objeto(CustomEnum):
@@ -46,6 +47,10 @@ class tipo_objeto(CustomEnum):
 
 
 class tipo_parametro(CustomEnum):
-    VARIABLE = 'VARIABLE'
-    CARACTER = 'CARACTER'
-    NUMERO = 'NUMERO'
+    NUMERO = 'NUM'
+    TEXTO = 'TEX'
+    VARIABLE = 'VAR'
+
+
+class paquete_funcion_bd(CustomEnum):
+    FORMULAS = "PK_FORMULAS"

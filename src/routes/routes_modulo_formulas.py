@@ -6,7 +6,7 @@ import logging
 from src.config.database import db
 from sqlalchemy import text, and_, func
 from src.decorators import validate_json, handle_exceptions
-from src.enums import tipo_factor, operador, tipo_parametro
+from src.enums import tipo_factor, operador, tipo_parametro, tipo_retorno
 from src.models.custom_base import custom_base
 from src.models.modulo_formulas import st_proceso, st_formula_proceso, st_parametro_proceso, st_parametro_por_proceso, \
     st_factor_calculo_parametro, st_funcion, validar_cod, tg_sistema, st_parametro_funcion, validar_estado
@@ -211,7 +211,7 @@ def put_formula_proceso(empresa, cod_formula, data):
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     formula.nombre = data['nombre']
-    formula.observaciones = data.get('observaciones')
+    formula.descripcion = data.get('descripcion')
     if data.get('estado') is not None:
         formula.estado = data['estado']
     formula.definicion = data['definicion']
@@ -331,6 +331,7 @@ def put_parametro_proceso(empresa, cod_parametro, data):
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     parametro.nombre = data['nombre']
+    parametro.color = data['color']
     parametro.descripcion = data.get('descripcion')
     if data.get('estado') is not None:
         parametro.estado = data['estado']
@@ -633,9 +634,9 @@ def post_factor_calculo_parametro(empresa, cod_proceso, cod_parametro, data):
                 logger.error(mensaje)
                 return jsonify({'mensaje': mensaje}), 404
             data['operador'] = None
-            data['valor_fijo'] = None
-        case tipo_factor.VALOR_FIJO.value:
-            if data.get('valor_fijo') is None or data.get('valor_fijo') == "":
+            data['numero'] = None
+        case tipo_factor.NUMERO.value:
+            if data.get('numero') is None or data.get('numero') == "":
                 mensaje = 'Falta el valor fijo'
                 logger.error(mensaje)
                 return jsonify({'mensaje': mensaje}), 400
@@ -650,10 +651,10 @@ def post_factor_calculo_parametro(empresa, cod_proceso, cod_parametro, data):
                 mensaje = f'Operador inválido, solo se aceptan: {', '.join(operador.values())}'
                 logger.error(mensaje)
                 return jsonify({'mensaje': mensaje}), 400
-            data['valor_fijo'] = None
+            data['numero'] = None
             data['cod_parametro_tipo'] = None
         case _:
-            mensaje = f'Tipo de operador inválido, solo se aceptan: {', '.join(tipo_factor.values())}'
+            mensaje = f'Tipo de factor inválido, solo se aceptan: {', '.join(tipo_factor.values())}'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
     db.session.add(st_factor_calculo_parametro(**data))
@@ -835,8 +836,8 @@ def put_funcion(empresa, cod_funcion, data):
     funcion.nombre_base_datos = data['nombre_base_datos']
     if data.get('estado') is not None:
         funcion.estado = data['estado']
-    funcion.observaciones = data.get('observaciones')
     funcion.tipo_retorno = data['tipo_retorno']
+    funcion.descripcion = data.get('descripcion')
     funcion.audit_usuario_mod = text('user')
     funcion.audit_fecha_mod = text('sysdate')
     db.session.commit()
@@ -942,27 +943,27 @@ def post_parametro_funcion(empresa, cod_funcion, data):
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     match (data['tipo_parametro']):
+        case tipo_parametro.NUMERO.value:
+            if data.get('numero') is None:
+                mensaje = 'Falta el número'
+                logger.error(mensaje)
+                return jsonify({'mensaje': mensaje}), 400
+            data['variable'] = None
+            data['texto'] = None
+        case tipo_parametro.TEXTO.value:
+            if not data.get('texto'):
+                mensaje = 'Falta el texto'
+                logger.error(mensaje)
+                return jsonify({'mensaje': mensaje}), 400
+            data['variable'] = None
+            data['numero'] = None
         case tipo_parametro.VARIABLE.value:
             if not data.get('variable'):
                 mensaje = 'Falta el nombre de la variable'
                 logger.error(mensaje)
                 return jsonify({'mensaje': mensaje}), 400
-            data['fijo_caracter'] = None
-            data['fijo_numero'] = None
-        case tipo_parametro.CARACTER.value:
-            if not data.get('fijo_caracter'):
-                mensaje = 'Falta el valor fijo del caracter'
-                logger.error(mensaje)
-                return jsonify({'mensaje': mensaje}), 400
-            data['variable'] = None
-            data['fijo_numero'] = None
-        case tipo_parametro.NUMERO.value:
-            if data.get('fijo_numero') is None:
-                mensaje = 'Falta el valor fijo del número'
-                logger.error(mensaje)
-                return jsonify({'mensaje': mensaje}), 400
-            data['variable'] = None
-            data['fijo_caracter'] = None
+            data['texto'] = None
+            data['numero'] = None
     ultimo_parametro = (db.session.query(st_parametro_funcion)
                         .filter_by(**{'empresa': empresa, 'cod_funcion': cod_funcion})
                         .order_by(st_parametro_funcion.secuencia.desc())
@@ -1008,30 +1009,30 @@ def put_parametro_funcion(empresa, cod_funcion, secuencia, data):
         return jsonify({'mensaje': mensaje}), 409
     parametro.tipo_parametro = data['tipo_parametro']
     match (data['tipo_parametro']):
+        case tipo_parametro.NUMERO.value:
+            if data.get('numero') is None or data.get('numero') == "":
+                mensaje = 'Falta el número'
+                logger.error(mensaje)
+                return jsonify({'mensaje': mensaje}), 400
+            parametro.numero = data.get('numero')
+            parametro.variable = None
+            parametro.texto = None
+        case tipo_parametro.TEXTO.value:
+            if not data.get('texto'):
+                mensaje = 'Falta el texto'
+                logger.error(mensaje)
+                return jsonify({'mensaje': mensaje}), 400
+            parametro.texto = data.get('texto')
+            parametro.numero = None
+            parametro.variable = None
         case tipo_parametro.VARIABLE.value:
             if not data.get('variable'):
                 mensaje = 'Falta el nombre de la variable'
                 logger.error(mensaje)
                 return jsonify({'mensaje': mensaje}), 400
-            parametro.VARIABLE = data.get('variable')
-            parametro.fijo_caracter = None
-            parametro.fijo_numero = None
-        case tipo_parametro.CARACTER.value:
-            if not data.get('fijo_caracter'):
-                mensaje = 'Falta el valor fijo del caracter'
-                logger.error(mensaje)
-                return jsonify({'mensaje': mensaje}), 400
-            parametro.fijo_caracter = data.get('fijo_caracter')
-            parametro.VARIABLE = None
-            parametro.fijo_numero = None
-        case tipo_parametro.NUMERO.value:
-            if data.get('fijo_numero') is None or data.get('fijo_numero') == "":
-                mensaje = 'Falta el valor fijo del número'
-                logger.error(mensaje)
-                return jsonify({'mensaje': mensaje}), 400
-            parametro.fijo_numero = data.get('fijo_numero')
-            parametro.VARIABLE = None
-            parametro.fijo_caracter = None
+            parametro.variable = data.get('variable')
+            parametro.numero = None
+            parametro.texto = None
     parametro.audit_usuario_mod = text('user')
     parametro.audit_fecha_mod = text('sysdate')
     db.session.commit()
@@ -1080,7 +1081,7 @@ def delete_parametro_funcion(empresa, cod_funcion, secuencia):
 @formulas_b.route("/empresas/<empresa>/funciones-bd/<cod_funcion>", methods=["GET"])
 @jwt_required()
 @cross_origin()
-@handle_exceptions("probar función")
+@handle_exceptions("evaluar la función")
 def execute_funcion_bd(empresa, cod_funcion):
     empresa = validar_number('empresa', empresa, 2)
     cod_funcion = validar_cod('cod_funcion', cod_funcion)
@@ -1088,7 +1089,19 @@ def execute_funcion_bd(empresa, cod_funcion):
         mensaje = f'Empresa {empresa} inexistente'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"SELECT PK_FORMULAS.EJECUTAR_FUNCION({empresa}, '', '', '{cod_funcion}') FROM DUAL"
+    funcion = db.session.get(st_funcion, (empresa, cod_funcion))
+    if not funcion:
+        mensaje = f'Función {cod_funcion} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    sql_funcion = f"PK_FORMULAS.EJECUTAR_FUNCION({empresa},'','','{cod_funcion}')"
+    match (funcion.tipo_retorno):
+        case tipo_retorno.NUMERO.value:
+            sql = f"SELECT {sql_funcion}.numero FROM dual"
+        case tipo_retorno.TEXTO.value:
+            sql = f"SELECT {sql_funcion}.texto FROM dual"
+        case tipo_retorno.FECHA.value:
+            sql = f"SELECT {sql_funcion}.fecha FROM dual"
     result = custom_base.execute_sql(sql)
     return jsonify({"mensaje": result})
 
@@ -1096,7 +1109,7 @@ def execute_funcion_bd(empresa, cod_funcion):
 @formulas_b.route("/empresas/<empresa>/formulas-bd/<cod_formula>", methods=["GET"])
 @jwt_required()
 @cross_origin()
-@handle_exceptions("probar fórmula")
+@handle_exceptions("evaluar la fórmula")
 def execute_formula_bd(empresa, cod_formula):
     empresa = validar_number('empresa', empresa, 2)
     cod_formula = validar_cod('cod_formula', cod_formula)
@@ -1112,7 +1125,7 @@ def execute_formula_bd(empresa, cod_formula):
 @formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>/parametros/<cod_parametro>/factores-bd", methods=["GET"])
 @jwt_required()
 @cross_origin()
-@handle_exceptions("probar factores de cálculo")
+@handle_exceptions("evaluar los factores de cálculo")
 def execute_factores_bd(empresa, cod_proceso, cod_parametro):
     empresa = validar_number('empresa', empresa, 2)
     cod_proceso = validar_cod('cod_proceso', cod_proceso)

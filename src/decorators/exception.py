@@ -21,18 +21,21 @@ def handle_exceptions(action):
                 return jsonify({'mensaje': str(e)}), 400
             except SQLAlchemyError as e:
                 db.session.rollback()
-                error_message = ""
+                status_code = 500
+                mensaje = f'Ocurrió un error con la base de datos al {action}'
                 orig = getattr(e, 'orig', None)
                 if isinstance(orig, DatabaseError):
                     error_obj, = orig.args
                     error_code = error_obj.code
                     if 20000 <= error_code <= 20999:
+                        status_code = 400
                         parts = error_obj.message.split(':', 2)
                         error_message = parts[2].strip().split('\n', 1)[0] if len(parts) == 3 else error_obj.message
+                        mensaje = f"{error_message if error_message else mensaje}"
                 logger.exception(f'Ocurrió una excepción con la base de datos al {action}: {e}')
                 return jsonify(
                     {
-                        'mensaje': f'Ocurrió un error con la base de datos al {action}{f': {error_message}' if error_message else ''}'}), 500
+                        'mensaje': mensaje}), status_code
             except Exception as e:
                 db.session.rollback()
                 logger.exception(f'Ocurrió una excepción al {action}: {e}')
