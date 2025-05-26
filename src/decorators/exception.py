@@ -29,13 +29,13 @@ def handle_exceptions(action):
                     error_code = error_obj.code
                     if 20000 <= error_code <= 20999:
                         status_code = 400
-                        parts = error_obj.message.split(':', 2)
-                        error_message = parts[2].strip().split('\n', 1)[0] if len(parts) == 3 else error_obj.message
-                        mensaje = f"{error_message if error_message else mensaje}"
+                        parts = [part.strip() for part in error_obj.message.split(':')]
+                        for part in parts:
+                            if not part.startswith('ORA-'):
+                                mensaje = part.split('\n')[0]
+                                break
                 logger.exception(f'Ocurrió una excepción con la base de datos al {action}: {e}')
-                return jsonify(
-                    {
-                        'mensaje': mensaje}), status_code
+                return jsonify({'mensaje': mensaje}), status_code
             except Exception as e:
                 db.session.rollback()
                 logger.exception(f'Ocurrió una excepción al {action}: {e}')
