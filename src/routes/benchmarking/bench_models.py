@@ -3,11 +3,15 @@ import re
 from flask import Blueprint, jsonify, request
 from flask_cors import cross_origin
 from flask_jwt_extended import jwt_required
-from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.styles import  PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from sqlalchemy import func
+from openpyxl import Workbook
+from flask import send_file
+import io
 import requests
 from openpyxl.drawing.image import Image
+from collections import defaultdict, OrderedDict
 from src.config.database import db
 from src.models.catalogos_bench import ModeloVersion, Motor, TipoMotor, Chasis, ElectronicaOtros, DimensionPeso, \
     Transmision, ClienteCanal, Segmento, ModeloComercial, Version, Marca, Imagenes
@@ -476,9 +480,7 @@ def get_segmentos_por_linea(codigo_linea):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-from openpyxl import Workbook
-from flask import send_file
-import io
+
 
 @bench_model.route('/exportar_comparacion_xlsx', methods=["POST"])
 @jwt_required()
@@ -489,100 +491,155 @@ def exportar_comparacion_xlsx():
         resultado = data.get("resultado")
         modelos = data.get("modelos")
 
+        if not resultado or "base" not in resultado or "comparables" not in resultado:
+            return jsonify({"error": "Entrada inválida: faltan datos de comparación"}), 400
+
+        modelo_dict = {m["codigo_modelo_version"]: m for m in modelos}
+        base = modelo_dict.get(resultado["base"])
+        comparables = [modelo_dict.get(c["modelo_version"]) for c in resultado.get("comparables", []) if modelo_dict.get(c["modelo_version"])]
+
+        if not base or len(comparables) == 0:
+            return jsonify({"error": "Debe existir un modelo base y al menos un comparable válido"}), 400
+
         wb = Workbook()
         ws = wb.active
         ws.title = "Resumen Comparación"
 
-        modelo_dict = {m["codigo_modelo_version"]: m for m in modelos}
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        from openpyxl.drawing.image import Image
 
-        for modelo in resultado.get("comparables", []):
-            base = modelo_dict.get(resultado["base"])
-            comparable = modelo_dict.get(modelo["modelo_version"])
+        firebrick_fill = PatternFill(start_color="B22222", end_color="B22222", fill_type="solid")
 
-            nombre_base = base.get("nombre_modelo_comercial", "Base")
-            nombre_comp = comparable.get("nombre_modelo_comercial", "Comparable")
+        # Encabezados: fila 14
+        header_cells = [
+            (14, 1, "CATEGORIA"),
+            (14, 2, "CAMPOS"),
+            (14, 3, f"{base['nombre_modelo_comercial']} - {base['nombre_marca']}"),
+            (2, 2, f"{base['nombre_modelo_comercial']} - {base['nombre_marca']}")
+        ]
 
-            # Agregar título
-            ws.append([f"COMPARACIÓN: {nombre_base} VS {nombre_comp}"])
-            ws.merge_cells(start_row=ws.max_row, start_column=1, end_row=ws.max_row, end_column=5)
-            title_cell = ws.cell(row=ws.max_row, column=1)
-            title_cell.font = Font(size=14, bold=True, color="FFFFFF")
-            title_cell.alignment = Alignment(horizontal="center")
-            title_cell.fill = PatternFill(start_color="B22222", end_color="BDD7EE", fill_type="solid")
+        for i, comp_modelo in enumerate(comparables):
+            header_cells.append((14, 4 + i * 2, f"{comp_modelo['nombre_modelo_comercial']} - {comp_modelo['nombre_marca']}"))
+            header_cells.append((14, 5 + i * 2, "COMPARATIVO"))
+            header_cells.append((2, 4 + i * 2, f"{comp_modelo['nombre_modelo_comercial']} - {comp_modelo['nombre_marca']}"))
 
-            title_row = ws.max_row
-            image_row = title_row + 1
-            name_row = title_row + 15
-            header_row = title_row + 10
+        for row, col, value in header_cells:
+            cell = ws.cell(row=row, column=col, value=value)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.fill = firebrick_fill
 
-            # Colocar imágenes
-            for idx, m in enumerate([base, comparable]):
-                img_url = m.get("path_imagen")
-                col = 2 if idx == 0 else 4
-                if img_url:
-                    try:
-                        res = requests.get(img_url)
-                        if res.ok:
-                            img_data = io.BytesIO(res.content)
-                            img = Image(img_data)
-                            img.width = 350
-                            img.height = 250
-                            anchor = f"{get_column_letter(col)}{image_row}"
-                            ws.add_image(img, anchor)
-                    except Exception as e:
-                        print(f"Error imagen {img_url}: {e}")
+        # Insertar imágenes desde fila 3
+        def insertar_imagen(moto, col):
+            img_url = moto.get("path_imagen")
+            if img_url:
+                try:
+                    res = requests.get(img_url)
+                    if res.ok:
+                        img_data = io.BytesIO(res.content)
+                        img = Image(img_data)
+                        img.width = 250
+                        img.height = 200
+                        ws.add_image(img, f"{get_column_letter(col)}3")
+                except Exception as e:
+                    print(f"Error al cargar imagen: {e}")
 
-            ws.cell(row=name_row, column=4, value=f"{nombre_comp} - {comparable.get('nombre_marca', '')}")
-            ws.cell(row=name_row, column=2, value=f"{nombre_base} - {base.get('nombre_marca', '')}")
+        insertar_imagen(base, 2)
+        for i, comp_modelo in enumerate(comparables):
+            insertar_imagen(comp_modelo, 4 + i * 2)
 
-            ws.append([])
+        icono_estado = {
+            "mejor": {"icono": "👍", "color": "2e7d32"},
+            "peor": {"icono": "👎", "color": "d32f2f"},
+            "igual": {"icono": "👍👍", "color": "ff9800"},
+            "diferente": {"icono": "👍👎", "color": "b300ac"}
+        }
 
-            # Encabezados
-            ws.append(["Categoría", "Campo", nombre_base, nombre_comp, "Comparativo"])
-            for col in range(1, 6):
-                cell = ws.cell(row=ws.max_row, column=col)
-                cell.font = Font(bold=True, color="FFFFFF")
-                cell.fill = PatternFill(start_color="B22222", end_color="4F81BD", fill_type="solid")
-                cell.alignment = Alignment(horizontal="center")
+        campos_unicos = {}
 
-            icono_estado = {
-                "mejor": {"icono": "👍", "color": "006100"},
-                "peor": {"icono": "👎", "color": "9C0006"},
-                "igual": {"icono": "👍👍", "color": "ff9800"},
-                "diferente": {"icono": "👍👎", "color": "b300ac"}
-            }
+        for idx, comp in enumerate(resultado.get("comparables", [])):
+            detalles_modelo = comp.get("mejor_en", {})
+            for categoria, detalles in detalles_modelo.items():
+                for det in detalles:
+                    clave = (categoria, det["campo"])
+                    if clave not in campos_unicos:
+                        campos_unicos[clave] = {
+                            "categoria": categoria,
+                            "campo": det["campo"],
+                            "base": det.get("base", ""),
+                            "comparables": [("", {"icono": "", "color": "000000"}) for _ in range(len(comparables))]
+                        }
+                    estado = det.get("estado", "").lower()
+                    icono = icono_estado.get(estado, {"icono": "❗", "color": "000000"})
+                    campos_unicos[clave]["comparables"][idx] = (det.get("comparable", ""), icono)
 
-            for categoria, campos in modelo.get("mejor_en", {}).items():
-                for detalle in campos:
-                    estado_valor = detalle.get("estado", "").lower()
+        # Borde gris claro
+        gray_border = Border(
+            left=Side(border_style="thin", color="808080"),
+            right=Side(border_style="thin", color="808080"),
+            top=Side(border_style="thin", color="808080"),
+            bottom=Side(border_style="thin", color="808080")
+        )
 
-                    fila = [
-                        categoria.capitalize(),
-                        detalle["campo"].replace('_', ' ').upper(),
-                        detalle.get("base", ""),
-                        detalle.get("comparable", ""),
-                        ""
-                    ]
-                    ws.append(fila)
+        agrupado_por_categoria = defaultdict(list)
 
-                    row_idx = ws.max_row
-                    cell = ws.cell(row=row_idx, column=5)
-                    if estado_valor in icono_estado:
-                        props = icono_estado[estado_valor]
-                        cell.value = props["icono"]
-                        cell.font = Font(bold=True, color=props["color"])
-                    else:
-                        cell.value = "❗"
+        for key in sorted(campos_unicos.keys(), key=lambda k: (k[0], k[1])):
+            categoria, campo = key
+            agrupado_por_categoria[categoria].append((campo, campos_unicos[key]))
 
+        # Escribir los datos desde fila 15
+        current_row = 15
+        for categoria, campos in agrupado_por_categoria.items():
+            inicio_fusion = current_row
+            for campo, datos in campos:
+                fila = [categoria.upper(), campo.upper(), datos["base"]]
+                for val, icono in datos["comparables"]:
+                    fila.append(val)
+                    fila.append(icono["icono"])
+
+                ws.append(fila)
+                row_idx = current_row
+
+                # Íconos centrados
+                for i, (_, icono) in enumerate(datos["comparables"]):
+                    col_idx = 5 + i * 2
+                    cell = ws.cell(row=row_idx, column=col_idx)
+                    cell.font = Font(bold=True, color=icono["color"])
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+
+                max_col = 3 + len(comparables) * 2
+                for col in range(1, max_col + 1):
+                    cell = ws.cell(row=row_idx, column=col)
+                    cell.border = gray_border
+                    if col < 4 or col % 2 == 1:
+                        cell.alignment = Alignment(horizontal="left", vertical="center")
+                        if cell.value is None:
+                            cell.value = ""
+
+                current_row += 1
+
+            # Fusionar celdas para la categoría
+            if len(campos) >= 1:
+                ws.merge_cells(start_row=inicio_fusion, start_column=1, end_row=current_row - 1, end_column=1)
+                cell = ws.cell(row=inicio_fusion, column=1)
+                cell.alignment = Alignment(vertical="center", horizontal="center")
+                cell.font = Font(bold=True)
+
+        # Ajustar anchos
         ws.column_dimensions[get_column_letter(1)].width = 15
-        ws.column_dimensions[get_column_letter(5)].width = 15
+        ws.column_dimensions[get_column_letter(2)].width = 25
+        ws.column_dimensions[get_column_letter(3)].width = 32
 
-        for col in range(2, 5):
-            ws.column_dimensions[get_column_letter(col)].width = 35
+        for i in range(len(comparables)):
+            ws.column_dimensions[get_column_letter(4 + i * 2)].width = 32
+            ws.column_dimensions[get_column_letter(5 + i * 2)].width = 15
 
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
+
+        if output.getbuffer().nbytes < 1000:
+            return jsonify({"error": "Archivo generado está vacío o corrupto"}), 500
 
         return send_file(
             output,
