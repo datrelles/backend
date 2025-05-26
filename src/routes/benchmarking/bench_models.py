@@ -3,15 +3,13 @@ import re
 from flask import Blueprint, jsonify, request
 from flask_cors import cross_origin
 from flask_jwt_extended import jwt_required
-from openpyxl.styles import  PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from sqlalchemy import func
 from openpyxl import Workbook
 from flask import send_file
 import io
 import requests
-from openpyxl.drawing.image import Image
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from src.config.database import db
 from src.models.catalogos_bench import ModeloVersion, Motor, TipoMotor, Chasis, ElectronicaOtros, DimensionPeso, \
     Transmision, ClienteCanal, Segmento, ModeloComercial, Version, Marca, Imagenes
