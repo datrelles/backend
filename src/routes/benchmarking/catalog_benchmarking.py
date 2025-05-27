@@ -2436,7 +2436,7 @@ def update_dimensiones(codigo_dim_peso):
 
 @bench.route('/update_electronica/<int:codigo_electronica>', methods=["PUT"])
 @jwt_required()
-def update_electronica_otros(codigo):
+def update_electronica_otros(codigo_electronica):
     try:
         user = get_jwt_identity()
         data = request.json
@@ -2444,7 +2444,7 @@ def update_electronica_otros(codigo):
         def normalize(value):
             return (value or '').strip().lower()
 
-        registro = db.session.query(ElectronicaOtros).get(codigo)
+        registro = db.session.query(ElectronicaOtros).get(codigo_electronica)
         if not registro:
             return jsonify({"error": "Registro no encontrado"}), 404
 
@@ -2456,7 +2456,7 @@ def update_electronica_otros(codigo):
                 func.lower(func.trim(ElectronicaOtros.luces_posteriores)) == normalize(data.get("luces_posteriores")),
                 func.lower(func.trim(ElectronicaOtros.garantia)) == normalize(data.get("garantia")),
                 func.lower(func.trim(ElectronicaOtros.velocidad_maxima)) == normalize(data.get("velocidad_maxima")),
-                ElectronicaOtros.codigo_electronica != codigo
+                ElectronicaOtros.codigo_electronica != codigo_electronica
             ).first()
 
         if duplicado:

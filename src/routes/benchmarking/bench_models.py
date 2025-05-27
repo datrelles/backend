@@ -3,16 +3,19 @@ import re
 from flask import Blueprint, jsonify, request
 from flask_cors import cross_origin
 from flask_jwt_extended import jwt_required
-from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
 from sqlalchemy import func
 from openpyxl import Workbook
 from flask import send_file
-import io
-import requests
 from collections import defaultdict
 from src.config.database import db
 from src.models.catalogos_bench import ModeloVersion, Motor, TipoMotor, Chasis, ElectronicaOtros, DimensionPeso, \
     Transmision, ClienteCanal, Segmento, ModeloComercial, Version, Marca, Imagenes
+from openpyxl.drawing.image import Image
+from openpyxl.utils import get_column_letter
+from concurrent.futures import ThreadPoolExecutor
+import io
+import requests
 
 bench_model = Blueprint('routes_bench_model', __name__)
 logger = logging.getLogger(__name__)
@@ -29,13 +32,6 @@ def comparar_modelos():
             return jsonify({"error": "Se requiere modelo base y al menos un modelo comparable"}), 400
 
         # FUNCIONES DE EXTRACCIÓN NUMÉRICA
-        def extract_hp(val):
-            match = re.search(r'([\d.]+)\s*hp', str(val).lower())
-            return float(match.group(1)) if match else None
-
-        def extract_nm(val):
-            match = re.search(r'([\d.]+)\s*nm', str(val).lower())
-            return float(match.group(1)) if match else None
 
         def extract_kmh(val):
             match = re.search(r'([\d.]+)\s*km', str(val).lower())
@@ -50,16 +46,48 @@ def comparar_modelos():
             return float(match.group(1)) if match else None
 
         def extract_garantia_meses(texto):
-            if texto is None:
+            if not texto:
                 return None
-            texto = str(texto).upper()
-            match_years = re.search(r'(\d+(?:[.,]\d+)?)\s*AÑOS?', texto)
-            match_meses = re.search(r'(\d+(?:[.,]\d+)?)\s*MESES?', texto)
-            if match_years:
-                return float(match_years.group(1)) * 12
-            elif match_meses:
-                return float(match_meses.group(1))
+            texto = str(texto).upper().replace(".", ",")
+
+            # Separar por delimitadores comunes
+            partes = re.split(r"/| O | Y |-", texto)
+
+            for parte in partes:
+                match_anos = re.search(r'(\d+(?:[.,]\d+)?)\s*AÑOS?', parte)
+                match_meses = re.search(r'(\d+(?:[.,]\d+)?)\s*MESES?', parte)
+                if match_anos:
+                    return float(match_anos.group(1).replace(",", ".")) * 12
+                elif match_meses:
+                    return float(match_meses.group(1).replace(",", "."))
+
             return None
+
+        def evaluar_pneumatic(cadena):
+            if not cadena:
+                return None
+            cadena = cadena.replace(" ", "")
+            match = re.match(r"(\d+)[/-](\d+)[/-]?(\d+)?", cadena)
+            if not match:
+                return None
+            ancho = int(match.group(1))
+            relacion = int(match.group(2))
+            rin = int(match.group(3)) if match.group(3) else 0
+            return 2 * (ancho * (relacion / 100)) + (rin * 25.4)
+
+        def extract_hp(val):
+            if not val:
+                return None
+            val = str(val).lower().replace(",", ".")
+            match = re.search(r'(\d+(?:\.\d+)?)\s*hp', val)
+            return float(match.group(1)) if match else None
+
+        def extract_nm(val):
+            if not val:
+                return None
+            val = str(val).lower().replace(",", ".")
+            match = re.search(r'(\d+(?:\.\d+)?)\s*(nm|bnm)', val)
+            return float(match.group(1)) if match else None
 
         def extract_cambios(val):
             if not val:
@@ -72,15 +100,6 @@ def comparar_modelos():
             match = re.search(r'(\d+)', val)
             return int(match.group(1)) if match else None
 
-        def evaluar_pneumatic(cadena):
-            if not cadena:
-                return None
-            match = re.match(r"(\d+)[/-](\d+)[/-](\d+)", cadena.replace(" ", ""))
-            if not match:
-                return None
-            ancho, relation, rin = map(int, match.groups())
-            return 2 * (ancho * (relation / 100)) + (rin * 25.4)
-
         # SEGMENTO
         segmento = db.session.query(Segmento.nombre_segmento).join(ModeloComercial,
             (Segmento.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
@@ -92,107 +111,51 @@ def comparar_modelos():
         mejor_si_mayor = set()
         mejor_si_diferente = set()
 
+        siempre_mejor_si_mayor = {
+            "velocidad_maxima","cilindrada","caballos_fuerza","capacidad_combustible","peso_seco",
+            "torque_maximo","caja_cambios","neumatico_delantero","neumatico_trasero","garantia",
+            "ancho_total","longitud_total","altura_total"
+        }
+
         if segmento_nombre == "cross":
-            mejor_si_mayor.update(
-                {
-                    "cilindrada", "caballos_fuerza",
-                    "torque_maximo","altura_total",
-                    "ancho_total","longitud_total",
-                    "garantia",
-                    "capacidad_combustible",
-                    "velocidad_maxima","caja_cambios",
-                    "neumatico_trasero","neumatico_delantero"
-                }
-            )
-            mejor_si_menor.update(
-                {
-                    "peso_seco"
-                }
-            )
-            mejor_si_diferente.update(
-                {
-                    "frenos_delanteros", "frenos_traseros",
-                    "aros_rueda_delantera",
-                    "aros_rueda_posterior", "suspension_delantera",
-                    "suspension_trasera"
-                }
-            )
+            mejor_si_diferente.update({
+                "suspension_delantera", "suspension_trasera", "aros_rueda_delantera",
+                "aros_rueda_posterior", "frenos_traseros", "frenos_delanteros",
+                "tablero", "luces_delanteras", "luces_posteriores",
+                "sistema_combustible", "sistema_refrigeracion", "arranque"
+            })
         elif segmento_nombre == "scooter":
-            mejor_si_menor.update(
-                {
-                    "cilindrada", "peso_seco","caballos_fuerza",
-                    "torque_maximo", "altura_total",
-                    "ancho_total", "longitud_total"
-                }
-            )
-            mejor_si_mayor.update(
-                {
-                    "capacidad_combustible" ,"velocidad_maxima",
-                    "garantia", "caja_cambios", "neumatico_delantero",
-                    "neumatico_trasero"
-                }
-            )
-            mejor_si_diferente.update(
-                {
-                    "frenos_delanteros","frenos_traseros",
-                    "aros_rueda_delantera","aros_rueda_posterior",
-                    "suspension_delantera","suspension_trasera"
-                }
-            )
+            mejor_si_menor.update({
+                "cilindrada","peso_seco","caballos_fuerza","torque_maximo",
+                "altura_total","ancho_total","longitud_total"
+            })
         elif segmento_nombre == "advento":
-            mejor_si_mayor.update(
-                {
-                    "cilindrada", "altura_total",
-                    "ancho_total", "longitud_total",
-                    "garantia","velocidad_maxima"
-                }
-            )
+            mejor_si_mayor.update({
+                "altura_total", "ancho_total", "longitud_total"
+            })
         elif segmento_nombre == "utilitaria":
-            mejor_si_menor.update(
-                {
-                    "cilindrada", "altura_total",
-                    "ancho_total", "longitud_total",
-                    "garantia","velocidad_maxima"
-                }
-            )
+            mejor_si_menor.update({
+                "cilindrada", "altura_total", "ancho_total", "longitud_total"
+            })
         elif segmento_nombre == "deportiva":
-            mejor_si_menor.update(
-                {
-                    "altura_total",
-                    "ancho_total", "longitud_total"
-                }
-            )
-            mejor_si_mayor.update(
-                {
-                    "garantia","velocidad_maxima",
-                    "capacidad_combustible","cilindrada",
-                    "caballos_fuerza","torque_maximo", "caja_cambios",
-                    "neumatico_delantero","neumatico_trasero"
-                }
-            )
-            mejor_si_diferente.update(
-                {
-                    "frenos_delanteros", "frenos_traseros",
-                    "aros_rueda_delantera","aros_rueda_posterior",
-                    "suspension_delantera","suspension_trasera"
-                }
-            )
+            mejor_si_menor.update({
+                "altura_total", "ancho_total", "longitud_total",
+            })
+
+
+        mejor_si_mayor.update(siempre_mejor_si_mayor)
 
         def evaluar_estado(campo, base_val, comp_val):
             campos_diferentes = {
-                "suspension_delantera",
-                "suspension_trasera",
-                "aros_rueda_delantera",
-                "aros_rueda_posterior",
-                "frenos_traseros",
-                "frenos_delanteros",
-                "tablero",
-                "luces_delanteras",
-                "luces_posteriores",
-                "sistema_combustible",
-                "sistema_refrigeracion",
-                "arranque"
+                "suspension_delantera", "suspension_trasera",
+                "aros_rueda_delantera", "aros_rueda_posterior",
+                "frenos_traseros", "frenos_delanteros",
+                "tablero", "luces_delanteras", "luces_posteriores",
+                "sistema_combustible", "sistema_refrigeracion", "arranque"
             }
+
+            if not base_val or not comp_val:
+                return "diferente"
 
             if campo in campos_diferentes:
                 base = str(base_val).strip().lower()
@@ -219,10 +182,10 @@ def comparar_modelos():
                     base = float(base_val)
                     comp = float(comp_val)
                 except (TypeError, ValueError):
-                    base, comp = None, None
+                    return "diferente"
 
             if base is None or comp is None:
-                return "igual"
+                return "diferente"
 
             if isinstance(base, (int, float)) and isinstance(comp, (int, float)):
                 if abs(base - comp) < 0.01:
@@ -395,7 +358,6 @@ def get_modelos_por_linea(codigo_linea):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 @bench_model.route('/get_modelos_por_linea_segmento', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -450,7 +412,6 @@ def get_modelos_por_linea_segmento():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 @bench_model.route('/get_segmentos_por_linea/<int:codigo_linea>', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -478,8 +439,6 @@ def get_segmentos_por_linea(codigo_linea):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
-
 @bench_model.route('/exportar_comparacion_xlsx', methods=["POST"])
 @jwt_required()
 @cross_origin()
@@ -503,12 +462,8 @@ def exportar_comparacion_xlsx():
         ws = wb.active
         ws.title = "Resumen Comparación"
 
-        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-        from openpyxl.drawing.image import Image
-
         firebrick_fill = PatternFill(start_color="B22222", end_color="B22222", fill_type="solid")
 
-        # Encabezados: fila 14
         header_cells = [
             (14, 1, "CATEGORIA"),
             (14, 2, "CAMPOS"),
@@ -527,24 +482,37 @@ def exportar_comparacion_xlsx():
             cell.alignment = Alignment(horizontal="center", vertical="center")
             cell.fill = firebrick_fill
 
-        # Insertar imágenes desde fila 3
-        def insertar_imagen(moto, col):
-            img_url = moto.get("path_imagen")
-            if img_url:
-                try:
-                    res = requests.get(img_url)
+        def descargar_img(url):
+            try:
+                if url:
+                    res = requests.get(url, timeout=2)
                     if res.ok:
-                        img_data = io.BytesIO(res.content)
-                        img = Image(img_data)
-                        img.width = 250
-                        img.height = 200
-                        ws.add_image(img, f"{get_column_letter(col)}3")
-                except Exception as e:
-                    print(f"Error al cargar imagen: {e}")
+                        return io.BytesIO(res.content)
+            except Exception as e:
+                print(f"[IMG] Error al descargar: {url} -> {e}")
+            return None
 
-        insertar_imagen(base, 2)
-        for i, comp_modelo in enumerate(comparables):
-            insertar_imagen(comp_modelo, 4 + i * 2)
+        urls = [base.get("path_imagen")] + [
+            modelo_dict.get(c["modelo_version"], {}).get("path_imagen")
+            for c in resultado.get("comparables", [])
+        ]
+
+        with ThreadPoolExecutor() as executor:
+            imagenes = list(executor.map(descargar_img, urls))
+
+        if imagenes[0]:
+            img = Image(imagenes[0])
+            img.width = 250
+            img.height = 200
+            ws.add_image(img, "B3")
+
+        for i, img_data in enumerate(imagenes[1:]):
+            if img_data:
+                col = 4 + i * 2
+                img = Image(img_data)
+                img.width = 200
+                img.height = 200
+                ws.add_image(img, f"{get_column_letter(col)}3")
 
         icono_estado = {
             "mejor": {"icono": "👍", "color": "2e7d32"},
@@ -554,7 +522,6 @@ def exportar_comparacion_xlsx():
         }
 
         campos_unicos = {}
-
         for idx, comp in enumerate(resultado.get("comparables", [])):
             detalles_modelo = comp.get("mejor_en", {})
             for categoria, detalles in detalles_modelo.items():
@@ -571,7 +538,6 @@ def exportar_comparacion_xlsx():
                     icono = icono_estado.get(estado, {"icono": "❗", "color": "000000"})
                     campos_unicos[clave]["comparables"][idx] = (det.get("comparable", ""), icono)
 
-        # Borde gris claro
         gray_border = Border(
             left=Side(border_style="thin", color="808080"),
             right=Side(border_style="thin", color="808080"),
@@ -580,25 +546,22 @@ def exportar_comparacion_xlsx():
         )
 
         agrupado_por_categoria = defaultdict(list)
-
         for key in sorted(campos_unicos.keys(), key=lambda k: (k[0], k[1])):
             categoria, campo = key
             agrupado_por_categoria[categoria].append((campo, campos_unicos[key]))
 
-        # Escribir los datos desde fila 15
         current_row = 15
         for categoria, campos in agrupado_por_categoria.items():
             inicio_fusion = current_row
             for campo, datos in campos:
-                fila = [categoria.upper(), campo.upper(), datos["base"]]
+                campo_formateado = campo.replace('_', ' ').upper()
+                fila = [categoria.upper(), campo_formateado, datos["base"]]
                 for val, icono in datos["comparables"]:
                     fila.append(val)
                     fila.append(icono["icono"])
-
                 ws.append(fila)
                 row_idx = current_row
 
-                # Íconos centrados
                 for i, (_, icono) in enumerate(datos["comparables"]):
                     col_idx = 5 + i * 2
                     cell = ws.cell(row=row_idx, column=col_idx)
@@ -613,21 +576,17 @@ def exportar_comparacion_xlsx():
                         cell.alignment = Alignment(horizontal="left", vertical="center")
                         if cell.value is None:
                             cell.value = ""
-
                 current_row += 1
 
-            # Fusionar celdas para la categoría
             if len(campos) >= 1:
                 ws.merge_cells(start_row=inicio_fusion, start_column=1, end_row=current_row - 1, end_column=1)
                 cell = ws.cell(row=inicio_fusion, column=1)
                 cell.alignment = Alignment(vertical="center", horizontal="center")
                 cell.font = Font(bold=True)
 
-        # Ajustar anchos
         ws.column_dimensions[get_column_letter(1)].width = 15
         ws.column_dimensions[get_column_letter(2)].width = 25
         ws.column_dimensions[get_column_letter(3)].width = 32
-
         for i in range(len(comparables)):
             ws.column_dimensions[get_column_letter(4 + i * 2)].width = 32
             ws.column_dimensions[get_column_letter(5 + i * 2)].width = 15

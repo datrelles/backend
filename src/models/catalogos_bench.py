@@ -494,7 +494,7 @@ class ClienteCanal(Base):
         {'schema': 'stock'}
     )
 
-    codigo_cliente_canal = Column(NUMBER(14), Sequence('seq_st_cliente_canal', schema='stock'), primary_key=True)
+    codigo_cliente_canal = Column(NUMBER(14), Sequence('seq_st_cliente_canal', schema='stock'))
     codigo_canal = Column(NUMBER(14), nullable=False)
     codigo_mod_vers_repuesto = Column(NUMBER(14), nullable=False)
     empresa = Column(NUMBER(2), nullable=False)
