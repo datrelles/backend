@@ -63,6 +63,7 @@ class st_formula_proceso(custom_base):
     empresa = Column(NUMBER(precision=2), primary_key=True)
     cod_formula = Column(VARCHAR(8), primary_key=True)
     nombre = Column(VARCHAR(100), nullable=False)
+    tipo_retorno = Column(VARCHAR(3), nullable=False)
     definicion = Column(VARCHAR(2000), nullable=False)
     descripcion = Column(VARCHAR(800))
     estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
@@ -82,6 +83,10 @@ class st_formula_proceso(custom_base):
     @validates('nombre')
     def validar_nombre(self, key, value):
         return validar_varchar(key, value, 100)
+
+    @validates('tipo_retorno')
+    def validar_tipo_retorno(self, key, value):
+        return validar_varchar(key, value, 3, valores_permitidos=tipo_retorno.values())
 
     @validates('definicion')
     def validar_definicion(self, key, value):
@@ -275,7 +280,7 @@ class st_funcion(custom_base):
     paquete = Column(VARCHAR(30), nullable=False)
     nombre = Column(VARCHAR(60), nullable=False)
     nombre_base_datos = Column(VARCHAR(30), nullable=False)
-    tipo_retorno = Column(VARCHAR(8), nullable=False)
+    tipo_retorno = Column(VARCHAR(3), nullable=False)
     tipo_objeto = Column(VARCHAR(3), nullable=False, server_default="FUN")
     descripcion = Column(VARCHAR(1000))
     estado = Column(NUMBER(precision=1), nullable=False, server_default="1")
@@ -310,7 +315,7 @@ class st_funcion(custom_base):
 
     @validates('tipo_retorno')
     def validar_tipo_retorno(self, key, value):
-        return validar_varchar(key, value, 8, valores_permitidos=tipo_retorno.values())
+        return validar_varchar(key, value, 3, valores_permitidos=tipo_retorno.values())
 
     @validates('tipo_objeto')
     def validar_tipo_objeto(self, key, value):

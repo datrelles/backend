@@ -211,6 +211,7 @@ def put_formula_proceso(empresa, cod_formula, data):
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     formula.nombre = data['nombre']
+    formula.tipo_retorno = data['tipo_retorno']
     formula.descripcion = data.get('descripcion')
     if data.get('estado') is not None:
         formula.estado = data['estado']
