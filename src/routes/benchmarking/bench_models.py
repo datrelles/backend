@@ -223,10 +223,17 @@ def comparar_modelos():
                 continue
             detalles_comp = cargar_detalles(modelo)
             mejor_en = {}
+            diferente_en = {}
 
             def comparar(campo, val_base, val_comp, grupo):
                 estado = evaluar_estado(campo, val_base, val_comp)
                 mejor_en.setdefault(grupo, []).append({
+                    "campo": campo,
+                    "base": val_base,
+                    "comparable": val_comp,
+                    "estado": estado
+                })
+                diferente_en.setdefault(grupo, []).append({
                     "campo": campo,
                     "base": val_base,
                     "comparable": val_comp,
@@ -315,7 +322,8 @@ def comparar_modelos():
             resultado.append({
                 "modelo_version": comp_id,
                 "nombre_modelo": modelo.nombre_modelo_version,
-                "mejor_en": mejor_en
+                "mejor_en": mejor_en,
+                "diferente_en": diferente_en
             })
 
         return jsonify({"base": base_id, "comparables": resultado})

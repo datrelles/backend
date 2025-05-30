@@ -1818,7 +1818,7 @@ def get_color():
         for c in color:
             resultado.append({
                 "codigo_color_bench": c.codigo_color_bench,
-                "nombre_color": c.nombre_color,
+                "nombre_color": c.nombre_color.upper(),
                 "usuario_crea": c.usuario_crea,
                 "usuario_modifica": c.usuario_modifica,
                 "fecha_creacion": c.fecha_creacion.isoformat() if c.fecha_creacion else None,
@@ -1859,7 +1859,7 @@ def get_imagenes():
 def get_transmision():
     try:
         #trans = db.session.query(Transmision).all()
-        trans = db.session.query(Transmision).order_by(Transmision.caja_cambios.asc()).all()
+        trans = db.session.query(Transmision).order_by(Transmision.codigo_transmision.asc()).all()
 
         resultado = []
         for tr in trans:
@@ -1936,7 +1936,7 @@ def get_lineas():
 @jwt_required()
 def get_marca_repuestos():
     try:
-        registros = db.session.query(MarcaRepuesto).order_by(MarcaRepuesto.nombre_comercial).all()
+        registros = db.session.query(MarcaRepuesto).order_by(MarcaRepuesto.codigo_marca_rep.asc()).all()
 
         resultado = []
         for r in registros:
@@ -1960,7 +1960,7 @@ def get_marca_repuestos():
 @jwt_required()
 def get_productos_externos():
     try:
-        registros = db.session.query(ProductoExterno).order_by(ProductoExterno.nombre_producto).all()
+        registros = db.session.query(ProductoExterno).order_by(ProductoExterno.codigo_prod_externo.asc()).all()
 
         resultado = []
         for r in registros:
@@ -1985,7 +1985,7 @@ def get_productos_externos():
 @jwt_required()
 def get_version():
     try:
-        registros = db.session.query(Version).order_by(Version.nombre_version).all()
+        registros = db.session.query(Version).order_by(Version.codigo_version.asc()).all()
 
         resultado = []
         for r in registros:
@@ -2009,7 +2009,7 @@ def get_version():
 @jwt_required()
 def get_modelos_sri():
     try:
-        modelos = db.session.query(ModeloSRI).order_by(ModeloSRI.codigo_modelo_sri.desc()).all()
+        modelos = db.session.query(ModeloSRI).order_by(ModeloSRI.codigo_modelo_sri.asc()).all()
         resultado = [
             {
                 "codigo_modelo_sri": m.codigo_modelo_sri,
@@ -2032,7 +2032,8 @@ def get_modelos_sri():
 @jwt_required()
 def get_modelos_homologados():
     try:
-        homologados = db.session.query(ModeloHomologado).join(ModeloSRI).all()
+        #homologados = db.session.query(ModeloHomologado).join(ModeloSRI).all()
+        homologados = db.session.query(ModeloHomologado).order_by(ModeloHomologado.codigo_modelo_homologado.asc()).join(ModeloSRI).all()
         resultado = [
             {
                 "codigo_modelo_homologado": h.codigo_modelo_homologado,
@@ -2077,7 +2078,7 @@ def get_marca():
 @jwt_required()
 def get_modelos_comerciales():
     try:
-        registros = db.session.query(ModeloComercial).order_by(ModeloComercial.nombre_modelo.asc()).all()
+        registros = db.session.query(ModeloComercial).order_by(ModeloComercial.codigo_modelo_comercial.asc()).all()
         resultados = []
 
         for modelo in registros:
@@ -2137,7 +2138,7 @@ def get_modelos_version_repuesto():
             "nombre_producto_externo": r.nombre_producto_externo,
             "nombre_version": r.nombre_version,
             "nombre_empresa": r.nombre_empresa,
-            "nombre_item": r.nombre_item,
+            "nombre_item": r.nombre_item.upper(),
             "precio_producto_modelo": r.precio_producto_modelo,
             "precio_venta_distribuidor": r.precio_venta_distribuidor,
             "descripcion": r.descripcion
@@ -2229,7 +2230,7 @@ def get_productos():
                 "cod_producto": p.cod_producto,
                 "cod_modelo": p.cod_modelo,
                 "cod_item": p.cod_item,
-                "nombre_item": p.nombre_item.strip(),
+                "nombre_item": p.nombre_item.strip().upper(),
                 "nombre_producto": p.nombre_producto.strip(),
                 "empresa": int(p.empresa),
                 "nombre_empresa": p.nombre_empresa
@@ -2248,7 +2249,7 @@ def get_productos():
 def get_segmentos():
     try:
         #segmentos = db.session.query(Segmento).all()
-        segmentos = db.session.query(Segmento).order_by(Segmento.nombre_segmento.asc()).all()
+        segmentos = db.session.query(Segmento).order_by(Segmento.codigo_segmento.asc()).all()
         resultados = []
 
         for seg in segmentos:
@@ -2356,7 +2357,7 @@ def get_modelo_version():
             "codigo_transmision": r.codigo_transmision,
             "codigo_color_bench": r.codigo_color_bench,
             "caja_cambios": r.caja_cambios,
-            "nombre_color": r.nombre_color,
+            "nombre_color": r.nombre_color.upper(),
             "codigo_chasis": r.codigo_chasis,
             "nombre_modelo_comercial": r.nombre_modelo_comercial,
             "nombre_marca": r.nombre_marca,
