@@ -1095,14 +1095,15 @@ def execute_funcion_bd(empresa, cod_funcion):
         mensaje = f'Función {cod_funcion} inexistente'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql_funcion = f"PK_FORMULAS.EJECUTAR_FUNCION({empresa},'','','{cod_funcion}')"
+    sql = f"PK_FORMULAS.EJECUTAR_FUNCION({empresa},'','','{cod_funcion}')"
     match (funcion.tipo_retorno):
         case tipo_retorno.NUMERO.value:
-            sql = f"SELECT {sql_funcion}.numero FROM dual"
+            sql = f"{sql}.numero"
         case tipo_retorno.TEXTO.value:
-            sql = f"SELECT {sql_funcion}.texto FROM dual"
+            sql = f"{sql}.texto"
         case tipo_retorno.FECHA.value:
-            sql = f"SELECT {sql_funcion}.fecha FROM dual"
+            sql = f"{sql}.fecha"
+    sql = f"SELECT {sql} FROM DUAL"
     result = custom_base.execute_sql(sql)
     return jsonify({"mensaje": result})
 
@@ -1118,7 +1119,20 @@ def execute_formula_bd(empresa, cod_formula):
         mensaje = f'Empresa {empresa} inexistente'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"SELECT PK_FORMULAS.EJECUTAR_FORMULA({empresa}, '', '', '{cod_formula}') FROM DUAL"
+    formula = db.session.get(st_formula_proceso, (empresa, cod_formula))
+    if not formula:
+        mensaje = f'Fórmula {cod_formula} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    sql = f"PK_FORMULAS.EJECUTAR_FORMULA({empresa}, '', '', '{cod_formula}')"
+    match (formula.tipo_retorno):
+        case tipo_retorno.NUMERO.value:
+            sql = f"{sql}.numero"
+        case tipo_retorno.TEXTO.value:
+            sql = f"{sql}.texto"
+        case tipo_retorno.FECHA.value:
+            sql = f"{sql}.fecha"
+    sql = f"SELECT {sql} FROM DUAL"
     result = custom_base.execute_sql(sql)
     return jsonify({"mensaje": result})
 
