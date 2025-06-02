@@ -305,10 +305,9 @@ class Benchmarking(Base):
 class MatriculacionMarca(Base):
     __tablename__ = 'st_matriculacion_marca'
     __table_args__ = (
-        UniqueConstraint('placa', name='uq_st_matricula_placa'),
+        UniqueConstraint('placa', name='uq_st_matriculacion_placa'),
         {'schema': 'stock'}
     )
-
     codigo_matricula_marca = Column(
         NUMBER(14, 0),
         Sequence('seq_st_matriculacion_marca', schema='stock'),
@@ -318,6 +317,8 @@ class MatriculacionMarca(Base):
         ForeignKey('stock.st_modelo_homologado.codigo_modelo_homologado'), nullable=False
     )
     placa = Column(VARCHAR(15), nullable=False)
+    fecha_matriculacion = Column(DateTime, nullable=False)
+    fecha_facturacion = Column(DateTime, nullable=False)
     detalle_matriculacion = Column(VARCHAR(150))
     usuario_crea = Column(VARCHAR(50), nullable=False)
     usuario_modifica = Column(VARCHAR(50))

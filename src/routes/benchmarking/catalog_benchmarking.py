@@ -1048,33 +1048,48 @@ def insert_matriculacion_marca():
 
         codigo_homologado = data.get("codigo_modelo_homologado")
         placa = data.get("placa")
+        fecha_matriculacion_str = data.get("fecha_matriculacion")
+        fecha_facturacion_str = data.get("fecha_facturacion")
         detalle = data.get("detalle_matriculacion")
 
+        # Validación de obligatorios
         if not codigo_homologado or not placa:
             return jsonify({"error": "Los campos 'codigo_modelo_homologado' y 'placa' son obligatorios"}), 400
 
+        # Conversión de fechas con validación
+        try:
+            fecha_matriculacion = datetime.strptime(fecha_matriculacion_str, '%Y-%m-%d') if fecha_matriculacion_str else None
+            fecha_facturacion = datetime.strptime(fecha_facturacion_str, '%Y-%m-%d') if fecha_facturacion_str else None
+        except ValueError:
+            return jsonify({"error": "Formato de fecha inválido. Use 'YYYY-MM-DD'."}), 400
+
+        # Validar existencia de modelo
         existe_modelo = db.session.query(ModeloHomologado).filter_by(
             codigo_modelo_homologado=codigo_homologado
         ).first()
         if not existe_modelo:
             return jsonify({"error": "El código de modelo homologado no existe"}), 404
 
+        # Validar placa única
         existe_placa = db.session.query(MatriculacionMarca).filter(
             func.upper(MatriculacionMarca.placa) == placa.upper()
         ).first()
         if existe_placa:
             return jsonify({"error": "Ya existe una matrícula con esa placa"}), 409
 
+        # Crear registro
         nueva = MatriculacionMarca(
             codigo_modelo_homologado=codigo_homologado,
             placa=placa,
+            fecha_matriculacion=fecha_matriculacion,
+            fecha_facturacion=fecha_facturacion,
             detalle_matriculacion=detalle,
             usuario_crea=user,
             fecha_creacion=datetime.now()
         )
 
         db.session.add(nueva)
-        db.session.commit()
+        db.session.flush()
         db.session.refresh(nueva)
 
         return jsonify({
@@ -1599,80 +1614,6 @@ def insert_modelo_version():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-#Repuestos compatibles con un modelo externo
-
-@bench.route("/modelo_version/repuestos_compatibles", methods=["GET"])
-@jwt_required()
-def get_repuestos_by_nombre():
-    try:
-        nombre = request.args.get("nombre")
-        if not nombre:
-            return jsonify({"error": "Parámetro 'nombre' es requerido"}), 400
-
-        mv = ModeloVersion
-        cc = ClienteCanal
-        mvr = ModeloVersionRepuesto
-        pe = ProductoExterno
-        mr = MarcaRepuesto
-
-        resultado = db.session.query(
-            pe.nombre_producto.label("nombre_repuesto"),
-            pe.descripcion_producto,
-            mvr.precio_producto_modelo,
-            mvr.precio_venta_distribuidor,
-            mr.nombre_comercial.label("marca_repuesto"),
-            mv.nombre_modelo_version.label("modelo")
-        ).select_from(mv).join(
-            cc,
-            (mv.codigo_cliente_canal == cc.codigo_cliente_canal) &
-            (mv.codigo_mod_vers_repuesto == cc.codigo_mod_vers_repuesto) &
-            (mv.empresa == cc.empresa) &
-            (mv.cod_producto == cc.cod_producto) &
-            (mv.codigo_modelo_comercial == cc.codigo_modelo_comercial) &
-            (mv.codigo_marca == cc.codigo_marca)
-        ).join(
-            mvr,
-            (cc.codigo_mod_vers_repuesto == mvr.codigo_mod_vers_repuesto) &
-            (cc.empresa == mvr.empresa) &
-            (cc.cod_producto == mvr.cod_producto) &
-            (cc.codigo_modelo_comercial == mvr.codigo_modelo_comercial) &
-            (cc.codigo_marca == mvr.codigo_marca)
-        ).join(
-            pe,
-            pe.codigo_prod_externo == mvr.codigo_prod_externo
-        ).join(
-            mr,
-            mr.codigo_marca_rep == pe.codigo_marca_rep
-        ).filter(
-            func.lower(mv.nombre_modelo_version).like(f"%{nombre.lower()}%")
-        ).all()
-
-        return jsonify([dict(row._mapping) for row in resultado])
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-#Carga de archivos desde un Excel ---->
-
-ALLOWED_EXTENSIONS = {'xlsx'}
-UPLOAD_FOLDER = 'uploads/'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-def get_or_create(model, defaults=None, **kwargs):
-    instance = db.session.query(model).filter_by(**kwargs).first()
-    if instance:
-        return instance
-    else:
-        params = dict((k, v) for k, v in kwargs.items())
-        if defaults:
-            params.update(defaults)
-        instance = model(**params)
-        db.session.add(instance)
-        db.session.flush()
-        return instance
 
 #METODOS GET CATALOGO BENCH ------------------------------------------------------------------------------>
 
@@ -2373,6 +2314,31 @@ def get_modelo_version():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@bench.route('/get_matriculacion_marca', methods=["GET"])
+@jwt_required()
+def get_matriculacion_marca():
+    try:
+        registros = db.session.query(MatriculacionMarca).order_by(MatriculacionMarca.codigo_matricula_marca.asc()).all()
+
+        resultado = []
+        for r in registros:
+            resultado.append({
+                "codigo_matricula_marca": r.codigo_matricula_marca,
+                "placa": r.placa,
+                "fecha_matriculacion": r.fecha_matriculacion,
+                "fecha_facturacion": r.fecha_facturacion,
+                "detalle_matriculacion": r.detalle_matriculacion,
+                "usuario_crea": r.usuario_crea,
+                "usuario_modifica": r.usuario_modifica,
+                "fecha_creacion": r.fecha_creacion.isoformat() if r.fecha_creacion else None,
+                "fecha_modificacion": r.fecha_modificacion.isoformat() if r.fecha_modificacion else None
+            })
+
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ACTUALIZAR/ MODIFICAR DATOS -------------------------------------------------------------------------->
 
