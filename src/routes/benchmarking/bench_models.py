@@ -456,6 +456,13 @@ def exportar_comparacion_xlsx():
         resultado = data.get("resultado")
         modelos = data.get("modelos")
 
+        gray_border = Border(
+            left=Side(border_style="thin", color="808080"),
+            right=Side(border_style="thin", color="808080"),
+            top=Side(border_style="thin", color="808080"),
+            bottom=Side(border_style="thin", color="808080")
+        )
+
         if not resultado or "base" not in resultado or "comparables" not in resultado:
             return jsonify({"error": "Entrada inválida: faltan datos de comparación"}), 400
 
@@ -473,17 +480,24 @@ def exportar_comparacion_xlsx():
         firebrick_fill = PatternFill(start_color="B22222", end_color="B22222", fill_type="solid")
 
         header_cells = [
-            (14, 1, "CATEGORIA"),
-            (14, 2, "CAMPOS"),
-            (14, 3, f"{base['nombre_modelo_comercial']} - {base['nombre_marca']}"),
-            (2, 2, f"{base['nombre_modelo_comercial']} - {base['nombre_marca']}")
+            (16, 1, "CATEGORIA"),
+            (16, 2, "CAMPOS"),
+            (16, 3, f"{base['nombre_modelo_comercial']} - {base['nombre_marca']}"),
+            (2, 2, f"{base['nombre_modelo_comercial']} - {base['nombre_marca']}"),
+            (14, 2, f"Precio: ${base['precio_producto_modelo']}")
         ]
 
         for i, comp_modelo in enumerate(comparables):
-            header_cells.append((14, 4 + i * 2, f"{comp_modelo['nombre_modelo_comercial']} - {comp_modelo['nombre_marca']}"))
-            header_cells.append((14, 5 + i * 2, "COMPARATIVO"))
+            header_cells.append((16, 4 + i * 2, f"{comp_modelo['nombre_modelo_comercial']} - {comp_modelo['nombre_marca']}"))
+            header_cells.append((16, 5 + i * 2, "COMPARATIVO"))
             header_cells.append((2, 4 + i * 2, f"{comp_modelo['nombre_modelo_comercial']} - {comp_modelo['nombre_marca']}"))
-
+            precio = comparables[0].get('precio_producto_modelo')
+            if precio is not None:
+                col = 4 + i * 2
+                cell = ws.cell(row=14, column=col, value=f"Precio: ${precio}")
+                cell.font = Font(bold=True, color="000000")
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
         for row, col, value in header_cells:
             cell = ws.cell(row=row, column=col, value=value)
             cell.font = Font(bold=True, color="FFFFFF")
@@ -546,19 +560,12 @@ def exportar_comparacion_xlsx():
                     icono = icono_estado.get(estado, {"icono": "❗", "color": "000000"})
                     campos_unicos[clave]["comparables"][idx] = (det.get("comparable", ""), icono)
 
-        gray_border = Border(
-            left=Side(border_style="thin", color="808080"),
-            right=Side(border_style="thin", color="808080"),
-            top=Side(border_style="thin", color="808080"),
-            bottom=Side(border_style="thin", color="808080")
-        )
-
         agrupado_por_categoria = defaultdict(list)
         for key in sorted(campos_unicos.keys(), key=lambda k: (k[0], k[1])):
             categoria, campo = key
             agrupado_por_categoria[categoria].append((campo, campos_unicos[key]))
 
-        current_row = 15
+        current_row = 17
         for categoria, campos in agrupado_por_categoria.items():
             inicio_fusion = current_row
             for campo, datos in campos:
