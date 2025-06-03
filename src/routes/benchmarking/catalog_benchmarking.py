@@ -1,5 +1,4 @@
 import logging
-import os
 from datetime import datetime
 import re
 import unicodedata
@@ -25,9 +24,9 @@ logger = logging.getLogger(__name__)
 def normalize(value):
     if not value:
         return ''
-    value = value.strip().lower()
+    value = str(value).strip().upper()
     return ''.join(
-        c for c in unicodedata.normalize('NFD', value)
+        c for c in unicodedata.normalize('NFKD', value)
         if unicodedata.category(c) != 'Mn'
     )
 @bench.route('/insert_chasis', methods=["POST"])
@@ -51,7 +50,7 @@ def insert_chasis():
             if not valor:
                 return ''
 
-            valor = valor.replace(" ", "").replace("\\", "/")
+            valor = valor.replace(" ", "").replace("\\", "/").upper()
 
             match = re.match(r"(\d{2,3})[/-](\d{2,3})[/-](\d{2,3})", valor)
             if match:
@@ -81,15 +80,15 @@ def insert_chasis():
                 continue
 
             chasis = Chasis(
-                aros_rueda_delantera=item.get("aros_rueda_delantera"),
-                aros_rueda_posterior=item.get("aros_rueda_posterior"),
+                aros_rueda_delantera=item.get("aros_rueda_delantera", "").upper(),
+                aros_rueda_posterior=item.get("aros_rueda_posterior", "").upper(),
                 neumatico_delantero=estandarizar_pneumatic(item.get("neumatico_delantero")),
                 neumatico_trasero=estandarizar_pneumatic(item.get("neumatico_trasero")),
-                suspension_delantera=item.get("suspension_delantera"),
-                suspension_trasera=item.get("suspension_trasera"),
-                frenos_delanteros=item.get("frenos_delanteros"),
-                frenos_traseros=item.get("frenos_traseros"),
-                usuario_crea=user,
+                suspension_delantera=item.get("suspension_delantera", "").upper(),
+                suspension_trasera=item.get("suspension_trasera", "").upper(),
+                frenos_delanteros=item.get("frenos_delanteros", "").upper(),
+                frenos_traseros=item.get("frenos_traseros", "").upper(),
+                usuario_crea=user.upper(),
                 fecha_creacion=datetime.now()
             )
             db.session.add(chasis)
@@ -214,13 +213,13 @@ def insert_electronica_otros():
                 continue
 
             nuevo = ElectronicaOtros(
-                capacidad_combustible=item.get("capacidad_combustible"),
-                tablero=item.get("tablero"),
-                luces_delanteras=item.get("luces_delanteras"),
-                luces_posteriores=item.get("luces_posteriores"),
-                garantia=item.get("garantia"),
-                velocidad_maxima=item.get("velocidad_maxima"),
-                usuario_crea=user,
+                capacidad_combustible=item.get("capacidad_combustible", "").upper(),
+                tablero=item.get("tablero", "").upper(),
+                luces_delanteras=item.get("luces_delanteras", "").upper(),
+                luces_posteriores=item.get("luces_posteriores", "").upper(),
+                garantia=item.get("garantia", "").upper(),
+                velocidad_maxima=item.get("velocidad_maxima", "").upper(),
+                usuario_crea=user.upper(),
                 fecha_creacion=datetime.now()
             )
 
@@ -388,65 +387,63 @@ def insert_motor():
         registros_actuales = db.session.query(Motor).join(TipoMotor).all()
 
         for item in data:
-            nombre_tipo_motor = item.get("tipo_motor_nombre")
-            if not nombre_tipo_motor:
-                duplicados.append(item)
-                continue
+            with db.session.no_autoflush:
+                nombre_tipo_motor = (item.get("tipo_motor_nombre") or "").strip().upper()
+                if not nombre_tipo_motor:
+                    duplicados.append(item)
+                    continue
 
-            # Si no lo encontraste inicialmente
-            tipo_motor = db.session.query(TipoMotor).filter(
-                func.lower(func.replace(func.replace(
-                    func.replace(func.replace(func.replace(TipoMotor.nombre_tipo, 'á', 'a'), 'é', 'e'), 'í', 'i'), 'ó',
-                    'o'), 'ú', 'u')
-                ) == normalize(nombre_tipo_motor)
-            ).first()
+                tipo_motor = db.session.query(TipoMotor).filter(
+                    func.upper(func.trim(TipoMotor.nombre_tipo)) == nombre_tipo_motor
+                ).first()
 
-            # Si sigue sin encontrarse, y tienes `codigo_tipo_motor` ya seteado por el frontend:
-            if not tipo_motor and item.get("codigo_tipo_motor"):
-                tipo_motor = db.session.query(TipoMotor).get(item.get("codigo_tipo_motor"))
+                if not tipo_motor:
+                    tipo_motor = TipoMotor(
+                        nombre_tipo=nombre_tipo_motor,
+                        descripcion_tipo_motor=(item.get("descripcion_tipo_motor") or "").strip().upper()
+                    )
+                    db.session.add(tipo_motor)
+                    db.session.flush()
 
-            if not tipo_motor:
-                raise ValueError("No se pudo encontrar o crear el tipo de motor necesario para insertar el motor.")
+                nombre_motor = normalize(item.get("nombre_motor"))
+                cilindrada = normalize(item.get("cilindrada"))
+                caballos_fuerza = normalize(item.get("caballos_fuerza"))
+                torque_maximo = normalize(item.get("torque_maximo"))
+                sistema_combustible = normalize(item.get("sistema_combustible"))
+                arranque = normalize(item.get("arranque"))
+                sistema_refrigeracion = normalize(item.get("sistema_refrigeracion"))
+                descripcion_motor = normalize(item.get("descripcion_motor"))
 
-            if not tipo_motor:
-                tipo_motor = TipoMotor(
-                    nombre_tipo=nombre_tipo_motor.strip(),
-                    descripcion_tipo_motor=item.get("descripcion_tipo_motor")
+                existe = db.session.query(Motor).filter_by(
+                    codigo_tipo_motor=tipo_motor.codigo_tipo_motor,
+                    nombre_motor=nombre_motor,
+                    cilindrada=cilindrada,
+                    sistema_combustible=sistema_combustible,
+                    arranque=arranque,
+                    sistema_refrigeracion=sistema_refrigeracion,
+                    descripcion_motor=descripcion_motor
+                ).first()
+
+                if existe:
+                    duplicados.append(item)
+                    continue
+
+                nuevo_motor = Motor(
+                    codigo_tipo_motor=tipo_motor.codigo_tipo_motor,
+                    nombre_motor=nombre_motor,
+                    cilindrada=cilindrada,
+                    caballos_fuerza=(item.get("caballos_fuerza") or "").strip().upper(),
+                    torque_maximo=(item.get("torque_maximo") or "").strip().upper(),
+                    sistema_combustible=sistema_combustible,
+                    arranque=arranque,
+                    sistema_refrigeracion=sistema_refrigeracion,
+                    descripcion_motor=descripcion_motor,
+                    usuario_crea=user,
+                    fecha_creacion=datetime.now()
                 )
-                db.session.add(tipo_motor)
-                db.session.commit()
-            existe = any(
-                r.codigo_tipo_motor == tipo_motor.codigo_tipo_motor and
-                normalize(r.nombre_motor) == normalize(item.get("nombre_motor")) and
-                normalize(r.cilindrada) == normalize(item.get("cilindrada")) and
-                normalize(r.caballos_fuerza) == normalize(item.get("caballos_fuerza")) and
-                normalize(r.torque_maximo) == normalize(item.get("torque_maximo")) and
-                normalize(r.sistema_combustible) == normalize(item.get("sistema_combustible")) and
-                normalize(r.arranque) == normalize(item.get("arranque")) and
-                normalize(r.sistema_refrigeracion) == normalize(item.get("sistema_refrigeracion")) and
-                normalize(r.descripcion_motor) == normalize(item.get("descripcion_motor"))
-                for r in registros_actuales
-            )
 
-            if existe:
-                duplicados.append(item)
-                continue
-
-            nuevo_motor = Motor(
-                codigo_tipo_motor=tipo_motor.codigo_tipo_motor,
-                nombre_motor=item.get("nombre_motor"),
-                cilindrada=item.get("cilindrada"),
-                caballos_fuerza=item.get("caballos_fuerza"),
-                torque_maximo=item.get("torque_maximo"),
-                sistema_combustible=item.get("sistema_combustible"),
-                arranque=item.get("arranque"),
-                sistema_refrigeracion=item.get("sistema_refrigeracion"),
-                descripcion_motor=item.get("descripcion_motor"),
-                usuario_crea=user,
-                fecha_creacion=datetime.now()
-            )
-            db.session.add(nuevo_motor)
-            insertados += 1
+                db.session.add(nuevo_motor)
+                insertados += 1
 
         db.session.commit()
 
@@ -495,7 +492,7 @@ def insert_color():
 
         for item in data:
             nuevo = Color(
-                nombre_color=item["nombre_color"].strip(),
+                nombre_color=item["nombre_color"].strip().upper(),
                 usuario_crea=user,
                 fecha_creacion=datetime.now()
             )
@@ -1091,6 +1088,7 @@ def insert_matriculacion_marca():
         db.session.add(nueva)
         db.session.flush()
         db.session.refresh(nueva)
+        db.session.commit()
 
         return jsonify({
             "message": "Matrícula registrada correctamente",
@@ -2325,6 +2323,7 @@ def get_matriculacion_marca():
         for r in registros:
             resultado.append({
                 "codigo_matricula_marca": r.codigo_matricula_marca,
+                "codigo_modelo_homologado": r.codigo_modelo_homologado,
                 "placa": r.placa,
                 "fecha_matriculacion": r.fecha_matriculacion,
                 "fecha_facturacion": r.fecha_facturacion,
