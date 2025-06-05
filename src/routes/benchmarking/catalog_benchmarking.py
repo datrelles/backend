@@ -922,8 +922,11 @@ def insert_modelo_sri():
         if isinstance(data, dict):
             data = [data]
 
+        # Se compara por nombre + año (para permitir modelos repetidos con diferente año)
         registros_existentes = db.session.query(ModeloSRI).all()
-        nombres_existentes = {r.nombre_modelo.lower() for r in registros_existentes}
+        claves_existentes = {
+            (r.nombre_modelo.strip().lower(), int(r.anio_modelo)) for r in registros_existentes
+        }
 
         duplicados = []
         insertados = 0
@@ -931,20 +934,31 @@ def insert_modelo_sri():
         for item in data:
             nombre = item.get("nombre_modelo")
             anio = item.get("anio_modelo")
-            estado = item.get("estado_modelo")
+
+            # Mapeo flexible de estado_modelo
+            estado_raw = item.get("estado_modelo")
+            if isinstance(estado_raw, str):
+                estado = 1 if estado_raw.strip().upper() == "ACTIVO" else 0
+            elif isinstance(estado_raw, int):
+                estado = estado_raw
+            else:
+                estado = None
+
             cod_mdl_importacion = item.get("cod_mdl_importacion")
 
+            # Validación
             if not nombre or estado not in [0, 1] or not (1950 <= int(anio) <= 2100):
                 duplicados.append(item)
                 continue
 
-            if nombre.lower() in nombres_existentes:
+            clave_actual = (nombre.strip().lower(), int(anio))
+            if clave_actual in claves_existentes:
                 duplicados.append(item)
                 continue
 
             nuevo = ModeloSRI(
-                nombre_modelo=nombre,
-                anio_modelo=anio,
+                nombre_modelo=nombre.strip(),
+                anio_modelo=int(anio),
                 estado_modelo=estado,
                 cod_mdl_importacion=cod_mdl_importacion,
                 usuario_crea=user,
@@ -952,7 +966,7 @@ def insert_modelo_sri():
             )
 
             db.session.add(nuevo)
-            nombres_existentes.add(nombre.lower())
+            claves_existentes.add(clave_actual)
             insertados += 1
 
         if insertados == 0:
@@ -968,6 +982,7 @@ def insert_modelo_sri():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
 
 @bench.route('/insert_modelo_homologado', methods=["POST"])
 @jwt_required()
@@ -1131,14 +1146,23 @@ def insert_modelo_comercial():
                 duplicados.append({**item, "error": "Modelo homologado no encontrado"})
                 continue
 
+            nombre_marca_normalizado = str(nombre_marca).strip().lower()
+
             marca = db.session.query(Marca).filter(
-                func.lower(func.replace(func.trim(Marca.nombre_marca), '\u00A0', ' ')) == normalize(nombre_marca)
+                func.lower(func.trim(Marca.nombre_marca)) == nombre_marca_normalizado
             ).first()
 
             if not marca:
+                duplicados.append({**item, "error": f"La marca '{nombre_marca}' no existe en la base de datos."})
+                continue
+
+            if not marca:
                 marca = Marca(
-                    nombre_marca=nombre_marca.strip(),
-                    estado_marca=estado_modelo.strip(),
+                    #nombre_marca=nombre_marca.strip(),
+                    #estado_marca=estado_modelo.strip(),
+                    nombre_marca=str(nombre_marca).strip(),
+                    estado_marca=str(estado_modelo).strip(),
+
                     usuario_crea=user,
                     fecha_creacion=datetime.now()
                 )
@@ -2210,6 +2234,7 @@ def get_segmentos():
                 "codigo_modelo_comercial": seg.codigo_modelo_comercial,
                 "nombre_modelo_comercial": modelo.nombre_modelo if modelo else None,
                 "codigo_marca": seg.codigo_marca,
+                "anio_modelo": modelo.anio_modelo,
                 "nombre_marca": marca.nombre_marca if marca else None,
                 "nombre_segmento": seg.nombre_segmento,
                 "estado_segmento": seg.estado_segmento,
@@ -2771,19 +2796,25 @@ def update_modelo_sri(codigo_modelo_sri):
         estado = data.get("estado_modelo")
         cod_mdl_importacion = data.get("cod_mdl_importacion")
 
-        if nombre:
+        # Validar si se desea cambiar el nombre
+        if nombre and nombre.strip().lower() != modelo.nombre_modelo.strip().lower():
             existe_nombre = db.session.query(ModeloSRI).filter(
-                func.lower(ModeloSRI.nombre_modelo) == nombre.lower(),
+                func.lower(ModeloSRI.nombre_modelo) == nombre.strip().lower(),
                 ModeloSRI.codigo_modelo_sri != codigo_modelo_sri
             ).first()
             if existe_nombre:
                 return jsonify({"error": "Ya existe otro modelo con ese nombre"}), 409
-            modelo.nombre_modelo = nombre
+            modelo.nombre_modelo = nombre.strip()
+
+        # Actualizar código de importación si viene presente
+        if cod_mdl_importacion is not None:
             modelo.cod_mdl_importacion = cod_mdl_importacion
 
+        # Validar y actualizar año
         if anio and (1950 <= int(anio) <= 2100):
             modelo.anio_modelo = int(anio)
 
+        # Validar y actualizar estado
         if estado in [0, 1]:
             modelo.estado_modelo = estado
 
@@ -2845,30 +2876,28 @@ def update_modelo_comercial(codigo):
         anio_modelo = data.get("anio_modelo")
         estado_modelo = data.get("estado_modelo")
 
+        # Validar campos obligatorios
         if not nombre_marca or not nombre_modelo or not codigo_modelo_homologado or not anio_modelo:
             return jsonify({"error": "Faltan campos obligatorios"}), 400
 
+        # Buscar la marca ya existente (NO insertarla aquí)
+        nombre_marca_normalizado = str(nombre_marca).strip().lower()
         marca = db.session.query(Marca).filter(
-            func.lower(func.replace(func.trim(Marca.nombre_marca), '\u00A0', ' ')) == normalize(nombre_marca)
+            func.lower(func.trim(Marca.nombre_marca)) == nombre_marca_normalizado
         ).first()
 
         if not marca:
-            marca = Marca(
-                nombre_marca=nombre_marca.strip(),
-                usuario_crea=user,
-                fecha_creacion=datetime.now()
-            )
-            db.session.add(marca)
-            db.session.flush()
+            return jsonify({"error": f"La marca '{nombre_marca}' no existe en la base de datos."}), 400
 
+        # Buscar modelo comercial a actualizar
         modelo = db.session.query(ModeloComercial).filter_by(codigo_modelo_comercial=codigo).first()
-
         if not modelo:
             return jsonify({"error": "Modelo comercial no encontrado"}), 404
 
+        # Actualizar valores
         modelo.codigo_marca = marca.codigo_marca
         modelo.codigo_modelo_homologado = codigo_modelo_homologado
-        modelo.nombre_modelo = nombre_modelo.strip()
+        modelo.nombre_modelo = str(nombre_modelo).strip()
         modelo.anio_modelo = int(anio_modelo)
         modelo.estado_modelo = int(estado_modelo)
         modelo.usuario_modifica = user
@@ -2880,6 +2909,7 @@ def update_modelo_comercial(codigo):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
 
 @bench.route('/update_modelo_version_repuesto/<int:codigo>', methods=['PUT', 'OPTIONS'])
 @jwt_required()
