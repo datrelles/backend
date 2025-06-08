@@ -5,7 +5,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, validates
 from src.config.database import db
 from src.enums import tipo_estado, tipo_retorno, tipo_objeto, tipo_parametro, tipo_factor, operador
-from src.enums.validation import paquete_funcion_bd
+from src.enums.validation import paquete_funcion_bd, tipo_cliente
 from src.validations import validar_varchar, validar_fecha, validar_number
 from src.models.custom_base import custom_base
 
@@ -376,3 +376,48 @@ class st_parametro_funcion(custom_base):
     @validates('variable')
     def validar_variable(self, key, value):
         return validar_varchar(key, value, 10, es_requerido=False)
+
+
+class st_cliente_procesos(custom_base):
+    __tablename__ = 'st_cliente_procesos'
+    __table_args__ = {'schema': schema_name}
+
+    empresa = Column(NUMBER(precision=2), primary_key=True)
+    cod_cliente = Column(VARCHAR(14), primary_key=True)
+    cod_modelo = Column(VARCHAR(8), nullable=False)
+    tipo_cliente = Column(VARCHAR(3), nullable=False)
+    nombre_imprime = Column(VARCHAR(60), nullable=False)
+    agrupa_cliente = Column(NUMBER(precision=1), nullable=False, server_default="0")
+    nombre_agrupacion = Column(VARCHAR(60))
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+    audit_usuario_mod = Column(VARCHAR(30))
+    audit_fecha_mod = Column(DateTime)
+
+    @validates('empresa')
+    def validar_empresa(self, key, value):
+        return validar_empresa(key, value)
+
+    @validates('cod_cliente')
+    def validar_cod_cliente(self, key, value):
+        return validar_varchar(key, value, 14)
+
+    @validates('cod_modelo')
+    def validar_cod_modelo(self, key, value):
+        return validar_varchar(key, value, 8, valores_permitidos=tipo_cliente.values())
+
+    @validates('tipo_cliente')
+    def validar_tipo_cliente(self, key, value):
+        return validar_varchar(key, value, 3)
+
+    @validates('nombre_imprime')
+    def validar_nombre_imprime(self, key, value):
+        return validar_varchar(key, value, 60)
+
+    @validates('agrupa_cliente')
+    def validar_agrupa_cliente(self, key, value):
+        return validar_estado(key, value)
+
+    @validates('nombre_agrupacion')
+    def validar_nombre_agrupacion(self, key, value):
+        return validar_varchar(key, value, 60, False)

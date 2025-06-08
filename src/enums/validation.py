@@ -54,3 +54,7 @@ class tipo_parametro(CustomEnum):
 
 class paquete_funcion_bd(CustomEnum):
     FORMULAS = "PK_FORMULAS"
+
+
+class tipo_cliente(CustomEnum):
+    CLI1 = "CLI1"

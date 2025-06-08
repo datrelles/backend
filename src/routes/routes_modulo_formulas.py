@@ -9,7 +9,8 @@ from src.decorators import validate_json, handle_exceptions
 from src.enums import tipo_factor, operador, tipo_parametro, tipo_retorno
 from src.models.custom_base import custom_base
 from src.models.modulo_formulas import st_proceso, st_formula_proceso, st_parametro_proceso, st_parametro_por_proceso, \
-    st_factor_calculo_parametro, st_funcion, validar_cod, tg_sistema, st_parametro_funcion, validar_estado
+    st_factor_calculo_parametro, st_funcion, validar_cod, tg_sistema, st_parametro_funcion, validar_estado, \
+    st_cliente_procesos
 from src.validations import validar_varchar, validar_number
 from src.models.users import Empresa
 from src.models.clientes import Cliente
@@ -1150,5 +1151,150 @@ def execute_factores_bd(empresa, cod_proceso, cod_parametro):
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     sql = f"SELECT PK_FORMULAS.EJECUTAR_FACTORES({empresa}, '{cod_proceso}', '{cod_parametro}') FROM DUAL"
+    result = custom_base.execute_sql(sql)
+    return jsonify({"mensaje": result})
+
+
+@formulas_b.route("/empresas/<empresa>/clientes/<cod_cliente>", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar el cliente")
+def get_cliente(empresa, cod_cliente):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    cliente = db.session.get(st_cliente_procesos, (empresa, cod_cliente))
+    if not cliente:
+        mensaje = f'Cliente {cod_cliente} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    return jsonify(cliente.to_dict())
+
+
+@formulas_b.route("/empresas/<empresa>/clientes", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar los clientes")
+def get_clientes(empresa):
+    empresa = validar_number('empresa', empresa, 2)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    query = st_cliente_procesos.query()
+    clientes = query.filter(st_cliente_procesos.empresa == empresa).order_by(st_cliente_procesos.cod_cliente).all()
+    return jsonify(st_cliente_procesos.to_list(clientes))
+
+
+@formulas_b.route("/empresas/<empresa>/clientes", methods=["POST"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("registrar el cliente")
+def post_cliente(empresa, data):
+    empresa = validar_number('empresa', empresa, 2)
+    data = {'empresa': empresa, **data}
+    cliente = st_cliente_procesos(**data)
+    if not db.session.get(Empresa, data['empresa']):
+        mensaje = f'Empresa {data['empresa']} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if db.session.get(st_cliente_procesos, (data['empresa'], data['cod_cliente'])):
+        mensaje = f'Ya existe un cliente con el código {data['cod_cliente']}'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 409
+    if data['agrupa_cliente']:
+        nombre_agrupacion = data.get('nombre_agrupacion')
+        if not nombre_agrupacion:
+            mensaje = 'Se requiere el nombre de agrupación'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+    else:
+        data['nombre_agrupacion'] = None
+    db.session.add(cliente)
+    db.session.commit()
+    mensaje = f'Se registró el cliente {cliente.cod_cliente}'
+    logger.info(mensaje)
+    return jsonify({'mensaje': mensaje}), 201
+
+
+@formulas_b.route("/empresas/<empresa>/clientes/<cod_cliente>", methods=["PUT"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("actualizar el cliente")
+def put_cliente(empresa, cod_cliente, data):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    data = {'empresa': empresa, 'cod_cliente': cod_cliente, **data}
+    st_cliente_procesos(**data)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    cliente = db.session.get(st_cliente_procesos, (empresa, cod_cliente))
+    if not cliente:
+        mensaje = f'No existe un cliente con el código {cod_cliente}'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    cliente.cod_modelo = data['cod_modelo']
+    cliente.tipo_cliente = data['tipo_cliente']
+    cliente.nombre_imprime = data['nombre_imprime']
+    cliente.agrupa_cliente = data['agrupa_cliente']
+    if cliente.agrupa_cliente:
+        nombre_agrupacion = data.get('nombre_agrupacion')
+        if not nombre_agrupacion:
+            mensaje = 'Se requiere el nombre de agrupación'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        cliente.nombre_agrupacion = nombre_agrupacion
+    else:
+        cliente.nombre_agrupacion = None
+    cliente.audit_usuario_mod = text('user')
+    cliente.audit_fecha_mod = text('sysdate')
+    db.session.commit()
+    mensaje = f'Se actualizó el cliente {cod_cliente}'
+    logger.info(mensaje)
+    return '', 204
+
+
+@formulas_b.route("/empresas/<empresa>/clientes/<cod_cliente>", methods=["DELETE"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("eliminar el cliente")
+def delete_cliente(empresa, cod_cliente):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    cliente = db.session.get(st_cliente_procesos, (empresa, cod_cliente))
+    if not cliente:
+        mensaje = f'No existe un cliente con el código {cod_cliente}'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    db.session.delete(cliente)
+    db.session.commit()
+    mensaje = f'Se eliminó el cliente {cod_cliente}'
+    logger.info(mensaje)
+    return '', 204
+
+
+@formulas_b.route("/empresas/<empresa>/nuevo-cliente/<cod_cliente>", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar el nombre del nuevo cliente")
+def get_nuevo_cliente(empresa, cod_cliente):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    sql = f"SELECT PK_PROCESOS.OBTENER_NOMBRE_NUEVO_CLIENTE({empresa}, '{cod_cliente}') FROM DUAL"
     result = custom_base.execute_sql(sql)
     return jsonify({"mensaje": result})
