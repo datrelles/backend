@@ -3,6 +3,9 @@ from flask import request, Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 import logging
+
+from sqlalchemy.orm import aliased
+
 from src.config.database import db
 from sqlalchemy import text, and_, func
 from src.decorators import validate_json, handle_exceptions
@@ -1155,6 +1158,22 @@ def execute_factores_bd(empresa, cod_proceso, cod_parametro):
     return jsonify({"mensaje": result})
 
 
+@formulas_b.route("/empresas/<empresa>/nuevo-cliente/<cod_cliente>", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar el nombre del nuevo cliente")
+def get_nuevo_cliente(empresa, cod_cliente):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    sql = f"SELECT PK_PROCESOS.OBTENER_NOMBRE_NUEVO_CLIENTE({empresa}, '{cod_cliente}') FROM DUAL"
+    result = custom_base.execute_sql(sql)
+    return jsonify({"mensaje": result})
+
+
 @formulas_b.route("/empresas/<empresa>/clientes/<cod_cliente>", methods=["GET"])
 @jwt_required()
 @cross_origin()
@@ -1284,17 +1303,34 @@ def delete_cliente(empresa, cod_cliente):
     return '', 204
 
 
-@formulas_b.route("/empresas/<empresa>/nuevo-cliente/<cod_cliente>", methods=["GET"])
+@formulas_b.route("/empresas/<empresa>/clientes-proyecciones", methods=["GET"])
 @jwt_required()
 @cross_origin()
-@handle_exceptions("consultar el nombre del nuevo cliente")
-def get_nuevo_cliente(empresa, cod_cliente):
+@handle_exceptions("consultar los clientes")
+def get_clientes_proyecciones(empresa):
     empresa = validar_number('empresa', empresa, 2)
-    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
     if not db.session.get(Empresa, empresa):
         mensaje = f'Empresa {empresa} inexistente'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"SELECT PK_PROCESOS.OBTENER_NOMBRE_NUEVO_CLIENTE({empresa}, '{cod_cliente}') FROM DUAL"
-    result = custom_base.execute_sql(sql)
-    return jsonify({"mensaje": result})
+    subquery = (
+        db.session.query(
+            st_cliente_procesos,
+            func.row_number().over(
+                partition_by=st_cliente_procesos.tipo_cliente,
+                order_by=st_cliente_procesos.nombre_imprime.asc()
+            ).label('rn')
+        )
+        .filter(st_cliente_procesos.agrupa_cliente == 1)
+    ).subquery()
+    clientes_agrupados = aliased(st_cliente_procesos, subquery)
+    query_agrupados = (
+        db.session.query(clientes_agrupados)
+        .filter(subquery.c.rn == 1)
+    )
+    query_individuales = (
+        db.session.query(st_cliente_procesos)
+        .filter(st_cliente_procesos.agrupa_cliente == 0)
+    )
+    clientes = query_agrupados.union_all(query_individuales).all()
+    return jsonify(st_cliente_procesos.to_list(clientes))
