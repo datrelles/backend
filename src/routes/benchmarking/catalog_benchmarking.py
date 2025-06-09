@@ -1161,7 +1161,7 @@ def insert_modelo_comercial():
                     #nombre_marca=nombre_marca.strip(),
                     #estado_marca=estado_modelo.strip(),
                     nombre_marca=str(nombre_marca).strip(),
-                    estado_marca=str(estado_modelo).strip(),
+                    estado_marca=estado_modelo,
 
                     usuario_crea=user,
                     fecha_creacion=datetime.now()
@@ -1995,24 +1995,30 @@ def get_modelos_sri():
 @jwt_required()
 def get_modelos_homologados():
     try:
-        #homologados = db.session.query(ModeloHomologado).join(ModeloSRI).all()
-        homologados = db.session.query(ModeloHomologado).order_by(ModeloHomologado.codigo_modelo_homologado.asc()).join(ModeloSRI).all()
+        homologados = (
+            db.session.query(ModeloHomologado)
+            .join(ModeloSRI)
+            .order_by(ModeloHomologado.codigo_modelo_homologado.asc())
+            .all()
+        )
         resultado = [
             {
                 "codigo_modelo_homologado": h.codigo_modelo_homologado,
                 "codigo_modelo_sri": h.codigo_modelo_sri,
                 "nombre_modelo_sri": h.modelo_sri.nombre_modelo if h.modelo_sri else None,
+                "anio_modelo_sri": h.modelo_sri.anio_modelo if h.modelo_sri else None,
                 "descripcion_homologacion": h.descripcion_homologacion,
                 "usuario_crea": h.usuario_crea,
                 "usuario_modifica": h.usuario_modifica,
                 "fecha_creacion": h.fecha_creacion.isoformat() if h.fecha_creacion else None,
-                "fecha_modificacion": h.fecha_modificacion.isoformat() if h.fecha_modificacion else None
+                "fecha_modificacion": h.fecha_modificacion.isoformat() if h.fecha_modificacion else None,
             }
             for h in homologados
         ]
         return jsonify(resultado)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @bench.route('/get_marca', methods=["GET"])
 @jwt_required()

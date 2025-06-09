@@ -48,20 +48,23 @@ def comparar_modelos():
         def extract_garantia_meses(texto):
             if not texto:
                 return None
-            texto = str(texto).upper().replace(".", ",")
 
-            # Separar por delimitadores comunes
+            texto = str(texto).upper().replace(".", ",")
             partes = re.split(r"/| O | Y |-", texto)
+
+            max_meses = 0
 
             for parte in partes:
                 match_anos = re.search(r'(\d+(?:[.,]\d+)?)\s*AÑOS?', parte)
-                match_meses = re.search(r'(\d+(?:[.,]\d+)?)\s*MESES?', parte)
                 if match_anos:
-                    return float(match_anos.group(1).replace(",", ".")) * 12
-                elif match_meses:
-                    return float(match_meses.group(1).replace(",", "."))
+                    meses = float(match_anos.group(1).replace(",", ".")) * 12
+                    max_meses = max(max_meses, meses)
+                match_meses = re.search(r'(\d+(?:[.,]\d+)?)\s*MESES?', parte)
+                if match_meses:
+                    meses = float(match_meses.group(1).replace(",", "."))
+                    max_meses = max(max_meses, meses)
 
-            return None
+            return int(max_meses) if max_meses > 0 else None
 
         def evaluar_pneumatic(cadena):
             if not cadena:
@@ -128,6 +131,11 @@ def comparar_modelos():
             mejor_si_menor.update({
                 "cilindrada","peso_seco","caballos_fuerza","torque_maximo",
                 "altura_total","ancho_total","longitud_total"
+            })
+        elif segmento_nombre == "caballito":
+            mejor_si_menor.update({
+                "cilindrada", "peso_seco", "caballos_fuerza", "torque_maximo",
+                "altura_total", "ancho_total", "longitud_total"
             })
         elif segmento_nombre == "advento":
             mejor_si_mayor.update({
