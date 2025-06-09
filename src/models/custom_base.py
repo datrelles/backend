@@ -46,5 +46,8 @@ class custom_base(base):
         return data
 
     @staticmethod
-    def execute_sql(sql, **kwargs):
-        return db.session.execute(text(sql), kwargs).scalar()
+    def execute_sql(sql, es_escalar=True, **kwargs):
+        if es_escalar:
+            return db.session.execute(text(sql), **kwargs).scalar()
+        else:
+            return db.session.execute(text(sql), **kwargs)

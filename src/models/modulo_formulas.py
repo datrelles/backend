@@ -421,3 +421,24 @@ class st_cliente_procesos(custom_base):
     @validates('nombre_agrupacion')
     def validar_nombre_agrupacion(self, key, value):
         return validar_varchar(key, value, 60, False)
+
+
+class st_modelo_comercial():
+    def __init__(self, codigo, marca, nombre):
+        self.codigo = codigo
+        self.marca = marca
+        self.nombre = nombre
+
+    @staticmethod
+    def execute_sql(sql, es_escalar=True, params=None):
+        if es_escalar:
+            return db.session.execute(text(sql), params).scalar()
+        else:
+            return db.session.execute(text(sql), params)
+
+    def to_dict(self):
+        return {
+            "codigo": self.codigo,
+            "marca": self.marca,
+            "nombre": self.nombre
+        }

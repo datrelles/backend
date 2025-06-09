@@ -13,13 +13,15 @@ from src.enums import tipo_factor, operador, tipo_parametro, tipo_retorno
 from src.models.custom_base import custom_base
 from src.models.modulo_formulas import st_proceso, st_formula_proceso, st_parametro_proceso, st_parametro_por_proceso, \
     st_factor_calculo_parametro, st_funcion, validar_cod, tg_sistema, st_parametro_funcion, validar_estado, \
-    st_cliente_procesos
+    st_cliente_procesos, st_modelo_comercial
 from src.validations import validar_varchar, validar_number
 from src.models.users import Empresa
 from src.models.clientes import Cliente
 
 formulas_b = Blueprint('routes_formulas', __name__)
 logger = logging.getLogger(__name__)
+
+CODIGO_MARCA_PROPIA = 94
 
 
 @formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>", methods=["GET"])
@@ -1306,7 +1308,7 @@ def delete_cliente(empresa, cod_cliente):
 @formulas_b.route("/empresas/<empresa>/clientes-proyecciones", methods=["GET"])
 @jwt_required()
 @cross_origin()
-@handle_exceptions("consultar los clientes")
+@handle_exceptions("consultar los clientes de proyecciones")
 def get_clientes_proyecciones(empresa):
     empresa = validar_number('empresa', empresa, 2)
     if not db.session.get(Empresa, empresa):
@@ -1334,3 +1336,24 @@ def get_clientes_proyecciones(empresa):
     )
     clientes = query_agrupados.union_all(query_individuales).all()
     return jsonify(st_cliente_procesos.to_list(clientes))
+
+
+@formulas_b.route("/empresas/<empresa>/modelos-motos-proyecciones", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar los modelos de motos de proyecciones")
+def get_modelos_motos_proyecciones(empresa):
+    empresa = validar_number('empresa', empresa, 2)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    sql = ("SELECT mo.codigo_modelo_comercial, ma.nombre_marca, mo.nombre_modelo "
+           "FROM ST_MARCA ma, ST_MODELO_COMERCIAL mo "
+           "WHERE ma.codigo_marca     =    :codigo_marca "
+           "AND mo.codigo_marca       =    ma.codigo_marca "
+           "GROUP BY mo.codigo_modelo_comercial, ma.nombre_marca, mo.nombre_modelo")
+    result = st_modelo_comercial.execute_sql(sql, False, {"codigo_marca": CODIGO_MARCA_PROPIA})
+    modelos = [st_modelo_comercial(row.codigo_modelo_comercial, row.nombre_marca, row.nombre_modelo).to_dict() for row
+               in result]
+    return jsonify(modelos)
