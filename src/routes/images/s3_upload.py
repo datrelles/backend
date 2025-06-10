@@ -19,7 +19,7 @@ s3_client = boto3.client(
     's3',
     aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    region_name='us-east-2'
+    region_name='us-east-1'
 )
 
 
@@ -27,7 +27,7 @@ s3_client = boto3.client(
 #print("AWS_SECRET_ACCESS_KEY:", os.getenv("AWS_SECRET_ACCESS_KEY"))
 
 
-BUCKET_NAME = "shineray-imagenes-benchmarking"
+BUCKET_NAME = "shineray-images-benchmarking"
 
 @s3.route("/generate-upload-url", methods=["POST"])
 @jwt_required()
@@ -53,7 +53,7 @@ def generate_upload_url():
         )
 
         # URL pública para visualización
-        public_url = f"https://{BUCKET_NAME}.s3.us-east-2.amazonaws.com/{filename}"
+        public_url = f"https://{BUCKET_NAME}.s3.us-east-1.amazonaws.com/{filename}"
 
         logger.info(f"Usuario {get_jwt_identity()} generó URL de carga para {filename}")
         return jsonify({
