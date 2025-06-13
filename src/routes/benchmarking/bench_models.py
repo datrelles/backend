@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, request
 from flask_cors import cross_origin
 from flask_jwt_extended import jwt_required
 from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
-from sqlalchemy import func, text
+from sqlalchemy import func
 from openpyxl import Workbook
 from flask import send_file
 from collections import defaultdict
