@@ -629,3 +629,98 @@ def exportar_comparacion_xlsx():
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@bench_model.route('/get_marcas_por_linea_segmento', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_marcas_por_linea_segmento():
+    try:
+        codigo_linea = request.args.get('codigo_linea', type=int)
+        nombre_segmento = request.args.get('nombre_segmento', type=str)
+
+        if not codigo_linea or not nombre_segmento:
+            return jsonify({"error": "Parámetros 'codigo_linea' y 'nombre_segmento' requeridos"}), 400
+
+        resultados = db.session.query(
+            Marca.codigo_marca,
+            Marca.nombre_marca
+        ) \
+        .join(ModeloComercial, Marca.codigo_marca == ModeloComercial.codigo_marca) \
+        .join(Segmento, (Segmento.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
+                        (Segmento.codigo_marca == ModeloComercial.codigo_marca)) \
+        .filter(Segmento.codigo_linea == codigo_linea) \
+        .filter(func.upper(Segmento.nombre_segmento) == func.upper(nombre_segmento.strip())) \
+        .filter(Marca.estado_marca == 1) \
+        .distinct() \
+        .all()
+
+        marcas = [{
+            "codigo_marca": r[0],
+            "nombre_marca": r[1]
+        } for r in resultados]
+
+        return jsonify(marcas), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+
+@bench_model.route('/get_modelos_por_linea_segmento_marca', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_modelos_por_linea_segmento_marca():
+    try:
+        codigo_linea = request.args.get('codigo_linea', type=int)
+        nombre_segmento = request.args.get('nombre_segmento', type=str)
+        codigo_marca = request.args.get('codigo_marca', type=int)
+
+        if not codigo_linea or not nombre_segmento or not codigo_marca:
+            return jsonify({"error": "Parámetros 'codigo_linea', 'nombre_segmento' y 'codigo_marca' requeridos"}), 400
+
+        resultados = db.session.query(
+            ModeloVersion.codigo_modelo_version,
+            ModeloVersion.nombre_modelo_version,
+            ModeloVersion.anio_modelo_version,
+            ModeloVersion.precio_producto_modelo,
+            ModeloComercial.nombre_modelo.label('nombre_modelo_comercial'),
+            Motor.nombre_motor,
+            TipoMotor.nombre_tipo,
+            Version.nombre_version,
+            Marca.nombre_marca,
+            Imagenes.path_imagen,
+        ) \
+        .join(ModeloComercial, (ModeloVersion.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
+                              (ModeloVersion.codigo_marca == ModeloComercial.codigo_marca)) \
+        .join(Segmento, (Segmento.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
+                        (Segmento.codigo_marca == ModeloComercial.codigo_marca)) \
+        .join(Motor, ModeloVersion.codigo_motor == Motor.codigo_motor) \
+        .join(TipoMotor, Motor.codigo_tipo_motor == TipoMotor.codigo_tipo_motor) \
+        .join(Version, ModeloVersion.codigo_version == Version.codigo_version) \
+        .join(Imagenes, ModeloVersion.codigo_imagen == Imagenes.codigo_imagen) \
+        .join(Marca, ModeloVersion.codigo_marca == Marca.codigo_marca) \
+        .filter(Segmento.codigo_linea == codigo_linea) \
+        .filter(func.upper(Segmento.nombre_segmento) == func.upper(nombre_segmento.strip())) \
+        .filter(ModeloVersion.codigo_marca == codigo_marca) \
+        .all()
+
+        modelos = [ {
+            "codigo_modelo_version": r[0],
+            "nombre_modelo_version": r[1],
+            "anio_modelo_version": r[2],
+            "precio_producto_modelo": r[3],
+            "nombre_modelo_comercial": r[4],
+            "nombre_motor": r[5],
+            "nombre_tipo": r[6],
+            "nombre_version": r[7],
+            "nombre_marca": r[8],
+            "path_imagen": r[9],
+        } for r in resultados]
+
+        return jsonify(modelos), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
