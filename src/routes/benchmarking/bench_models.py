@@ -578,10 +578,16 @@ def exportar_comparacion_xlsx():
             inicio_fusion = current_row
             for campo, datos in campos:
                 campo_formateado = campo.replace('_', ' ').upper()
-                fila = [categoria.upper(), campo_formateado, datos["base"]]
+                fila = [
+                    categoria.upper(),
+                    campo_formateado,
+                    datos["base"] if datos["base"] not in [None, ""] else "N/A"
+                ]
+
                 for val, icono in datos["comparables"]:
-                    fila.append(val)
+                    fila.append(val if val not in [None, ""] else "N/A")
                     fila.append(icono["icono"])
+
                 ws.append(fila)
                 row_idx = current_row
 
