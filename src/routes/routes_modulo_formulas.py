@@ -10,6 +10,7 @@ from src.config.database import db
 from sqlalchemy import text, and_, func
 from src.decorators import validate_json, handle_exceptions
 from src.enums import tipo_factor, operador, tipo_parametro, tipo_retorno
+from src.enums.validation import paquete_funcion_bd
 from src.models.custom_base import custom_base
 from src.models.modulo_formulas import st_proceso, st_formula_proceso, st_parametro_proceso, st_parametro_por_proceso, \
     st_factor_calculo_parametro, st_funcion, validar_cod, tg_sistema, st_parametro_funcion, validar_estado, \
@@ -1101,7 +1102,7 @@ def execute_funcion_bd(empresa, cod_funcion):
         mensaje = f'Función {cod_funcion} inexistente'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"PK_FORMULAS.EJECUTAR_FUNCION({empresa},'','','{cod_funcion}')"
+    sql = f"{paquete_funcion_bd.PROCESOS.value}.EJECUTAR_FUNCION({empresa},'','','{cod_funcion}')"
     match (funcion.tipo_retorno):
         case tipo_retorno.NUMERO.value:
             sql = f"{sql}.numero"
@@ -1130,7 +1131,7 @@ def execute_formula_bd(empresa, cod_formula):
         mensaje = f'Fórmula {cod_formula} inexistente'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"PK_FORMULAS.EJECUTAR_FORMULA({empresa}, '', '', '{cod_formula}')"
+    sql = f"{paquete_funcion_bd.PROCESOS.value}.EJECUTAR_FORMULA({empresa}, '', '', '{cod_formula}')"
     match (formula.tipo_retorno):
         case tipo_retorno.NUMERO.value:
             sql = f"{sql}.numero"
