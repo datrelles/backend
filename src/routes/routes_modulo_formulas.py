@@ -466,9 +466,8 @@ def put_parametro_por_proceso(empresa, cod_proceso, cod_parametro, data):
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     parametro_x_proceso.orden_calculo = data.get('orden_calculo')
-    estado = validar_estado('estado', data.get('estado'), False)
-    if estado:
-        parametro_x_proceso.estado = estado
+    if data.get('estado') is not None:
+        parametro_x_proceso.estado = data['estado']
     cod_formula = validar_cod('cod_formula', data.get('cod_formula'), False)
     if cod_formula:
         if not db.session.get(st_formula_proceso, (empresa, cod_formula)):
