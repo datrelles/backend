@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 import re
-import pandas as pd
+# import pandas as pd
 import unicodedata
 from flask import request, Blueprint, jsonify
 from flask_cors import cross_origin
