@@ -1,7 +1,6 @@
 import logging
 from datetime import datetime
 import re
-import pandas as pd
 import unicodedata
 from flask import request, Blueprint, jsonify
 from flask_cors import cross_origin
@@ -1648,17 +1647,18 @@ def insert_modelo_version():
 @jwt_required()
 def insert_modelo_version_masivo():
     try:
-        if 'file' not in request.files:
-            return jsonify({"error": "Archivo no proporcionado"}), 400
+        data = request.get_json()
 
-        file = request.files['file']
-        df = pd.read_excel(file)
+        if not isinstance(data, list):
+            return jsonify({"error": "Formato inválido. Se esperaba un array de objetos"}), 400
 
         insertados = 0
         errores = []
 
-        for idx, (_, row) in enumerate(df.iterrows()):
+        def normalize_string(val):
+            return str(val).strip().upper() if val is not None else ""
 
+        for idx, row_data in enumerate(data):
             try:
                 campos_obligatorios = [
                     "codigo_dim_peso", "descripcion_imagen", "codigo_electronica",
@@ -1668,86 +1668,98 @@ def insert_modelo_version_masivo():
                     "precio_producto_modelo", "precio_venta_distribuidor"
                 ]
 
-                faltantes = [campo for campo in campos_obligatorios if pd.isna(row.get(campo)) or str(row[campo]).strip() == '']
+                faltantes = [campo for campo in campos_obligatorios if
+                             row_data.get(campo) is None or str(row_data[campo]).strip() == '']
                 if faltantes:
                     errores.append({
-                        "fila": int(idx) + 2,
+                        "fila": idx + 1,
                         "error": f"Campos obligatorios faltantes: {', '.join(faltantes)}",
-                        "datos": row.to_dict()
+                        "datos": row_data
                     })
                     continue
 
-                try:
-                    anio = int(row["anio_modelo_version"])
-                    if anio < 1950 or anio > 2100:
-                        errores.append({"fila": int(idx) + 2, "error": "Año fuera de rango (1950-2100)"})
-                        continue
-                except Exception:
-                    errores.append({"fila": int(idx) + 2, "error": "Año inválido"})
+                anio = int(row_data["anio_modelo_version"])
+                if anio < 1950 or anio > 2100:
+                    errores.append({"fila": idx + 1, "error": "Año fuera de rango (1950-2100)"})
                     continue
 
-                try:
-                    precio_producto = float(str(row["precio_producto_modelo"]).replace(',', '.'))
-                    precio_venta = float(str(row["precio_venta_distribuidor"]).replace(',', '.'))
-                except Exception:
-                    errores.append({"fila": int(idx) + 2, "error": "Precios inválidos"})
-                    continue
+                precio_producto = float(str(row_data["precio_producto_modelo"]).replace(',', '.'))
+                precio_venta = float(str(row_data["precio_venta_distribuidor"]).replace(',', '.'))
 
-                motor = db.session.query(Motor).filter_by(codigo_motor=row["codigo_motor"]).first()
+                motor = db.session.query(Motor).filter_by(codigo_motor=row_data["codigo_motor"]).first()
                 if not motor:
-                    errores.append({"fila": int(idx) + 2, "error": "Motor no encontrado"})
+                    errores.append({"fila": idx + 1, "error": "Motor no encontrado"})
                     continue
                 codigo_tipo_motor = motor.codigo_tipo_motor
 
-                imagen = db.session.query(Imagenes).filter_by(descripcion_imagen=row["descripcion_imagen"]).first()
+                imagen = db.session.query(Imagenes).filter(
+                    db.func.upper(db.func.trim(Imagenes.descripcion_imagen)) == normalize_string(
+                        row_data["descripcion_imagen"])
+                ).first()
                 if not imagen:
-                    errores.append({"fila": int(idx) + 2, "error": "Imagen no encontrada"})
+                    errores.append({"fila": idx + 1, "error": "Imagen no encontrada"})
                     continue
 
-                transmision = db.session.query(Transmision).filter_by(caja_cambios=row["caja_cambios"]).first()
+                transmision = db.session.query(Transmision).filter(
+                    db.func.upper(db.func.trim(Transmision.caja_cambios)) == normalize_string(row_data["caja_cambios"])
+                ).first()
                 if not transmision:
-                    errores.append({"fila": int(idx) + 2, "error": "Transmisión no encontrada"})
+                    errores.append({"fila": idx + 1, "error": "Transmisión no encontrada"})
                     continue
 
-                color = db.session.query(Color).filter_by(nombre_color=row["nombre_color"]).first()
+                color = db.session.query(Color).filter(
+                    db.func.upper(db.func.trim(Color.nombre_color)) == normalize_string(row_data["nombre_color"])
+                ).first()
                 if not color:
-                    errores.append({"fila": int(idx) + 2, "error": "Color no encontrado"})
+                    errores.append({"fila": idx + 1, "error": "Color no encontrado"})
                     continue
 
-                modelo = db.session.query(ModeloComercial).filter_by(nombre_modelo=row["nombre_modelo"]).first()
+                modelo = db.session.query(ModeloComercial).filter(
+                    db.func.upper(db.func.trim(ModeloComercial.nombre_modelo)) == normalize_string(
+                        row_data["nombre_modelo"])
+                ).first()
                 if not modelo:
-                    errores.append({"fila": int(idx) + 2, "error": "Modelo comercial no encontrado"})
+                    errores.append({"fila": idx + 1, "error": "Modelo comercial no encontrado"})
                     continue
                 codigo_modelo_comercial = modelo.codigo_modelo_comercial
                 codigo_marca = modelo.codigo_marca
 
-                version = db.session.query(Version).filter_by(nombre_version=row["nombre_version"]).first()
+                nombre_version = str(row_data["nombre_version"]).strip().upper()
+                version = db.session.query(Version).filter(
+                    db.func.upper(db.func.trim(Version.nombre_version)) == nombre_version
+                ).first()
+
                 if not version:
-                    errores.append({"fila": int(idx) + 2, "error": "Versión no encontrada"})
+                    errores.append({
+                        "fila": idx + 1,
+                        "error": f"Versión '{row_data['nombre_version']}' no encontrada",
+                        "datos": row_data
+                    })
                     continue
 
-                cliente = db.session.query(ClienteCanal).filter_by(codigo_cliente_canal=row["codigo_cliente_canal"]).first()
+                cliente = db.session.query(ClienteCanal).filter_by(
+                    codigo_cliente_canal=row_data["codigo_cliente_canal"]).first()
                 if not cliente:
-                    errores.append({"fila": int(idx) + 2, "error": "Cliente canal no encontrado"})
+                    errores.append({"fila": idx + 1, "error": "Cliente canal no encontrado"})
                     continue
 
                 nuevo = ModeloVersion(
-                    codigo_dim_peso=row["codigo_dim_peso"],
+                    codigo_dim_peso=row_data["codigo_dim_peso"],
                     codigo_imagen=imagen.codigo_imagen,
-                    codigo_electronica=row["codigo_electronica"],
-                    codigo_motor=row["codigo_motor"],
+                    codigo_electronica=row_data["codigo_electronica"],
+                    codigo_motor=row_data["codigo_motor"],
                     codigo_tipo_motor=codigo_tipo_motor,
                     codigo_transmision=transmision.codigo_transmision,
                     codigo_color_bench=color.codigo_color_bench,
-                    codigo_chasis=row["codigo_chasis"],
+                    codigo_chasis=row_data["codigo_chasis"],
                     codigo_modelo_comercial=codigo_modelo_comercial,
                     codigo_marca=codigo_marca,
-                    codigo_cliente_canal=row["codigo_cliente_canal"],
+                    codigo_cliente_canal=row_data["codigo_cliente_canal"],
                     codigo_mod_vers_repuesto=cliente.codigo_mod_vers_repuesto,
                     empresa=cliente.empresa,
                     cod_producto=cliente.cod_producto,
                     codigo_version=version.codigo_version,
-                    nombre_modelo_version=row["nombre_modelo_version"],
+                    nombre_modelo_version=row_data["nombre_modelo_version"],
                     anio_modelo_version=anio,
                     precio_producto_modelo=precio_producto,
                     precio_venta_distribuidor=precio_venta
@@ -1757,7 +1769,7 @@ def insert_modelo_version_masivo():
                 insertados += 1
 
             except Exception as err:
-                errores.append({"fila": int(idx) + 2, "error": str(err), "datos": row.to_dict()})
+                errores.append({"fila": idx + 1, "error": str(err), "datos": row_data})
 
         db.session.commit()
         return jsonify({"insertados": insertados, "errores": errores})
