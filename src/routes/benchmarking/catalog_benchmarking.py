@@ -1697,21 +1697,33 @@ def insert_modelo_version_masivo():
                         row_data["descripcion_imagen"])
                 ).first()
                 if not imagen:
-                    errores.append({"fila": idx + 1, "error": "Imagen no encontrada"})
+                    errores.append({
+                        "fila": idx + 1,
+                        "error": f"Imagen '{row_data['descripcion_imagen']}' no encontrada",
+                        "datos": row_data
+                    })
                     continue
 
                 transmision = db.session.query(Transmision).filter(
                     db.func.upper(db.func.trim(Transmision.caja_cambios)) == normalize_string(row_data["caja_cambios"])
                 ).first()
                 if not transmision:
-                    errores.append({"fila": idx + 1, "error": "Transmisión no encontrada"})
+                    errores.append({
+                        "fila": idx + 1,
+                        "error": f"Transmisión '{row_data['caja_cambios']}' no encontrada",
+                        "datos": row_data
+                    })
                     continue
 
                 color = db.session.query(Color).filter(
                     db.func.upper(db.func.trim(Color.nombre_color)) == normalize_string(row_data["nombre_color"])
                 ).first()
                 if not color:
-                    errores.append({"fila": idx + 1, "error": "Color no encontrado"})
+                    errores.append({
+                        "fila": idx + 1,
+                        "error": f"Color '{row_data['nombre_color']}' no encontrado",
+                        "datos": row_data
+                    })
                     continue
 
                 modelo = db.session.query(ModeloComercial).filter(
@@ -1719,7 +1731,11 @@ def insert_modelo_version_masivo():
                         row_data["nombre_modelo"])
                 ).first()
                 if not modelo:
-                    errores.append({"fila": idx + 1, "error": "Modelo comercial no encontrado"})
+                    errores.append({
+                        "fila": idx + 1,
+                        "error": f"Modelo Comercial '{row_data['nombre_modelo']}' no encontrado",
+                        "datos": row_data
+                    })
                     continue
                 codigo_modelo_comercial = modelo.codigo_modelo_comercial
                 codigo_marca = modelo.codigo_marca
