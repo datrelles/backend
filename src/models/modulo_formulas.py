@@ -442,3 +442,50 @@ class st_modelo_comercial():
             "marca": self.marca,
             "nombre": self.nombre
         }
+
+
+class st_version_proyeccion(custom_base):
+    __tablename__ = 'st_version_proyeccion'
+    __table_args__ = {'schema': schema_name}
+
+    empresa = Column(NUMBER(precision=2), primary_key=True)
+    cod_version = Column(NUMBER(precision=22), primary_key=True)
+    nombre = Column(VARCHAR(100), nullable=False)
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+    audit_usuario_mod = Column(VARCHAR(30))
+    audit_fecha_mod = Column(DateTime)
+
+    @validates('empresa')
+    def validar_empresa(self, key, value):
+        return validar_empresa(key, value)
+
+    @validates('cod_version')
+    def validar_cod_version(self, key, value):
+        return validar_number(key, value, 22)
+
+    @validates('nombre')
+    def validar_nombre(self, key, value):
+        return validar_varchar(key, value, 100)
+
+
+class st_proyeccion_ppp(custom_base):
+    __tablename__ = 'st_proyeccion_ppp'
+    __table_args__ = {'schema': schema_name}
+
+    empresa = Column(NUMBER(precision=2), primary_key=True)
+    cod_version = Column(NUMBER(precision=22), primary_key=True)
+    cod_proceso = Column(VARCHAR(8), primary_key=True)
+    cod_parametro = Column(VARCHAR(8), primary_key=True)
+    cod_modelo_comercial = Column(NUMBER(precision=14), primary_key=True)
+    cod_marca = Column(NUMBER(precision=14), primary_key=True)
+    cod_cliente = Column(VARCHAR(14), primary_key=True)
+    anio = Column(NUMBER(precision=4), primary_key=True)
+    mes = Column(NUMBER(precision=2), primary_key=True)
+    numero = Column(NUMBER(precision=22, scale=8))
+    texto = Column(VARCHAR(1000))
+    fecha = Column(DateTime)
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+    audit_usuario_mod = Column(VARCHAR(30))
+    audit_fecha_mod = Column(DateTime)

@@ -19,6 +19,9 @@ def handle_exceptions(action):
             except validation_error as e:
                 logger.exception(e)
                 return jsonify({'mensaje': str(e)}), 400
+            except TypeError as e:
+                logger.exception(e)
+                return jsonify({'mensaje': 'Los parámetros provistos al recurso de la API son incorrectos'}), 400
             except SQLAlchemyError as e:
                 db.session.rollback()
                 status_code = 500

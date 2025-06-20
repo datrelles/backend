@@ -14,7 +14,7 @@ from src.enums.validation import paquete_funcion_bd
 from src.models.custom_base import custom_base
 from src.models.modulo_formulas import st_proceso, st_formula_proceso, st_parametro_proceso, st_parametro_por_proceso, \
     st_factor_calculo_parametro, st_funcion, validar_cod, tg_sistema, st_parametro_funcion, validar_estado, \
-    st_cliente_procesos, st_modelo_comercial
+    st_cliente_procesos, st_modelo_comercial, st_version_proyeccion, st_proyeccion_ppp
 from src.validations import validar_varchar, validar_number
 from src.models.users import Empresa
 from src.models.clientes import Cliente
@@ -1357,3 +1357,36 @@ def get_modelos_motos_proyecciones(empresa):
     modelos = [st_modelo_comercial(row.codigo_modelo_comercial, row.nombre_marca, row.nombre_modelo).to_dict() for row
                in result]
     return jsonify(modelos)
+
+
+@formulas_b.route("/empresas/<empresa>/versiones/<cod_version>/procesos/<cod_proceso>/proyeccion", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar la proyección")
+def get_proyeccion(empresa, cod_version, cod_proceso):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_version = validar_number('cod_version', cod_version, 22)
+    cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
+        mensaje = f'Versión {cod_version} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_proceso, (empresa, cod_proceso)):
+        mensaje = f'Proceso {cod_proceso} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    query = st_proyeccion_ppp.query()
+    datos = query.filter(st_proyeccion_ppp.empresa == empresa, st_proyeccion_ppp.cod_version == cod_version,
+                         st_proyeccion_ppp.cod_proceso == cod_proceso).order_by(st_proyeccion_ppp.cod_parametro,
+                                                                                st_proyeccion_ppp.cod_modelo_comercial,
+                                                                                st_proyeccion_ppp.cod_marca,
+                                                                                st_proyeccion_ppp.cod_cliente,
+                                                                                st_proyeccion_ppp.anio,
+                                                                                st_proyeccion_ppp.mes).all()
+    return jsonify(st_proyeccion_ppp.to_list(datos))
+
+# /empresas/<empresa>/versiones/<cod_version>/procesos/<cod_proceso>/parametros/<cod_parametro>/modelos/<cod_modelo>/marcas/<cod_marca>/clientes/<cod_cliente>/anios/<anio>/meses/<mes>
