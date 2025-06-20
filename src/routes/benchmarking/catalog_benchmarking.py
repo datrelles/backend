@@ -3207,7 +3207,6 @@ def update_segmento(codigo_segmento):
         segmento.nombre_segmento = data.get('nombre_segmento')
         segmento.descripcion_segmento = data.get('descripcion_segmento', '')
         segmento.estado_segmento = data.get('estado_segmento')
-
         segmento.fecha_modificacion = datetime.now()
         segmento.usuario_modifica = get_jwt_identity()
 
@@ -3215,6 +3214,12 @@ def update_segmento(codigo_segmento):
         return jsonify({"message": "Segmento actualizado correctamente"})
     except Exception as e:
         db.session.rollback()
+
+        if "ORA-00001" in str(e) and "UQ_ST_SEGMENTO_NOMBRE_ANIO" in str(e):
+            return jsonify({
+                "error": "No se pudo actualizar el segmento. Ya existe otro con el mismo nombre y año."
+            }), 400
+
         return jsonify({"error": str(e)}), 500
 
 @bench.route('/update_modelo_version/<int:codigo_modelo_version>', methods=["PUT"])
@@ -3479,6 +3484,103 @@ def update_modelos_comerciales_masivo():
 
         return jsonify({
             "message": f"{actualizados} modelo(s) comercial(es) actualizado(s) correctamente.",
+            "errores": errores
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_segmentos_masivo', methods=["PUT"])
+@jwt_required()
+def update_segmentos_masivo():
+    try:
+        user = get_jwt_identity()
+        data = request.get_json()
+        registros = data if isinstance(data, list) else [data]
+
+        errores = []
+        actualizados = 0
+
+        def normalizar(texto):
+            return unidecode(str(texto or "")).strip().lower()
+
+        lineas = db.session.query(Linea).all()
+        modelos = db.session.query(ModeloComercial).all()
+
+        for idx, row in enumerate(registros):
+            try:
+                codigo_segmento = row.get("codigo_segmento")
+                nombre_linea = row.get("nombre_linea")
+                nombre_modelo = row.get("nombre_modelo")
+                nombre_segmento = str(row.get("nombre_segmento", "")).strip()
+                estado_raw = str(row.get("estado_segmento", "")).strip().lower()
+                descripcion_segmento = str(row.get("descripcion_segmento", "")).strip()
+
+                if not codigo_segmento or not nombre_linea or not nombre_modelo:
+                    errores.append(f"Fila {idx + 2}: Datos obligatorios faltantes")
+                    continue
+
+                estado_segmento = (
+                    1 if estado_raw == "activo" else
+                    0 if estado_raw == "inactivo" else
+                    None
+                )
+                if estado_segmento is None:
+                    errores.append(f"Fila {idx + 2}: Estado inválido '{estado_raw}'")
+                    continue
+
+                # Buscar segmento
+                segmento = db.session.query(Segmento).filter_by(codigo_segmento=codigo_segmento).first()
+                if not segmento:
+                    errores.append(f"Fila {idx + 2}: Segmento con código {codigo_segmento} no encontrado")
+                    continue
+
+                # Buscar línea
+                linea = next(
+                    (l for l in lineas if normalizar(l.nombre_linea) == normalizar(nombre_linea)),
+                    None
+                )
+                if not linea:
+                    errores.append(f"Fila {idx + 2}: Línea '{nombre_linea}' no encontrada")
+                    continue
+
+                # Buscar modelo comercial
+                modelo = next(
+                    (m for m in modelos if normalizar(m.nombre_modelo) == normalizar(nombre_modelo)),
+                    None
+                )
+                if not modelo:
+                    errores.append(f"Fila {idx + 2}: Modelo '{nombre_modelo}' no encontrado")
+                    continue
+
+                # Actualizar campos
+                segmento.nombre_segmento = nombre_segmento
+                segmento.estado_segmento = estado_segmento
+                segmento.descripcion_segmento = descripcion_segmento
+                segmento.codigo_linea = linea.codigo_linea
+                segmento.codigo_modelo_comercial = modelo.codigo_modelo_comercial
+                segmento.codigo_marca = modelo.codigo_marca
+                segmento.usuario_modifica = user
+                segmento.fecha_modificacion = datetime.now()
+
+                actualizados += 1
+
+            except Exception as e:
+                errores.append(f"Fila {idx + 2}: Error inesperado - {str(e)}")
+
+                if "ORA-00001" in str(e) and "UQ_ST_SEGMENTO_NOMBRE_ANIO" in str(e):
+                    errores.append(
+                        f"Fila {idx + 2}: No se pudo actualizar. Ya existe otro segmento con el mismo nombre y año.")
+                else:
+                    errores.append(f"Fila {idx + 2}: Error inesperado - {str(e)}")
+
+                continue
+
+        db.session.commit()
+
+        return jsonify({
+            "message": f"{actualizados} segmento(s) actualizado(s) correctamente.",
             "errores": errores
         }), 200
 
