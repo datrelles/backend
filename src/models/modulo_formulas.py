@@ -491,3 +491,15 @@ class st_proyeccion_ppp(custom_base):
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
     audit_fecha_mod = Column(DateTime)
+
+    @validates('numero')
+    def validar_numero(self, key, value):
+        return validar_number(key, value, 22, 8, es_requerido=False)
+
+    @validates('texto')
+    def validar_texto(self, key, value):
+        return validar_varchar(key, value, 100, es_requerido=False)
+
+    @validates('fecha')
+    def validar_fecha(self, key, value):
+        return validar_fecha(key, value, 100, es_requerido=False)
