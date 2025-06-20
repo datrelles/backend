@@ -3587,3 +3587,70 @@ def update_segmentos_masivo():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+
+@bench.route('/update_modelo_sri_masivo', methods=["PUT"])
+@jwt_required()
+def update_modelo_sri_masivo():
+    try:
+        data = request.get_json()
+        user = get_jwt_identity()
+
+        if not isinstance(data, list):
+            return jsonify({"error": "Se esperaba una lista de modelos para actualizar"}), 400
+
+        errores = []
+        for item in data:
+            try:
+
+                codigo_modelo_sri = item.get("codigo_modelo_sri")
+                if not codigo_modelo_sri:
+                    errores.append("Modelo sin código_modelo_sri")
+                    continue
+
+                modelo = db.session.query(ModeloSRI).filter_by(codigo_modelo_sri=codigo_modelo_sri).first()
+                if not modelo:
+                    errores.append(f"Modelo no encontrado: {codigo_modelo_sri}")
+                    continue
+
+                nombre = item.get("nombre_modelo")
+                anio = item.get("anio_modelo")
+                estado = item.get("estado_modelo")
+                cod_mdl_importacion = item.get("cod_mdl_importacion")
+
+                if nombre and nombre.strip().lower() != modelo.nombre_modelo.strip().lower():
+                    existe_nombre = db.session.query(ModeloSRI).filter(
+                        func.lower(ModeloSRI.nombre_modelo) == nombre.strip().lower(),
+                        ModeloSRI.anio_modelo == modelo.anio_modelo,
+                        ModeloSRI.codigo_modelo_sri != codigo_modelo_sri
+                    ).first()
+                    if existe_nombre:
+                        errores.append(
+                            f"Ya existe otro modelo con el nombre '{nombre}' y el año '{modelo.anio_modelo}' (Modelo: {codigo_modelo_sri})"
+                        )
+                        continue
+                    modelo.nombre_modelo = nombre.strip()
+                if cod_mdl_importacion is not None:
+                    modelo.cod_mdl_importacion = cod_mdl_importacion
+
+                if anio and (1950 <= int(anio) <= 2100):
+                    modelo.anio_modelo = int(anio)
+
+                if estado in [0, 1]:
+                    modelo.estado_modelo = estado
+
+                modelo.usuario_modifica = user
+                modelo.fecha_modificacion = datetime.now()
+
+            except Exception as e:
+                errores.append(f"Error con el modelo {codigo_modelo_sri}: {str(e)}")
+                continue
+        db.session.commit()
+
+        if errores:
+            return jsonify({"message": "Actualización masiva completada con errores", "errores": errores}), 207
+        return jsonify({"message": "Actualización masiva exitosa"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Error general: {str(e)}"}), 500
