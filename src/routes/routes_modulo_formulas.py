@@ -22,7 +22,7 @@ from src.models.clientes import Cliente
 formulas_b = Blueprint('routes_formulas', __name__)
 logger = logging.getLogger(__name__)
 
-CODIGO_MARCA_PROPIA = 94
+CODIGOS_MARCAS_PROPIAS = [94]
 
 
 @formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>", methods=["GET"])
@@ -1348,13 +1348,16 @@ def get_modelos_motos_proyecciones(empresa):
         mensaje = f'Empresa {empresa} inexistente'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = ("SELECT mo.codigo_modelo_comercial, ma.nombre_marca, mo.nombre_modelo "
-           "FROM ST_MARCA ma, ST_MODELO_COMERCIAL mo "
-           "WHERE ma.codigo_marca     =    :codigo_marca "
-           "AND mo.codigo_marca       =    ma.codigo_marca "
-           "GROUP BY mo.codigo_modelo_comercial, ma.nombre_marca, mo.nombre_modelo")
-    result = st_modelo_comercial.execute_sql(sql, False, {"codigo_marca": CODIGO_MARCA_PROPIA})
-    modelos = [st_modelo_comercial(row.codigo_modelo_comercial, row.nombre_marca, row.nombre_modelo).to_dict() for row
+    codigos_marcas = '(' + ','.join(map(str, CODIGOS_MARCAS_PROPIAS)) + ')'
+    sql = ("SELECT mo.codigo_modelo_comercial, ma.codigo_marca, ma.nombre_marca, mo.nombre_modelo "
+           "FROM ST_MARCA ma "
+           "INNER JOIN ST_MODELO_COMERCIAL mo "
+           "ON mo.codigo_marca = ma.codigo_marca "
+           f"WHERE ma.codigo_marca IN {codigos_marcas} "
+           "GROUP BY mo.codigo_modelo_comercial, ma.codigo_marca, ma.nombre_marca, mo.nombre_modelo")
+    result = st_modelo_comercial.execute_sql(sql, False)
+    modelos = [st_modelo_comercial(row.codigo_modelo_comercial, row.codigo_marca, row.nombre_marca,
+                                   row.nombre_modelo).to_dict() for row
                in result]
     return jsonify(modelos)
 

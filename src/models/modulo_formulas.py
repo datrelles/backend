@@ -424,8 +424,9 @@ class st_cliente_procesos(custom_base):
 
 
 class st_modelo_comercial():
-    def __init__(self, codigo, marca, nombre):
+    def __init__(self, codigo, codigo_marca, marca, nombre):
         self.codigo = codigo
+        self.codigo_marca = codigo_marca
         self.marca = marca
         self.nombre = nombre
 
@@ -439,6 +440,7 @@ class st_modelo_comercial():
     def to_dict(self):
         return {
             "codigo": self.codigo,
+            "codigo_marca": self.codigo_marca,
             "marca": self.marca,
             "nombre": self.nombre
         }
