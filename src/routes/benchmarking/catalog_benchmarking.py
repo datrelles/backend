@@ -3706,3 +3706,77 @@ def update_dimemsiones_masivo():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Error general: {str(e)}"}), 500
+
+@bench.route('/update_electronica_masivo', methods=["PUT"])
+@jwt_required()
+def update_electronica_masivo():
+    try:
+        def normalize(value):
+            return (value or '').strip().lower()
+
+        user = get_jwt_identity()
+        data = request.json
+
+        if not isinstance(data, list):
+            return jsonify({"error": "Se esperaba una lista para actualizar"}), 400
+
+        errores = []
+        filas_duplicadas = []
+
+        for idx, item in enumerate(data, start=2):
+            try:
+                codigo_electronica = item.get("codigo_electronica")
+                if not codigo_electronica:
+                    errores.append(f"Falta 'codigo_electronica' en fila {idx}")
+                    continue
+
+                registro = db.session.query(ElectronicaOtros).get(codigo_electronica)
+                if not registro:
+                    errores.append(f"Registro no encontrado en fila {idx}")
+                    continue
+
+                with db.session.no_autoflush:
+                    duplicado = db.session.query(ElectronicaOtros).filter(
+                        func.lower(func.trim(ElectronicaOtros.capacidad_combustible)) == normalize(item.get("capacidad_combustible")),
+                        func.lower(func.trim(ElectronicaOtros.tablero)) == normalize(item.get("tablero")),
+                        func.lower(func.trim(ElectronicaOtros.luces_delanteras)) == normalize(item.get("luces_delanteras")),
+                        func.lower(func.trim(ElectronicaOtros.luces_posteriores)) == normalize(item.get("luces_posteriores")),
+                        func.lower(func.trim(ElectronicaOtros.garantia)) == normalize(item.get("garantia")),
+                        func.lower(func.trim(ElectronicaOtros.velocidad_maxima)) == normalize(item.get("velocidad_maxima")),
+                        ElectronicaOtros.codigo_electronica != codigo_electronica
+                    ).first()
+
+                if duplicado:
+                    filas_duplicadas.append(idx)
+                    continue
+
+                # Actualizar campos
+                registro.capacidad_combustible = item.get("capacidad_combustible")
+                registro.tablero = item.get("tablero")
+                registro.luces_delanteras = item.get("luces_delanteras")
+                registro.luces_posteriores = item.get("luces_posteriores")
+                registro.garantia = item.get("garantia")
+                registro.velocidad_maxima = item.get("velocidad_maxima")
+                registro.usuario_modifica = user
+                registro.fecha_modificacion = datetime.now()
+
+            except Exception as e:
+                errores.append(f"Error en fila {idx}: {str(e)}")
+
+        db.session.commit()
+
+        if filas_duplicadas:
+            return jsonify({
+                "error": "Registros duplicados detectados",
+                "filas_duplicadas": filas_duplicadas}), 409
+
+        if errores:
+            return jsonify({
+                "message": "Actualización masiva completada con errores",
+                "errores": errores}), 207
+
+        return jsonify({"message": "Actualización masiva exitosa"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Error general: {str(e)}"}), 500
