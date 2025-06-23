@@ -15,7 +15,7 @@ from src.models.custom_base import custom_base
 from src.models.modulo_formulas import st_proceso, st_formula_proceso, st_parametro_proceso, st_parametro_por_proceso, \
     st_factor_calculo_parametro, st_funcion, validar_cod, tg_sistema, st_parametro_funcion, validar_estado, \
     st_cliente_procesos, st_modelo_comercial, st_version_proyeccion, st_proyeccion_ppp
-from src.validations import validar_varchar, validar_number
+from src.validations import validar_varchar, validar_number, validar_fecha
 from src.models.users import Empresa
 from src.models.clientes import Cliente
 
@@ -1504,7 +1504,7 @@ def put_proyeccion(empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_
                                  cod_cliente,
                                  anio, mes))
     if not proyeccion:
-        mensaje = f'No existe la proyección especificada ({cod_parametro}, {cod_modelo_comercial}, {cod_marca}, {cod_cliente}, {anio}, {mes})'
+        mensaje = f'No existe la proyección especificada ({empresa}, {cod_parametro}, {cod_modelo_comercial}, {cod_marca}, {cod_cliente}, {anio}, {mes})'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if data.get('numero') is None and data.get('texto') is None and data.get('fecha') is None:
@@ -1513,11 +1513,11 @@ def put_proyeccion(empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_
         return jsonify({'mensaje': mensaje}), 404
     valor = None
     if data.get('numero') is not None:
-        valor = data['numero']
+        valor = validar_number('numero', data['numero'], 22, 8)
     elif data.get('texto') is not None:
-        valor = data['texto']
+        valor = validar_varchar('texto', data['texto'], 1000)
     else:
-        valor = data['fecha']
+        valor = validar_fecha('fecha', data['fecha'])
     sql = f"CALL PK_PROCESOS.ACTUALIZAR_PROYECCION({empresa}, {cod_version}, '{cod_proceso}', '{cod_parametro}', {cod_modelo_comercial}, {cod_marca}, '{cod_cliente}', {anio}, {mes}, '{valor}')"
     custom_base.execute_sql(sql, es_escalar=False)
     mensaje = f'Se actualizó la proyección con el valor {valor}'
