@@ -7,7 +7,7 @@ import logging
 from sqlalchemy.orm import aliased
 
 from src.config.database import db
-from sqlalchemy import text, and_, func
+from sqlalchemy import text, and_, func, asc, desc
 from src.decorators import validate_json, handle_exceptions
 from src.enums import tipo_factor, operador, tipo_parametro, tipo_retorno
 from src.enums.validation import paquete_funcion_bd
@@ -1382,15 +1382,43 @@ def get_proyeccion(empresa, cod_version, cod_proceso):
         mensaje = f'Proceso {cod_proceso} inexistente'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    query = st_proyeccion_ppp.query()
-    datos = query.filter(st_proyeccion_ppp.empresa == empresa, st_proyeccion_ppp.cod_version == cod_version,
-                         st_proyeccion_ppp.cod_proceso == cod_proceso).order_by(st_proyeccion_ppp.cod_parametro,
-                                                                                st_proyeccion_ppp.cod_modelo_comercial,
-                                                                                st_proyeccion_ppp.cod_marca,
-                                                                                st_proyeccion_ppp.cod_cliente,
-                                                                                st_proyeccion_ppp.anio,
-                                                                                st_proyeccion_ppp.mes).all()
-    return jsonify(st_proyeccion_ppp.to_list(datos))
+    inicio = (
+        db.session.query(st_proyeccion_ppp.anio, st_proyeccion_ppp.mes)
+        .filter(
+            st_proyeccion_ppp.empresa == empresa,
+            st_proyeccion_ppp.cod_version == cod_version,
+            st_proyeccion_ppp.cod_proceso == cod_proceso
+        )
+        .order_by(asc(st_proyeccion_ppp.anio), asc(st_proyeccion_ppp.mes))
+        .limit(1)
+        .first()
+    )
+    fin = (
+        db.session.query(st_proyeccion_ppp.anio, st_proyeccion_ppp.mes)
+        .filter(
+            st_proyeccion_ppp.empresa == empresa,
+            st_proyeccion_ppp.cod_version == cod_version,
+            st_proyeccion_ppp.cod_proceso == cod_proceso
+        )
+        .order_by(desc(st_proyeccion_ppp.anio), desc(st_proyeccion_ppp.mes))
+        .limit(1)
+        .first()
+    )
+    query = st_proyeccion_ppp.query().filter(st_proyeccion_ppp.empresa == empresa,
+                                             st_proyeccion_ppp.cod_version == cod_version,
+                                             st_proyeccion_ppp.cod_proceso == cod_proceso)
+    datos = query.order_by(st_proyeccion_ppp.cod_parametro,
+                           st_proyeccion_ppp.cod_modelo_comercial,
+                           st_proyeccion_ppp.cod_marca,
+                           st_proyeccion_ppp.cod_cliente,
+                           st_proyeccion_ppp.anio,
+                           st_proyeccion_ppp.mes).all()
+    if not datos:
+        return '', 204
+    anio_inicio, mes_inicio = inicio
+    anio_fin, mes_fin = fin
+    return jsonify({"anio_inicio": anio_inicio, "mes_inicio": mes_inicio, "anio_fin": anio_fin, "mes_fin": mes_fin,
+                    "datos": st_proyeccion_ppp.to_list(datos)})
 
 
 @formulas_b.route("/empresas/<empresa>/versiones/<cod_version>/proyecciones/procesos/<cod_proceso>", methods=["POST"])
