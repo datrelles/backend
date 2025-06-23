@@ -3641,9 +3641,12 @@ def update_modelo_sri_masivo():
                 modelo.usuario_modifica = user
                 modelo.fecha_modificacion = datetime.now()
 
-            except Exception as e:
-                errores.append(f"Error con el modelo {codigo_modelo_sri}: {str(e)}")
-                continue
+            except IntegrityError as e:
+                db.session.rollback()
+                return jsonify({
+                    "error": "Violación de restricción única: hay registros duplicados",
+                    "detalle": str(e.orig)
+                }), 409
         db.session.commit()
 
         if errores:
@@ -3687,15 +3690,11 @@ def update_dimemsiones_masivo():
                 dimension.usuario_modifica = user
                 dimension.fecha_modificacion = datetime.now()
 
-            except Exception as e:
-                errores.append(f"Error con el registro {codigo_dim_peso}: {str(e)}")
-
             except IntegrityError as e:
                 db.session.rollback()
                 return jsonify({
                     "error": "Violación de restricción única: hay registros duplicados",
-                    "detalle": str(e.orig)
-                }), 409
+                    "detalle": str(e.orig)}), 409
 
         db.session.commit()
 
