@@ -1393,7 +1393,40 @@ def get_proyeccion(empresa, cod_version, cod_proceso):
     return jsonify(st_proyeccion_ppp.to_list(datos))
 
 
-#
+@formulas_b.route("/empresas/<empresa>/versiones/<cod_version>/proyecciones/procesos/<cod_proceso>", methods=["POST"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("ejecutar la proyección")
+def post_proyeccion(empresa, cod_version, cod_proceso, data):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_version = validar_number('cod_version', cod_version, 22)
+    cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
+        mensaje = f'Versión {cod_version} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_proceso, (empresa, cod_proceso)):
+        mensaje = f'Proceso {cod_proceso} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    anio_inicio, mes_inicio, anio_fin, mes_fin = data.get('anio_inicio'), data.get('mes_inicio'), data.get(
+        'anio_fin'), data.get('mes_fin')
+    if anio_inicio is None or mes_inicio is None or anio_fin is None or mes_fin is None:
+        mensaje = "Se requieren el año y mes de inicio y el año y mes de fin"
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    sql = f"CALL PK_PROCESOS.EJECUTAR_PROYECCION({empresa}, {cod_version}, '{cod_proceso}', {anio_inicio}, {mes_inicio}, {anio_fin}, {mes_fin})"
+    custom_base.execute_sql(sql, es_escalar=False)
+    mensaje = f'Se ejecutó la proyección'
+    logger.info(mensaje)
+    return '', 204
+
+
 @formulas_b.route(
     "/empresas/<empresa>/versiones/<cod_version>/proyecciones/procesos/<cod_proceso>/parametros/<cod_parametro>/modelos/<cod_modelo_comercial>/marcas/<cod_marca>/clientes/<cod_cliente>/anios/<anio>/meses/<mes>",
     methods=["PUT"])
