@@ -1,5 +1,5 @@
 from sqlalchemy import Column, DateTime, Index, VARCHAR, text, Integer, PrimaryKeyConstraint, ForeignKey, \
-    ForeignKeyConstraint, column, inspect
+    ForeignKeyConstraint, column, inspect, Sequence, FetchedValue
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, validates
@@ -451,7 +451,7 @@ class st_version_proyeccion(custom_base):
     __table_args__ = {'schema': schema_name}
 
     empresa = Column(NUMBER(precision=2), primary_key=True)
-    cod_version = Column(NUMBER(precision=22), primary_key=True)
+    cod_version = Column(NUMBER(precision=22), primary_key=True, server_default=FetchedValue())
     nombre = Column(VARCHAR(100), nullable=False)
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))

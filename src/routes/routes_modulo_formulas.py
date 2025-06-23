@@ -1462,3 +1462,65 @@ def put_proyeccion(empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_
     mensaje = f'Se actualizó la proyección con el valor {valor}'
     logger.info(mensaje)
     return '', 204
+
+
+@formulas_b.route("/empresas/<empresa>/versiones/<cod_version>", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar la versión de la proyección")
+def get_version_proyeccion(empresa, cod_version):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_version = validar_number('cod_version', cod_version, 22)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    version = db.session.get(st_version_proyeccion, (empresa, cod_version))
+    if not version:
+        mensaje = f'Versión {cod_version} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    return jsonify(st_version_proyeccion.to_dict(version))
+
+
+@formulas_b.route("/empresas/<empresa>/versiones", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar las versiones de las proyecciones")
+def get_versiones_proyecciones(empresa):
+    empresa = validar_number('empresa', empresa, 2)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    query = st_version_proyeccion.query()
+    versiones = query.filter(st_version_proyeccion.empresa == empresa).order_by(
+        st_version_proyeccion.audit_fecha_ing.desc(),
+        st_version_proyeccion.nombre).all()
+    return jsonify(st_version_proyeccion.to_list(versiones))
+
+
+@formulas_b.route("/empresas/<empresa>/versiones", methods=["POST"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("crear la versión de la proyección")
+def post_version_proyeccion(empresa, data):
+    empresa = validar_number('empresa', empresa, 2)
+    data = {'empresa': empresa, **data}
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    nombre = data.get("nombre")
+    if st_version_proyeccion.query().filter(st_version_proyeccion.empresa == empresa,
+                                            st_version_proyeccion.nombre == nombre).first():
+        mensaje = f'Ya existe una versión con el nombre {nombre}'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 409
+    version = st_version_proyeccion(**data)
+    db.session.add(version)
+    db.session.commit()
+    mensaje = f'Se registró la versión {version.cod_version}'
+    logger.info(mensaje)
+    return jsonify({'mensaje': mensaje}), 201
