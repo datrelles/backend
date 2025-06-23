@@ -3114,7 +3114,6 @@ def update_modelo_comercial(codigo):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-
 @bench.route('/update_modelo_version_repuesto/<int:codigo>', methods=['PUT', 'OPTIONS'])
 @jwt_required()
 @cross_origin(methods=["PUT", "OPTIONS"])
@@ -3645,6 +3644,59 @@ def update_modelo_sri_masivo():
             except Exception as e:
                 errores.append(f"Error con el modelo {codigo_modelo_sri}: {str(e)}")
                 continue
+        db.session.commit()
+
+        if errores:
+            return jsonify({"message": "Actualización masiva completada con errores", "errores": errores}), 207
+        return jsonify({"message": "Actualización masiva exitosa"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Error general: {str(e)}"}), 500
+
+@bench.route('/update_dimemsiones_masivo', methods=["PUT"])
+@jwt_required()
+def update_dimemsiones_masivo():
+    try:
+        def normalize_float(value):
+            if isinstance(value, str):
+                value = value.strip()
+            return float(value) if value not in (None, '', ' ') else None
+
+        data = request.json
+        user = get_jwt_identity()
+
+        if not isinstance(data, list):
+            return jsonify({"error": "Se esperaba una lista para actualizar"}), 400
+
+        errores = []
+
+        for item in data:
+            try:
+                codigo_dim_peso = item.get("codigo_dim_peso")
+                dimension = db.session.query(DimensionPeso).filter_by(codigo_dim_peso=codigo_dim_peso).first()
+
+                if not dimension:
+                    errores.append(f"Dimensión no encontrada: {codigo_dim_peso}")
+                    continue
+
+                dimension.altura_total = normalize_float(item.get("altura_total"))
+                dimension.longitud_total = normalize_float(item.get("longitud_total"))
+                dimension.ancho_total = normalize_float(item.get("ancho_total"))
+                dimension.peso_seco = normalize_float(item.get("peso_seco"))
+                dimension.usuario_modifica = user
+                dimension.fecha_modificacion = datetime.now()
+
+            except Exception as e:
+                errores.append(f"Error con el registro {codigo_dim_peso}: {str(e)}")
+
+            except IntegrityError as e:
+                db.session.rollback()
+                return jsonify({
+                    "error": "Violación de restricción única: hay registros duplicados",
+                    "detalle": str(e.orig)
+                }), 409
+
         db.session.commit()
 
         if errores:
