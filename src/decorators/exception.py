@@ -37,7 +37,7 @@ def handle_exceptions(action):
                             if not part.startswith('ORA-'):
                                 mensaje = part.split('\n')[0]
                                 break
-                    elif error_code == 12571:
+                    elif error_code == 0:
                         mensaje = "Se perdió conexión con la base de datos"
                 logger.exception(f'Ocurrió una excepción con la base de datos al {action}: {e}')
                 return jsonify({'mensaje': mensaje}), status_code
