@@ -14,6 +14,7 @@ from src.config.database import db
 from src.models.catalogos_bench import Chasis, DimensionPeso, ElectronicaOtros, Transmision, Imagenes, TipoMotor, Motor, \
     Color, Canal, MarcaRepuesto, ProductoExterno, Linea, Marca, ModeloSRI, ModeloHomologado, MatriculacionMarca, \
     ModeloComercial, Segmento, Version, ModeloVersionRepuesto, ClienteCanal, ModeloVersion, Benchmarking
+from src.models.clientes import Cliente
 from src.models.productos import Producto
 from src.models.proveedores import TgModeloItem
 from src.models.users import Empresa
@@ -2252,7 +2253,7 @@ def get_modelos_comerciales():
             resultados.append({
                 "codigo_modelo_comercial": modelo.codigo_modelo_comercial,
                 "nombre_marca": modelo.marca.nombre_marca,
-                "nombre_modelo_homologado": modelo.modelo_homologado.modelo_sri.nombre_modelo,
+                "nombre_modelo_sri": modelo.modelo_homologado.modelo_sri.nombre_modelo,
                 "codigo_modelo_homologado": modelo.codigo_modelo_homologado,
                 "codigo_marca": modelo.codigo_marca,
                 "nombre_modelo": modelo.nombre_modelo,
@@ -3386,7 +3387,7 @@ def update_motor_masivo():
                 if not motor:
                     raise ValueError(f"Motor {codigo_motor} no encontrado")
 
-                tipo_nombre = item.get("tipo_motor_nombre")
+                tipo_nombre = item.get("nombre_tipo_motor")
                 if tipo_nombre:
                     tipo = db.session.query(TipoMotor).filter(
                         db.func.upper(TipoMotor.nombre_tipo) == tipo_nombre.strip().upper()
@@ -3440,6 +3441,7 @@ def update_modelos_comerciales_masivo():
         errores = []
         actualizados = 0
 
+
         for idx, item in enumerate(data):
             try:
                 codigo = item.get("codigo_modelo_comercial")
@@ -3465,6 +3467,16 @@ def update_modelos_comerciales_masivo():
                 modelo = db.session.query(ModeloComercial).filter_by(codigo_modelo_comercial=codigo).first()
                 if not modelo:
                     errores.append(f"Fila {idx + 1}: Modelo comercial con código {codigo} no encontrado.")
+                    continue
+
+                estado_normalizado = str(estado_modelo).strip().lower()
+                if estado_normalizado in ['activo', '1']:
+                    modelo.estado_modelo = 1
+                elif estado_normalizado in ['inactivo', '0']:
+                    modelo.estado_modelo = 0
+                else:
+                    errores.append(
+                        f"Fila {idx + 1}: Estado '{estado_modelo}' inválido. Debe ser 'ACTIVO', 'INACTIVO', 1 o 0.")
                     continue
 
                 modelo.codigo_marca = marca.codigo_marca
@@ -3779,3 +3791,126 @@ def update_electronica_masivo():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Error general: {str(e)}"}), 500
+
+
+@bench.route('/update_modelo_version_masivo', methods=["POST"])
+@jwt_required()
+def update_modelo_version_masivo():
+    try:
+        payload = request.get_json()
+        if not isinstance(payload, list):
+            return jsonify({"error": "El body debe ser una lista de objetos modelo_version"}), 400
+
+        actualizados = []
+        errores = []
+
+        for data in payload:
+            codigo_modelo_version = data.get("codigo_modelo_version")
+            if not codigo_modelo_version:
+                errores.append({"error": "Falta codigo_modelo_version en uno de los registros"})
+                continue
+
+            modelo = db.session.query(ModeloVersion).filter_by(codigo_modelo_version=codigo_modelo_version).first()
+            if not modelo:
+                errores.append({"codigo_modelo_version": codigo_modelo_version, "error": "No encontrado"})
+                continue
+
+            try:
+                # Buscar código_imagen desde descripcion_imagen
+                imagen = db.session.query(Imagenes).filter(Imagenes.descripcion_imagen == data["descripcion_imagen"]).first()
+                if not imagen:
+                    raise Exception("descripcion_imagen no encontrada")
+                codigo_imagen = imagen.codigo_imagen
+
+                # Buscar color por nombre (case insensitive, sin espacios extra si deseas)
+                color = db.session.query(Color).filter(
+                    func.upper(Color.nombre_color) == data["nombre_color"].strip().upper()).first()
+                if not color:
+                    raise Exception("Color no encontrado")
+                codigo_color_bench = color.codigo_color_bench
+
+                # Modelo comercial y marca (desde nombre_modelo y codigo_cliente_canal)
+                modelo_com = db.session.query(ModeloComercial).filter(
+                    ModeloComercial.nombre_modelo == data["nombre_modelo_comercial"]
+
+                ).first()
+                if not modelo_com:
+                    raise Exception("Modelo comercial no encontrado")
+                codigo_modelo_comercial = modelo_com.codigo_modelo_comercial
+                codigo_marca = modelo_com.codigo_marca
+
+                cliente = db.session.query(ClienteCanal).filter(
+                    ClienteCanal.codigo_cliente_canal == data["codigo_cliente_canal"]).first()
+                if not cliente:
+                    raise Exception("Cliente canal no encontrado")
+                codigo_cliente_canal = cliente.codigo_cliente_canal
+                codigo_canal = cliente.codigo_canal
+                codigo_mod_vers_repuesto = cliente.codigo_mod_vers_repuesto
+                empresa= cliente.empresa
+                cod_producto = cliente.cod_producto
+
+
+                # Versión
+                version = db.session.query(Version).filter(
+                    Version.nombre_version == str(data["nombre_version"])
+                ).first()
+                if not version:
+                    raise Exception("Versión no encontrada")
+                codigo_version = version.codigo_version
+
+                # Motor y tipo_motor
+                motor = db.session.query(Motor).filter(Motor.codigo_motor == data["codigo_motor"]).first()
+                if not motor:
+                    raise Exception("Motor no encontrado")
+                codigo_tipo_motor = motor.codigo_tipo_motor
+
+                # Transmisión (opcional si ya tienes por defecto)
+                transmision = db.session.query(Transmision).filter(
+                    Transmision.caja_cambios == data.get("caja_cambios")
+                ).first()
+                if not transmision:
+                    raise Exception("Transmisión no encontrada")
+                codigo_transmision = transmision.codigo_transmision
+
+
+                # Asignar campos
+                modelo.codigo_dim_peso = data["codigo_dim_peso"]
+                modelo.codigo_imagen = codigo_imagen
+                modelo.codigo_electronica = data["codigo_electronica"]
+                modelo.codigo_motor = data["codigo_motor"]
+                modelo.codigo_tipo_motor = codigo_tipo_motor
+                modelo.codigo_transmision = codigo_transmision
+                modelo.codigo_color_bench = codigo_color_bench
+                modelo.codigo_chasis = data["codigo_chasis"]
+                modelo.codigo_modelo_comercial = codigo_modelo_comercial
+                modelo.codigo_marca = codigo_marca
+                modelo.codigo_cliente_canal = codigo_cliente_canal
+                modelo.codigo_canal = codigo_canal
+                modelo.codigo_mod_vers_repuesto = codigo_mod_vers_repuesto
+                modelo.empresa = empresa
+                modelo.cod_producto = cod_producto
+                modelo.codigo_version = codigo_version
+                modelo.nombre_modelo_version = data["nombre_modelo_version"]
+                modelo.anio_modelo_version = data["anio_modelo_version"]
+                modelo.precio_producto_modelo = data["precio_producto_modelo"]
+                modelo.precio_venta_distribuidor = data["precio_venta_distribuidor"]
+
+                actualizados.append(int(codigo_modelo_version))
+
+            except Exception as e:
+                errores.append({
+                    "codigo_modelo_version": codigo_modelo_version,
+                    "error": str(e)
+                })
+
+        db.session.commit()
+
+        return jsonify({
+            "actualizados": actualizados,
+            "errores": errores,
+            "total_procesados": len(payload)
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
