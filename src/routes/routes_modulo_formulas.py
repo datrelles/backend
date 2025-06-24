@@ -1525,6 +1525,33 @@ def put_proyeccion(empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_
     return '', 204
 
 
+@formulas_b.route("/empresas/<empresa>/versiones/<cod_version>/proyecciones/procesos/<cod_proceso>", methods=["DELETE"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("eliminar la proyección")
+def delete_proyeccion(empresa, cod_version, cod_proceso):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_version = validar_number('cod_version', cod_version, 22)
+    cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
+        mensaje = f'Versión {cod_version} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_proceso, (empresa, cod_proceso)):
+        mensaje = f'Proceso {cod_proceso} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    sql = f"CALL PK_PROCESOS.ELIMINAR_PROYECCION({empresa}, {cod_version}, '{cod_proceso}')"
+    custom_base.execute_sql(sql, es_escalar=False)
+    mensaje = f'Se eliminó la proyección'
+    logger.info(mensaje)
+    return '', 204
+
+
 @formulas_b.route("/empresas/<empresa>/versiones/<cod_version>", methods=["GET"])
 @jwt_required()
 @cross_origin()
@@ -1585,3 +1612,31 @@ def post_version_proyeccion(empresa, data):
     mensaje = f'Se registró la versión {version.cod_version}'
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
+
+
+@formulas_b.route("/empresas/<empresa>/versiones/<cod_version>", methods=["DELETE"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("eliminar la versión")
+def delete_version_proyeccion(empresa, cod_version):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_version = validar_number('cod_version', cod_version, 22)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    version = db.session.get(st_version_proyeccion, (empresa, cod_version))
+    if not version:
+        mensaje = f'Versión {cod_version} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if st_proyeccion_ppp.query().filter(st_proyeccion_ppp.empresa == empresa,
+                                        st_proyeccion_ppp.cod_version == cod_version).first():
+        mensaje = f'La versión {version.nombre} tiene una proyección vinculada'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 409
+    db.session.delete(version)
+    db.session.commit()
+    mensaje = f'Se eliminó la versión'
+    logger.info(mensaje)
+    return '', 204
