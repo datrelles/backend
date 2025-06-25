@@ -3900,3 +3900,81 @@ def update_modelo_version_masivo():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_producto_externo_masivo', methods=["PUT"])
+@jwt_required()
+def update_producto_externo_masivo():
+    try:
+        user = get_jwt_identity()
+        data = request.get_json()
+
+        if not isinstance(data, list):
+            return jsonify({"error": "El body debe ser una lista de productos externos"}), 400
+
+        errores = []
+        actualizados = 0
+
+        marcas = db.session.query(MarcaRepuesto).all()
+        for idx, row in enumerate(data):
+            try:
+                codigo = row.get("codigo_prod_externo")
+                if not codigo:
+                    errores.append(f"Fila {idx + 2}: Código de producto externo faltante.")
+                    continue
+
+                registro = db.session.query(ProductoExterno).filter_by(codigo_prod_externo=codigo).first()
+                if not registro:
+                    errores.append(f"Fila {idx + 2}: Producto externo con código {codigo} no encontrado.")
+                    continue
+
+                nombre = str(row.get("nombre_producto", registro.nombre_producto)).strip()
+                estado = row.get("estado_prod_externo", registro.estado_prod_externo)
+                descripcion = str(row.get("descripcion_producto", registro.descripcion_producto)).strip()
+                nombre_marca = str(row.get("nombre_comercial", "")).strip().lower()
+                marca = next((m for m in marcas if m.nombre_comercial.strip().lower() == nombre_marca), None)
+                if not marca:
+                    errores.append(f"Fila {idx + 2}: Marca repuesto '{nombre_marca}' no encontrada.")
+                    continue
+
+                # Normalizar estado
+                if isinstance(estado, str):
+                    estado_normalizado = estado.strip().lower()
+                    if estado_normalizado == "activo":
+                        estado = 1
+                    elif estado_normalizado == "inactivo":
+                        estado = 0
+                    else:
+                        errores.append(f"Fila {idx + 2}: Estado inválido '{estado}'.")
+                        continue
+
+                existe = db.session.query(ProductoExterno).filter(
+                    ProductoExterno.nombre_producto.ilike(nombre),
+                    ProductoExterno.codigo_marca_rep == marca.codigo_marca_rep,
+                    ProductoExterno.codigo_prod_externo != codigo
+                ).first()
+                if existe:
+                    errores.append(f"Fila {idx + 2}: Ya existe otro producto con ese nombre y marca.")
+                    continue
+
+                registro.nombre_producto = nombre
+                registro.estado_prod_externo = estado
+                registro.descripcion_producto = descripcion
+                registro.codigo_marca_rep = marca.codigo_marca_rep
+                registro.usuario_modifica = user
+                registro.fecha_modificacion = datetime.now()
+
+                actualizados += 1
+
+            except Exception as e:
+                errores.append(f"Fila {idx + 2}: Error inesperado - {str(e)}")
+
+        db.session.commit()
+
+        return jsonify({
+            "message": f"{actualizados} producto(s) externo(s) actualizado(s) correctamente.",
+            "errores": errores
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
