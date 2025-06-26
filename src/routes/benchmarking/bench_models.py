@@ -436,9 +436,11 @@ def get_segmentos_por_linea(codigo_linea):
         segmentos = db.session.query(
             Segmento.nombre_segmento,
             db.func.min(Segmento.codigo_segmento).label('codigo_segmento')
-        ).filter(
+        ).join(ModeloComercial, ModeloComercial.codigo_modelo_comercial == Segmento.codigo_modelo_comercial)
+        segmentos = segmentos.filter(
             Segmento.codigo_linea == codigo_linea,
-            Segmento.estado_segmento == 1
+            Segmento.estado_segmento == 1,
+            ModeloComercial.estado_modelo == 1
         ).group_by(
             Segmento.nombre_segmento
         ).order_by(
