@@ -576,18 +576,35 @@ def exportar_comparacion_xlsx():
             agrupado_por_categoria[categoria].append((campo, campos_unicos[key]))
 
         current_row = 17
+
+        unidades_por_campo = {
+            "ALTURA TOTAL": "mm",
+            "LONGITUD TOTAL": "mm",
+            "ANCHO TOTAL": "mm",
+            "PESO SECO": "kg"
+        }
+
         for categoria, campos in agrupado_por_categoria.items():
             inicio_fusion = current_row
             for campo, datos in campos:
                 campo_formateado = campo.replace('_', ' ').upper()
+                unidad = unidades_por_campo.get(campo_formateado, "")
+                valor_base = datos["base"] if datos["base"] not in [None, ""] else "N/A"
+                if unidad and valor_base != "N/A":
+                    valor_base = f"{valor_base} {unidad}"
+
                 fila = [
                     categoria.upper(),
                     campo_formateado,
-                    datos["base"] if datos["base"] not in [None, ""] else "N/A"
+                    valor_base
                 ]
 
                 for val, icono in datos["comparables"]:
-                    fila.append(val if val not in [None, ""] else "N/A")
+
+                    val_fmt = val if val not in [None, ""] else "N/A"
+                    if unidad and val_fmt != "N/A":
+                        val_fmt = f"{val_fmt} {unidad}"
+                    fila.append(val_fmt)
                     fila.append(icono["icono"])
 
                 ws.append(fila)
@@ -672,8 +689,6 @@ def get_marcas_por_linea_segmento():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
 
 
 @bench_model.route('/get_modelos_por_linea_segmento_marca', methods=['GET'])
