@@ -1171,7 +1171,7 @@ def get_nuevo_cliente(empresa, cod_cliente):
         mensaje = f'Empresa {empresa} inexistente'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"SELECT PK_PROCESOS.OBTENER_NOMBRE_NUEVO_CLIENTE({empresa}, '{cod_cliente}') FROM DUAL"
+    sql = f"SELECT {paquete_funcion_bd.PROCESOS.value}.OBTENER_NOMBRE_NUEVO_CLIENTE({empresa}, '{cod_cliente}') FROM DUAL"
     result = custom_base.execute_sql(sql)
     return jsonify({"mensaje": result})
 
@@ -1362,196 +1362,6 @@ def get_modelos_motos_proyecciones(empresa):
     return jsonify(modelos)
 
 
-@formulas_b.route("/empresas/<empresa>/versiones/<cod_version>/proyecciones/procesos/<cod_proceso>", methods=["GET"])
-@jwt_required()
-@cross_origin()
-@handle_exceptions("consultar la proyección")
-def get_proyeccion(empresa, cod_version, cod_proceso):
-    empresa = validar_number('empresa', empresa, 2)
-    cod_version = validar_number('cod_version', cod_version, 22)
-    cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
-    if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
-        mensaje = f'Versión {cod_version} inexistente'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    inicio = (
-        db.session.query(st_proyeccion_ppp.anio, st_proyeccion_ppp.mes)
-        .filter(
-            st_proyeccion_ppp.empresa == empresa,
-            st_proyeccion_ppp.cod_version == cod_version,
-            st_proyeccion_ppp.cod_proceso == cod_proceso
-        )
-        .order_by(asc(st_proyeccion_ppp.anio), asc(st_proyeccion_ppp.mes))
-        .limit(1)
-        .first()
-    )
-    fin = (
-        db.session.query(st_proyeccion_ppp.anio, st_proyeccion_ppp.mes)
-        .filter(
-            st_proyeccion_ppp.empresa == empresa,
-            st_proyeccion_ppp.cod_version == cod_version,
-            st_proyeccion_ppp.cod_proceso == cod_proceso
-        )
-        .order_by(desc(st_proyeccion_ppp.anio), desc(st_proyeccion_ppp.mes))
-        .limit(1)
-        .first()
-    )
-    query = st_proyeccion_ppp.query().filter(st_proyeccion_ppp.empresa == empresa,
-                                             st_proyeccion_ppp.cod_version == cod_version,
-                                             st_proyeccion_ppp.cod_proceso == cod_proceso)
-    datos = query.order_by(st_proyeccion_ppp.cod_parametro,
-                           st_proyeccion_ppp.cod_modelo_comercial,
-                           st_proyeccion_ppp.cod_marca,
-                           st_proyeccion_ppp.cod_cliente,
-                           st_proyeccion_ppp.anio,
-                           st_proyeccion_ppp.mes).all()
-    if not datos:
-        return '', 204
-    anio_inicio, mes_inicio = inicio
-    anio_fin, mes_fin = fin
-    return jsonify({"anio_inicio": anio_inicio, "mes_inicio": mes_inicio, "anio_fin": anio_fin, "mes_fin": mes_fin,
-                    "datos": st_proyeccion_ppp.to_list(datos)})
-
-
-@formulas_b.route("/empresas/<empresa>/versiones/<cod_version>/proyecciones/procesos/<cod_proceso>", methods=["POST"])
-@jwt_required()
-@cross_origin()
-@validate_json()
-@handle_exceptions("ejecutar la proyección")
-def post_proyeccion(empresa, cod_version, cod_proceso, data):
-    empresa = validar_number('empresa', empresa, 2)
-    cod_version = validar_number('cod_version', cod_version, 22)
-    cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
-    if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
-        mensaje = f'Versión {cod_version} inexistente'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    anio_inicio, mes_inicio, anio_fin, mes_fin = data.get('anio_inicio'), data.get('mes_inicio'), data.get(
-        'anio_fin'), data.get('mes_fin')
-    if anio_inicio is None or mes_inicio is None or anio_fin is None or mes_fin is None:
-        mensaje = "Se requieren el año y mes de inicio y el año y mes de fin"
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    sql = f"CALL PK_PROCESOS.EJECUTAR_PROYECCION({empresa}, {cod_version}, '{cod_proceso}', {anio_inicio}, {mes_inicio}, {anio_fin}, {mes_fin})"
-    custom_base.execute_sql(sql, es_escalar=False)
-    mensaje = f'Se ejecutó la proyección'
-    logger.info(mensaje)
-    return '', 204
-
-
-@formulas_b.route(
-    "/empresas/<empresa>/versiones/<cod_version>/proyecciones/procesos/<cod_proceso>/parametros/<cod_parametro>/modelos/<cod_modelo_comercial>/marcas/<cod_marca>/clientes/<cod_cliente>/anios/<anio>/meses/<mes>",
-    methods=["PUT"])
-@jwt_required()
-@cross_origin()
-@validate_json()
-@handle_exceptions("actualizar la proyección")
-def put_proyeccion(empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_comercial, cod_marca, cod_cliente, anio,
-                   mes,
-                   data):
-    empresa = validar_number('empresa', empresa, 2)
-    cod_version = validar_number('cod_version', cod_version, 22)
-    cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
-    cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
-    cod_modelo_comercial = validar_number('cod_modelo_comercial', cod_modelo_comercial, 14)
-    cod_marca = validar_number('cod_marca', cod_marca, 14)
-    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
-    anio = validar_number('anio', anio, 4)
-    mes = validar_number('mes', mes, 2)
-    data = {'empresa': empresa, 'cod_version': cod_version, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro,
-            'cod_modelo_comercial': cod_modelo_comercial, 'cod_marca': cod_marca, 'cod_cliente': cod_cliente,
-            'anio': anio, 'mes': mes,
-            **data}
-    st_proyeccion_ppp(**data)
-    if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
-        mensaje = f'Versión {cod_version} inexistente'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(st_parametro_proceso, (empresa, cod_parametro)):
-        mensaje = f'Parámetro {cod_parametro} inexistente'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(st_cliente_procesos, (empresa, cod_cliente)):
-        mensaje = f'Cliente {cod_cliente} inexistente'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    proyeccion = db.session.get(st_proyeccion_ppp,
-                                (empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_comercial, cod_marca,
-                                 cod_cliente,
-                                 anio, mes))
-    if not proyeccion:
-        mensaje = f'No existe la proyección especificada ({empresa}, {cod_parametro}, {cod_modelo_comercial}, {cod_marca}, {cod_cliente}, {anio}, {mes})'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    if data.get('numero') is None and data.get('texto') is None and data.get('fecha') is None:
-        mensaje = 'Se requiere el valor de actualización de la proyección'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    valor = None
-    if data.get('numero') is not None:
-        valor = validar_number('numero', data['numero'], 22, 8)
-    elif data.get('texto') is not None:
-        valor = validar_varchar('texto', data['texto'], 1000)
-    else:
-        valor = validar_fecha('fecha', data['fecha'])
-    sql = f"CALL PK_PROCESOS.ACTUALIZAR_PROYECCION({empresa}, {cod_version}, '{cod_proceso}', '{cod_parametro}', {cod_modelo_comercial}, {cod_marca}, '{cod_cliente}', {anio}, {mes}, '{valor}')"
-    custom_base.execute_sql(sql, es_escalar=False)
-    mensaje = f'Se actualizó la proyección con el valor {valor}'
-    logger.info(mensaje)
-    return '', 204
-
-
-@formulas_b.route("/empresas/<empresa>/versiones/<cod_version>/proyecciones/procesos/<cod_proceso>", methods=["DELETE"])
-@jwt_required()
-@cross_origin()
-@handle_exceptions("eliminar la proyección")
-def delete_proyeccion(empresa, cod_version, cod_proceso):
-    empresa = validar_number('empresa', empresa, 2)
-    cod_version = validar_number('cod_version', cod_version, 22)
-    cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
-    if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
-        mensaje = f'Versión {cod_version} inexistente'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    sql = f"CALL PK_PROCESOS.ELIMINAR_PROYECCION({empresa}, {cod_version}, '{cod_proceso}')"
-    custom_base.execute_sql(sql, es_escalar=False)
-    mensaje = f'Se eliminó la proyección'
-    logger.info(mensaje)
-    return '', 204
-
-
 @formulas_b.route("/empresas/<empresa>/versiones/<cod_version>", methods=["GET"])
 @jwt_required()
 @cross_origin()
@@ -1638,5 +1448,195 @@ def delete_version_proyeccion(empresa, cod_version):
     db.session.delete(version)
     db.session.commit()
     mensaje = f'Se eliminó la versión'
+    logger.info(mensaje)
+    return '', 204
+
+
+@formulas_b.route("/empresas/<empresa>/versiones/<cod_version>/proyecciones/procesos/<cod_proceso>", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar la proyección")
+def get_proyeccion(empresa, cod_version, cod_proceso):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_version = validar_number('cod_version', cod_version, 22)
+    cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
+        mensaje = f'Versión {cod_version} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_proceso, (empresa, cod_proceso)):
+        mensaje = f'Proceso {cod_proceso} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    inicio = (
+        db.session.query(st_proyeccion_ppp.anio, st_proyeccion_ppp.mes)
+        .filter(
+            st_proyeccion_ppp.empresa == empresa,
+            st_proyeccion_ppp.cod_version == cod_version,
+            st_proyeccion_ppp.cod_proceso == cod_proceso
+        )
+        .order_by(asc(st_proyeccion_ppp.anio), asc(st_proyeccion_ppp.mes))
+        .limit(1)
+        .first()
+    )
+    fin = (
+        db.session.query(st_proyeccion_ppp.anio, st_proyeccion_ppp.mes)
+        .filter(
+            st_proyeccion_ppp.empresa == empresa,
+            st_proyeccion_ppp.cod_version == cod_version,
+            st_proyeccion_ppp.cod_proceso == cod_proceso
+        )
+        .order_by(desc(st_proyeccion_ppp.anio), desc(st_proyeccion_ppp.mes))
+        .limit(1)
+        .first()
+    )
+    query = st_proyeccion_ppp.query().filter(st_proyeccion_ppp.empresa == empresa,
+                                             st_proyeccion_ppp.cod_version == cod_version,
+                                             st_proyeccion_ppp.cod_proceso == cod_proceso)
+    datos = query.order_by(st_proyeccion_ppp.cod_parametro,
+                           st_proyeccion_ppp.cod_modelo_comercial,
+                           st_proyeccion_ppp.cod_marca,
+                           st_proyeccion_ppp.cod_cliente,
+                           st_proyeccion_ppp.anio,
+                           st_proyeccion_ppp.mes).all()
+    if not datos:
+        return '', 204
+    anio_inicio, mes_inicio = inicio
+    anio_fin, mes_fin = fin
+    return jsonify({"anio_inicio": anio_inicio, "mes_inicio": mes_inicio, "anio_fin": anio_fin, "mes_fin": mes_fin,
+                    "datos": st_proyeccion_ppp.to_list(datos)})
+
+
+@formulas_b.route("/empresas/<empresa>/versiones/<cod_version>/proyecciones/procesos/<cod_proceso>", methods=["POST"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("crear la proyección")
+def post_proyeccion(empresa, cod_version, cod_proceso, data):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_version = validar_number('cod_version', cod_version, 22)
+    cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
+        mensaje = f'Versión {cod_version} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_proceso, (empresa, cod_proceso)):
+        mensaje = f'Proceso {cod_proceso} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    anio_inicio, mes_inicio, anio_fin, mes_fin = data.get('anio_inicio'), data.get('mes_inicio'), data.get(
+        'anio_fin'), data.get('mes_fin')
+    if anio_inicio is None or mes_inicio is None or anio_fin is None or mes_fin is None:
+        mensaje = "Se requieren el año y mes de inicio y el año y mes de fin"
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    sql = f"CALL {paquete_funcion_bd.PROCESOS.value}.CREAR_PROYECCION({empresa}, {cod_version}, '{cod_proceso}', {anio_inicio}, {mes_inicio}, {anio_fin}, {mes_fin})"
+    custom_base.execute_sql(sql, es_escalar=False)
+    mensaje = f'Se ejecutó la proyección'
+    logger.info(mensaje)
+    return '', 204
+
+
+@formulas_b.route(
+    "/empresas/<empresa>/versiones/<cod_version>/proyecciones/procesos/<cod_proceso>/parametros/<cod_parametro>/modelos/<cod_modelo_comercial>/marcas/<cod_marca>/clientes/<cod_cliente>/anios/<anio>/meses/<mes>",
+    methods=["PUT"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("actualizar el registro de la proyección")
+def put_proyeccion(empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_comercial, cod_marca, cod_cliente, anio,
+                   mes,
+                   data):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_version = validar_number('cod_version', cod_version, 22)
+    cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+    cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
+    cod_modelo_comercial = validar_number('cod_modelo_comercial', cod_modelo_comercial, 14)
+    cod_marca = validar_number('cod_marca', cod_marca, 14)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    anio = validar_number('anio', anio, 4)
+    mes = validar_number('mes', mes, 2)
+    data = {'empresa': empresa, 'cod_version': cod_version, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro,
+            'cod_modelo_comercial': cod_modelo_comercial, 'cod_marca': cod_marca, 'cod_cliente': cod_cliente,
+            'anio': anio, 'mes': mes,
+            **data}
+    st_proyeccion_ppp(**data)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
+        mensaje = f'Versión {cod_version} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_proceso, (empresa, cod_proceso)):
+        mensaje = f'Proceso {cod_proceso} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_parametro_proceso, (empresa, cod_parametro)):
+        mensaje = f'Parámetro {cod_parametro} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_cliente_procesos, (empresa, cod_cliente)):
+        mensaje = f'Cliente {cod_cliente} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    proyeccion = db.session.get(st_proyeccion_ppp,
+                                (empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_comercial, cod_marca,
+                                 cod_cliente,
+                                 anio, mes))
+    if not proyeccion:
+        mensaje = f'No existe la proyección especificada ({empresa}, {cod_parametro}, {cod_modelo_comercial}, {cod_marca}, {cod_cliente}, {anio}, {mes})'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if data.get('numero') is None and data.get('texto') is None and data.get('fecha') is None:
+        mensaje = 'Se requiere el valor de actualización de la proyección'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    valor = None
+    if data.get('numero') is not None:
+        valor = validar_number('numero', data['numero'], 22, 8)
+    elif data.get('texto') is not None:
+        valor = validar_varchar('texto', data['texto'], 1000)
+    else:
+        valor = validar_fecha('fecha', data['fecha'])
+    sql = f"CALL {paquete_funcion_bd.PROCESOS.value}.ACTUALIZAR_REGISTRO_PROYECCION({empresa}, {cod_version}, '{cod_proceso}', '{cod_parametro}', {cod_modelo_comercial}, {cod_marca}, '{cod_cliente}', {anio}, {mes}, '{valor}')"
+    custom_base.execute_sql(sql, es_escalar=False)
+    mensaje = f'Se actualizó la proyección con el valor {valor}'
+    logger.info(mensaje)
+    return '', 204
+
+
+@formulas_b.route("/empresas/<empresa>/versiones/<cod_version>/proyecciones/procesos/<cod_proceso>", methods=["DELETE"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("eliminar la proyección")
+def delete_proyeccion(empresa, cod_version, cod_proceso):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_version = validar_number('cod_version', cod_version, 22)
+    cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
+        mensaje = f'Versión {cod_version} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_proceso, (empresa, cod_proceso)):
+        mensaje = f'Proceso {cod_proceso} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    sql = f"CALL {paquete_funcion_bd.PROCESOS.value}.ELIMINAR_PROYECCION({empresa}, {cod_version}, '{cod_proceso}')"
+    custom_base.execute_sql(sql, es_escalar=False)
+    mensaje = f'Se eliminó la proyección'
     logger.info(mensaje)
     return '', 204
