@@ -1511,6 +1511,52 @@ def get_proyeccion(empresa, cod_version, cod_proceso):
                     "datos": st_proyeccion_ppp.to_list(datos)})
 
 
+@formulas_b.route(
+    "/empresas/<empresa>/versiones/<cod_version>/proyecciones/procesos/<cod_proceso>/modelos/<cod_modelo_comercial>/marcas/<cod_marca>/clientes/<cod_cliente>",
+    methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar la proyección parcial")
+def get_proyeccion_parcial(empresa, cod_version, cod_proceso, cod_modelo_comercial, cod_marca, cod_cliente):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_version = validar_number('cod_version', cod_version, 22)
+    cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
+    cod_modelo_comercial = validar_number('cod_modelo_comercial', cod_modelo_comercial, 14)
+    cod_marca = validar_number('cod_marca', cod_marca, 14)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
+        mensaje = f'Versión {cod_version} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_proceso, (empresa, cod_proceso)):
+        mensaje = f'Proceso {cod_proceso} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_cliente_procesos, (empresa, cod_cliente)):
+        mensaje = f'Cliente {cod_cliente} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    query = st_proyeccion_ppp.query().filter(st_proyeccion_ppp.empresa == empresa,
+                                             st_proyeccion_ppp.cod_version == cod_version,
+                                             st_proyeccion_ppp.cod_proceso == cod_proceso,
+                                             st_proyeccion_ppp.cod_modelo_comercial == cod_modelo_comercial,
+                                             st_proyeccion_ppp.cod_marca == cod_marca,
+                                             st_proyeccion_ppp.cod_cliente == cod_cliente)
+    datos = query.order_by(st_proyeccion_ppp.cod_parametro,
+                           st_proyeccion_ppp.cod_modelo_comercial,
+                           st_proyeccion_ppp.cod_marca,
+                           st_proyeccion_ppp.cod_cliente,
+                           st_proyeccion_ppp.anio,
+                           st_proyeccion_ppp.mes).all()
+    if not datos:
+        return '', 204
+    return jsonify(st_proyeccion_ppp.to_list(datos))
+
+
 @formulas_b.route("/empresas/<empresa>/versiones/<cod_version>/proyecciones/procesos/<cod_proceso>", methods=["POST"])
 @jwt_required()
 @cross_origin()
