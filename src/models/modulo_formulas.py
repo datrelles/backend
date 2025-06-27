@@ -503,3 +503,103 @@ class st_proyeccion_ppp(custom_base):
     @validates('fecha')
     def validar_fecha(self, key, value):
         return validar_fecha(key, value, 100, es_requerido=False)
+
+
+class st_presupuesto_motos_pro(custom_base):
+    __tablename__ = 'st_presup_motos_pro'
+    __table_args__ = {'schema': schema_name}
+
+    empresa = Column(NUMBER(precision=2), primary_key=True)
+    cod_cliente = Column(VARCHAR(14), primary_key=True)
+    cod_modelo = Column(VARCHAR(20), primary_key=True)
+    anio = Column(NUMBER(precision=4), primary_key=True)
+    mes = Column(NUMBER(precision=2), primary_key=True)
+    unidades = Column(NUMBER(precision=22, scale=2), nullable=False)
+    sell_out = Column(NUMBER(precision=22, scale=2))
+    cod_linea = Column(VARCHAR(4))
+    cod_tipo_linea = Column(VARCHAR(4))
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+    audit_usuario_mod = Column(VARCHAR(30))
+    audit_fecha_mod = Column(DateTime)
+
+    @validates('empresa')
+    def validar_empresa(self, key, value):
+        return validar_empresa(key, value)
+
+    @validates('cod_cliente')
+    def validar_cod_cliente(self, key, value):
+        return (validar_varchar(key, value, 14))
+
+    @validates('cod_modelo')
+    def validar_cod_modelo(self, key, value):
+        return (validar_varchar(key, value, 20))
+
+    @validates('anio')
+    def validar_anio(self, key, value):
+        return validar_number(key, value, 4)
+
+    @validates('mes')
+    def validar_mes(self, key, value):
+        return validar_number(key, value, 2)
+
+    @validates('unidades')
+    def validar_unidades(self, key, value):
+        return validar_number(key, value, 22, 2)
+
+    @validates('sell_out')
+    def validar_sell_out(self, key, value):
+        return validar_number(key, value, 22, 2)
+
+    @validates('cod_linea')
+    def validar_cod_linea(self, key, value):
+        return validar_varchar(key, value, 4, es_requerido=False)
+
+    @validates('cod_tipo_linea')
+    def validar_cod_tipo_linea(self, key, value):
+        return validar_varchar(key, value, 4, es_requerido=False)
+
+
+class st_presupuesto_motos_tipo_cli_pro(custom_base):
+    __tablename__ = 'st_presup_motos_tipo_cli_pro'
+    __table_args__ = {'schema': schema_name}
+
+    empresa = Column(NUMBER(precision=2), primary_key=True)
+    cod_tipo_cliente = Column(VARCHAR(14), primary_key=True)
+    cod_modelo = Column(VARCHAR(20), primary_key=True)
+    anio = Column(NUMBER(precision=4), primary_key=True)
+    mes = Column(NUMBER(precision=2), primary_key=True)
+    unidades = Column(NUMBER(precision=22, scale=2), nullable=False)
+    sell_out = Column(NUMBER(precision=22, scale=2))
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+    audit_usuario_mod = Column(VARCHAR(30))
+    audit_fecha_mod = Column(DateTime)
+
+    @validates('empresa')
+    def validar_empresa(self, key, value):
+        return validar_empresa(key, value)
+
+    @validates('cod_tipo_cliente')
+    def validar_cod_tipo_cliente(self, key, value):
+        return (validar_varchar(key, value, 3))
+
+    @validates('cod_modelo')
+    def validar_cod_modelo(self, key, value):
+        return (validar_varchar(key, value, 20))
+
+    @validates('anio')
+    def validar_anio(self, key, value):
+        return validar_number(key, value, 4)
+
+    @validates('mes')
+    def validar_mes(self, key, value):
+        return validar_number(key, value, 2)
+
+    @validates('unidades')
+    def validar_unidades(self, key, value):
+        return validar_number(key, value, 22, 2)
+
+    @validates('sell_out')
+    def validar_sell_out(self, key, value):
+        return validar_number(key, value, 22, 2)

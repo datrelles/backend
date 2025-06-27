@@ -14,7 +14,7 @@ from src.enums.validation import paquete_funcion_bd
 from src.models.custom_base import custom_base
 from src.models.modulo_formulas import st_proceso, st_formula_proceso, st_parametro_proceso, st_parametro_por_proceso, \
     st_factor_calculo_parametro, st_funcion, validar_cod, tg_sistema, st_parametro_funcion, validar_estado, \
-    st_cliente_procesos, st_modelo_comercial, st_version_proyeccion, st_proyeccion_ppp
+    st_cliente_procesos, st_modelo_comercial, st_version_proyeccion, st_proyeccion_ppp, st_presupuesto_motos_pro
 from src.validations import validar_varchar, validar_number, validar_fecha
 from src.models.users import Empresa
 from src.models.clientes import Cliente
@@ -1686,3 +1686,19 @@ def delete_proyeccion(empresa, cod_version, cod_proceso):
     mensaje = f'Se eliminó la proyección'
     logger.info(mensaje)
     return '', 204
+
+
+@formulas_b.route("/empresas/<empresa>/", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar los presupuestos")
+def get_presupuestos(empresa):
+    empresa = validar_number('empresa', empresa, 2)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    query = st_presupuesto_motos_pro.query()
+    clientes = query.filter(st_presupuesto_motos_pro.empresa == empresa).order_by(
+        st_presupuesto_motos_pro.cod_cliente, st_presupuesto_motos_pro.cod_modelo).all()
+    return jsonify(st_presupuesto_motos_pro.to_list(clientes))
