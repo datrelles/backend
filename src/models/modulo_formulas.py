@@ -549,7 +549,7 @@ class st_presupuesto_motos_pro(custom_base):
 
     @validates('sell_out')
     def validar_sell_out(self, key, value):
-        return validar_number(key, value, 22, 2)
+        return validar_number(key, value, 22, 2, es_requerido=False)
 
     @validates('cod_linea')
     def validar_cod_linea(self, key, value):
@@ -602,4 +602,4 @@ class st_presupuesto_motos_tipo_cli_pro(custom_base):
 
     @validates('sell_out')
     def validar_sell_out(self, key, value):
-        return validar_number(key, value, 22, 2)
+        return validar_number(key, value, 22, 2, es_requerido=False)

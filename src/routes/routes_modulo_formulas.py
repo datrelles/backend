@@ -1688,7 +1688,7 @@ def delete_proyeccion(empresa, cod_version, cod_proceso):
     return '', 204
 
 
-@formulas_b.route("/empresas/<empresa>/", methods=["GET"])
+@formulas_b.route("/empresas/<empresa>/presupuestos", methods=["GET"])
 @jwt_required()
 @cross_origin()
 @handle_exceptions("consultar los presupuestos")
@@ -1702,3 +1702,97 @@ def get_presupuestos(empresa):
     clientes = query.filter(st_presupuesto_motos_pro.empresa == empresa).order_by(
         st_presupuesto_motos_pro.cod_cliente, st_presupuesto_motos_pro.cod_modelo).all()
     return jsonify(st_presupuesto_motos_pro.to_list(clientes))
+
+
+@formulas_b.route(
+    "/empresas/<empresa>/clientes/<cod_cliente>/modelos/<cod_modelo>/anios/<anio>/meses/<mes>/presupuestos",
+    methods=["POST"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("crear el presupuesto")
+def post_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes, data):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    cod_modelo = validar_varchar('cod_modelo', cod_modelo, 20)
+    anio = validar_number('anio', anio, 4)
+    mes = validar_number('mes', mes, 2)
+    data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_modelo': cod_modelo, 'anio': anio, 'mes': mes, **data}
+    presupuesto = st_presupuesto_motos_pro(**data)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_cliente_procesos, (empresa, cod_cliente)):
+        mensaje = f'Cliente {cod_cliente} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if db.session.get(st_presupuesto_motos_pro, (empresa, cod_cliente, cod_modelo, anio, mes)):
+        mensaje = f'El presupuesto del cliente {cod_cliente}, modelo {cod_modelo}, año {anio} y mes {mes} ya existe'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 409
+    cod_linea, cod_tipo_linea = data.get('cod_linea'), data.get('cod_tipo_linea')
+    if (cod_linea is not None and cod_linea != "") and (cod_tipo_linea is None or cod_tipo_linea == ""):
+        mensaje = "Se requiere el tipo de línea"
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if (cod_tipo_linea is not None and cod_tipo_linea != "") and (cod_linea is None or cod_linea == ""):
+        mensaje = "Se requiere el código de línea"
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    presupuesto.cod_linea = None if cod_linea == "" else cod_linea
+    presupuesto.cod_tipo_linea = None if cod_tipo_linea == "" else cod_tipo_linea
+    db.session.add(presupuesto)
+    db.session.commit()
+    mensaje = 'Se registró el presupuesto'
+    logger.info(mensaje)
+    return jsonify({'mensaje': mensaje}), 201
+
+
+@formulas_b.route(
+    "/empresas/<empresa>/clientes/<cod_cliente>/modelos/<cod_modelo>/anios/<anio>/meses/<mes>/presupuestos",
+    methods=["PUT"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("actualizar el presupuesto")
+def put_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes, data):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    cod_modelo = validar_varchar('cod_modelo', cod_modelo, 20)
+    anio = validar_number('anio', anio, 4)
+    mes = validar_number('mes', mes, 2)
+    data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_modelo': cod_modelo, 'anio': anio, 'mes': mes, **data}
+    st_presupuesto_motos_pro(**data)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_cliente_procesos, (empresa, cod_cliente)):
+        mensaje = f'Cliente {cod_cliente} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    presupuesto = db.session.get(st_presupuesto_motos_pro, (empresa, cod_cliente, cod_modelo, anio, mes))
+    if not presupuesto:
+        mensaje = f'No existe el presupuesto del cliente {cod_cliente}, modelo {cod_modelo}, año {anio} y mes {mes}'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    presupuesto.unidades = data['unidades']
+    presupuesto.sell_out = data.get('sell_out')
+    cod_linea, cod_tipo_linea = data.get('cod_linea'), data.get('cod_tipo_linea')
+    if (cod_linea is not None and cod_linea != "") and (cod_tipo_linea is None or cod_tipo_linea == ""):
+        mensaje = "Se requiere el tipo de línea"
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if (cod_tipo_linea is not None and cod_tipo_linea != "") and (cod_linea is None or cod_linea == ""):
+        mensaje = "Se requiere el código de línea"
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    presupuesto.cod_linea = None if cod_linea == "" else cod_linea
+    presupuesto.cod_tipo_linea = None if cod_tipo_linea == "" else cod_tipo_linea
+    presupuesto.audit_usuario_mod = text('user')
+    presupuesto.audit_fecha_mod = text('sysdate')
+    db.session.commit()
+    mensaje = 'Se actualizó el presupuesto'
+    logger.info(mensaje)
+    return '', 204
