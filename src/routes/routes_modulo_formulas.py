@@ -14,7 +14,8 @@ from src.enums.validation import paquete_funcion_bd
 from src.models.custom_base import custom_base
 from src.models.modulo_formulas import st_proceso, st_formula_proceso, st_parametro_proceso, st_parametro_por_proceso, \
     st_factor_calculo_parametro, st_funcion, validar_cod, tg_sistema, st_parametro_funcion, validar_estado, \
-    st_cliente_procesos, st_modelo_comercial, st_version_proyeccion, st_proyeccion_ppp, st_presupuesto_motos_pro
+    st_cliente_procesos, st_modelo_comercial, st_version_proyeccion, st_proyeccion_ppp, st_presupuesto_motos_pro, \
+    validar_mes
 from src.validations import validar_varchar, validar_number, validar_fecha
 from src.models.users import Empresa
 from src.models.clientes import Cliente
@@ -1609,7 +1610,7 @@ def put_proyeccion(empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_
     cod_marca = validar_number('cod_marca', cod_marca, 14)
     cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
     anio = validar_number('anio', anio, 4)
-    mes = validar_number('mes', mes, 2)
+    mes = validar_mes('mes', mes)
     data = {'empresa': empresa, 'cod_version': cod_version, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro,
             'cod_modelo_comercial': cod_modelo_comercial, 'cod_marca': cod_marca, 'cod_cliente': cod_cliente,
             'anio': anio, 'mes': mes,
@@ -1716,7 +1717,7 @@ def post_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes, data):
     cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
     cod_modelo = validar_varchar('cod_modelo', cod_modelo, 20)
     anio = validar_number('anio', anio, 4)
-    mes = validar_number('mes', mes, 2)
+    mes = validar_mes('mes', mes)
     data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_modelo': cod_modelo, 'anio': anio, 'mes': mes, **data}
     presupuesto = st_presupuesto_motos_pro(**data)
     if not db.session.get(Empresa, empresa):
@@ -1761,7 +1762,7 @@ def put_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes, data):
     cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
     cod_modelo = validar_varchar('cod_modelo', cod_modelo, 20)
     anio = validar_number('anio', anio, 4)
-    mes = validar_number('mes', mes, 2)
+    mes = validar_mes('mes', mes)
     data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_modelo': cod_modelo, 'anio': anio, 'mes': mes, **data}
     st_presupuesto_motos_pro(**data)
     if not db.session.get(Empresa, empresa):
@@ -1794,5 +1795,37 @@ def put_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes, data):
     presupuesto.audit_fecha_mod = text('sysdate')
     db.session.commit()
     mensaje = 'Se actualizó el presupuesto'
+    logger.info(mensaje)
+    return '', 204
+
+
+@formulas_b.route(
+    "/empresas/<empresa>/clientes/<cod_cliente>/modelos/<cod_modelo>/anios/<anio>/meses/<mes>/presupuestos",
+    methods=["DELETE"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("eliminar el presupuesto")
+def delete_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    cod_modelo = validar_varchar('cod_modelo', cod_modelo, 20)
+    anio = validar_number('anio', anio, 4)
+    mes = validar_mes('mes', mes)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_cliente_procesos, (empresa, cod_cliente)):
+        mensaje = f'Cliente {cod_cliente} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    presupuesto = db.session.get(st_presupuesto_motos_pro, (empresa, cod_cliente, cod_modelo, anio, mes))
+    if not presupuesto:
+        mensaje = f'No existe el presupuesto del cliente {cod_cliente}, modelo {cod_modelo}, año {anio} y mes {mes}'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    db.session.delete(presupuesto)
+    db.session.commit()
+    mensaje = 'Se eliminó el presupuesto'
     logger.info(mensaje)
     return '', 204

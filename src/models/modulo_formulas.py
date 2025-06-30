@@ -26,6 +26,10 @@ def validar_estado(clave, valor, es_requerido=True):
     return validar_number(clave, valor, 1, es_requerido=es_requerido, valores_permitidos=tipo_estado.values())
 
 
+def validar_mes(clave, valor, es_requerido=True):
+    return validar_number(clave, valor, 2, es_requerido=es_requerido, valores_permitidos=range(1, 13))
+
+
 class st_proceso(custom_base):
     __tablename__ = 'st_proceso'
     __table_args__ = {'schema': schema_name}
@@ -541,7 +545,7 @@ class st_presupuesto_motos_pro(custom_base):
 
     @validates('mes')
     def validar_mes(self, key, value):
-        return validar_number(key, value, 2)
+        return validar_mes(key, value)
 
     @validates('unidades')
     def validar_unidades(self, key, value):
@@ -594,7 +598,7 @@ class st_presupuesto_motos_tipo_cli_pro(custom_base):
 
     @validates('mes')
     def validar_mes(self, key, value):
-        return validar_number(key, value, 2)
+        return validar_mes(key, value)
 
     @validates('unidades')
     def validar_unidades(self, key, value):

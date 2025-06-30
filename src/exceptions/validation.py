@@ -41,7 +41,7 @@ class validation_error(Exception):
                     aviso_decimales = f'y {self.decimales} decimales' if self.decimales else 'sin decimales'
                     mensaje = f'{mensaje} permite hasta {self.enteros} dígitos enteros {aviso_decimales}'
                 case categoria_excepcion.VALORES_PERMITIDOS.value:
-                    mensaje = f'{mensaje} no coincide con ninguno de los valores permitidos: {', '.join(self.valores_permitidos)}'
+                    mensaje = f'{mensaje} no coincide con ninguno de los valores permitidos: {', '.join([str(v) for v in self.valores_permitidos])}'
                 case _:
                     mensaje = f'{mensaje} es inválido'
         elif hasattr(self, 'faltantes'):
