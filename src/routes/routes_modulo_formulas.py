@@ -15,7 +15,7 @@ from src.models.custom_base import custom_base
 from src.models.modulo_formulas import st_proceso, st_formula_proceso, st_parametro_proceso, st_parametro_por_proceso, \
     st_factor_calculo_parametro, st_funcion, validar_cod, tg_sistema, st_parametro_funcion, validar_estado, \
     st_cliente_procesos, st_modelo_comercial, st_version_proyeccion, st_proyeccion_ppp, st_presupuesto_motos_pro, \
-    validar_mes
+    validar_mes, st_presupuesto_motos_tipo_cli_pro
 from src.validations import validar_varchar, validar_number, validar_fecha
 from src.models.users import Empresa
 from src.models.clientes import Cliente
@@ -1701,7 +1701,8 @@ def get_presupuestos(empresa):
         return jsonify({'mensaje': mensaje}), 404
     query = st_presupuesto_motos_pro.query()
     clientes = query.filter(st_presupuesto_motos_pro.empresa == empresa).order_by(
-        st_presupuesto_motos_pro.cod_cliente, st_presupuesto_motos_pro.cod_modelo).all()
+        st_presupuesto_motos_pro.cod_cliente, st_presupuesto_motos_pro.cod_modelo, st_presupuesto_motos_pro.anio,
+        st_presupuesto_motos_pro.mes).all()
     return jsonify(st_presupuesto_motos_pro.to_list(clientes))
 
 
@@ -1828,4 +1829,116 @@ def delete_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes):
     db.session.commit()
     mensaje = 'Se eliminó el presupuesto'
     logger.info(mensaje)
+    return '', 204
+
+
+@formulas_b.route("/empresas/<empresa>/presupuestos-tipo-cli", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar los presupuestos")
+def get_presupuestos_tipo_cli(empresa):
+    empresa = validar_number('empresa', empresa, 2)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    query = st_presupuesto_motos_tipo_cli_pro.query()
+    presupuestos = query.filter(st_presupuesto_motos_tipo_cli_pro.empresa == empresa).order_by(
+        st_presupuesto_motos_tipo_cli_pro.cod_tipo_cliente, st_presupuesto_motos_tipo_cli_pro.cod_modelo,
+        st_presupuesto_motos_tipo_cli_pro.anio, st_presupuesto_motos_tipo_cli_pro.mes).all()
+    return jsonify(st_presupuesto_motos_tipo_cli_pro.to_list(presupuestos))
+
+
+@formulas_b.route(
+    "/empresas/<empresa>/tipos-clientes/<cod_tipo_cliente>/modelos/<cod_modelo>/anios/<anio>/meses/<mes>/presupuestos-tipo-cli",
+    methods=["POST"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("crear el presupuesto")
+def post_presupuesto_tipo_cli(empresa, cod_tipo_cliente, cod_modelo, anio, mes, data):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_tipo_cliente = validar_varchar('cod_tipo_cliente', cod_tipo_cliente, 3)
+    cod_modelo = validar_varchar('cod_modelo', cod_modelo, 20)
+    anio = validar_number('anio', anio, 4)
+    mes = validar_mes('mes', mes)
+    data = {'empresa': empresa, 'cod_tipo_cliente': cod_tipo_cliente, 'cod_modelo': cod_modelo, 'anio': anio,
+            'mes': mes, **data}
+    presupuesto = st_presupuesto_motos_tipo_cli_pro(**data)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if db.session.get(st_presupuesto_motos_tipo_cli_pro, (empresa, cod_tipo_cliente, cod_modelo, anio, mes)):
+        mensaje = f'El presupuesto del tipo cliente {cod_tipo_cliente}, modelo {cod_modelo}, año {anio} y mes {mes} ya existe'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 409
+    db.session.add(presupuesto)
+    db.session.commit()
+    mensaje = 'Se registró el presupuesto'
+    logger.info(mensaje)
+    return jsonify({'mensaje': mensaje}), 201
+
+
+@formulas_b.route(
+    "/empresas/<empresa>/tipos-clientes/<cod_tipo_cliente>/modelos/<cod_modelo>/anios/<anio>/meses/<mes>/presupuestos-tipo-cli",
+    methods=["PUT"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("actualizar el presupuesto")
+def put_presupuesto_tipo_cli(empresa, cod_tipo_cliente, cod_modelo, anio, mes, data):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_tipo_cliente = validar_varchar('cod_tipo_cliente', cod_tipo_cliente, 3)
+    cod_modelo = validar_varchar('cod_modelo', cod_modelo, 20)
+    anio = validar_number('anio', anio, 4)
+    mes = validar_mes('mes', mes)
+    data = {'empresa': empresa, 'cod_tipo_cliente': cod_tipo_cliente, 'cod_modelo': cod_modelo, 'anio': anio,
+            'mes': mes, **data}
+    st_presupuesto_motos_tipo_cli_pro(**data)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    presupuesto = db.session.get(st_presupuesto_motos_tipo_cli_pro, (empresa, cod_tipo_cliente, cod_modelo, anio, mes))
+    if not presupuesto:
+        mensaje = f'No existe el presupuesto del tipo cliente {cod_tipo_cliente}, modelo {cod_modelo}, año {anio} y mes {mes}'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    presupuesto.unidades = data['unidades']
+    presupuesto.sell_out = data.get('sell_out')
+    presupuesto.audit_usuario_mod = text('user')
+    presupuesto.audit_fecha_mod = text('sysdate')
+    db.session.commit()
+    mensaje = 'Se actualizó el presupuesto'
+    logger.info(mensaje)
+    return '', 204
+
+
+@formulas_b.route(
+    "/empresas/<empresa>/tipos-clientes/<cod_tipo_cliente>/modelos/<cod_modelo>/anios/<anio>/meses/<mes>/presupuestos-tipo-cli",
+    methods=["DELETE"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("eliminar el presupuesto")
+def delete_presupuesto_tipo_cli(empresa, cod_tipo_cliente, cod_modelo, anio, mes):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_tipo_cliente = validar_varchar('cod_tipo_cliente', cod_tipo_cliente, 14)
+    cod_modelo = validar_varchar('cod_modelo', cod_modelo, 20)
+    anio = validar_number('anio', anio, 4)
+    mes = validar_mes('mes', mes)
+    if not db.session.get(Empresa, empresa):
+        mensaje = f'Empresa {empresa} inexistente'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    presupuesto = db.session.get(st_presupuesto_motos_tipo_cli_pro, (empresa, cod_tipo_cliente, cod_modelo, anio, mes))
+    if not presupuesto:
+        mensaje = f'No existe el presupuesto del tipo cliente {cod_tipo_cliente}, modelo {cod_modelo}, año {anio} y mes {mes}'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    db.session.delete(presupuesto)
+    db.session.commit()
+    mensaje = 'Se eliminó el presupuesto'
+    logger.info(mensaje)
+
     return '', 204
