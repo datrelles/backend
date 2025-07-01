@@ -1940,5 +1940,4 @@ def delete_presupuesto_tipo_cli(empresa, cod_tipo_cliente, cod_modelo, anio, mes
     db.session.commit()
     mensaje = 'Se eliminó el presupuesto'
     logger.info(mensaje)
-
     return '', 204
