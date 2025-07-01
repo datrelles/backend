@@ -1156,7 +1156,7 @@ def execute_factores_bd(empresa, cod_proceso, cod_parametro):
         mensaje = f'Empresa {empresa} inexistente'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"SELECT PK_FORMULAS.EJECUTAR_FACTORES({empresa}, '{cod_proceso}', '{cod_parametro}') FROM DUAL"
+    sql = f"SELECT {paquete_funcion_bd.PROCESOS.value}.EJECUTAR_FACTORES({empresa}, '{cod_proceso}', '{cod_parametro}') FROM DUAL"
     result = custom_base.execute_sql(sql)
     return jsonify({"mensaje": result})
 
