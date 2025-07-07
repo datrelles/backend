@@ -13,8 +13,7 @@ from unidecode import unidecode
 from src.config.database import db
 from src.models.catalogos_bench import Chasis, DimensionPeso, ElectronicaOtros, Transmision, Imagenes, TipoMotor, Motor, \
     Color, Canal, MarcaRepuesto, ProductoExterno, Linea, Marca, ModeloSRI, ModeloHomologado, MatriculacionMarca, \
-    ModeloComercial, Segmento, Version, ModeloVersionRepuesto, ClienteCanal, ModeloVersion, Benchmarking
-from src.models.clientes import Cliente
+    ModeloComercial, Segmento, Version, ModeloVersionRepuesto, ClienteCanal, ModeloVersion, Benchmarking, StCliente
 from src.models.productos import Producto
 from src.models.proveedores import TgModeloItem
 from src.models.users import Empresa
@@ -126,7 +125,6 @@ def insert_dimension():
             return float(value)
         except (ValueError, TypeError):
             return None
-
     try:
         data = request.json
         user = get_jwt_identity()
@@ -421,6 +419,8 @@ def insert_motor():
                     nombre_motor=nombre_motor,
                     cilindrada=cilindrada,
                     sistema_combustible=sistema_combustible,
+                    caballos_fuerza=caballos_fuerza,
+                    torque_maximo=torque_maximo,
                     arranque=arranque,
                     sistema_refrigeracion=sistema_refrigeracion,
                     descripcion_motor=descripcion_motor
@@ -573,6 +573,82 @@ def insert_canal():
         db.session.rollback()
         return jsonify({
             "error": "Registro duplicado: ya existe un registro de canal con estos datos"
+        }), 409
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/insert_cliente', methods=["POST"])
+@jwt_required()
+def insert_cliente():
+    try:
+        user = get_jwt_identity()
+        data = request.get_json()
+
+        if isinstance(data, dict) and "cliente" in data:
+            data = data["cliente"]
+        elif isinstance(data, dict):
+            data = [data]
+
+        duplicados = []
+        insertados = 0
+
+        for item in data:
+            nombre_raw = item.get("nombre_cliente")
+            if not nombre_raw:
+                return jsonify({"error": "Nombre del cliente no puede ser nulo"}), 400
+
+            nombre_normalizado = normalize(nombre_raw)
+
+            estado = item.get("estado_cliente")
+            if isinstance(estado, str):
+                estado_normalizado = estado.strip().lower()
+                if estado_normalizado == "activo":
+                    estado = 1
+                elif estado_normalizado == "inactivo":
+                    estado = 0
+                else:
+                    return jsonify({'error': f"Estado inválido en el registro: {estado}"}), 400
+
+            existe = db.session.query(StCliente).filter(
+                func.upper(func.trim(StCliente.nombre_cliente)) == nombre_normalizado
+            ).first() is not None
+
+            if existe:
+                duplicados.append(nombre_raw)
+                continue
+
+            next_id = db.session.execute(text("SELECT stock.seq_st_cliente.NEXTVAL FROM dual")).scalar()
+
+            nuevo = StCliente(
+                codigo_cliente=next_id,
+                nombre_cliente=nombre_normalizado,
+                estado_cliente=estado,
+                usuario_crea=user,
+                fecha_creacion=datetime.now()
+            )
+
+            db.session.add(nuevo)
+            insertados += 1
+
+        db.session.commit()
+
+        if duplicados and len(duplicados) == len(data):
+            return jsonify({"error": "Todos los registros ya existen. No se insertó ninguno"}), 409
+        elif duplicados:
+            return jsonify({
+                "message": f"{insertados} registro(s) insertado(s), {len(duplicados)} duplicado(s) omitido(s)",
+                "duplicados": duplicados
+            }), 201
+        else:
+            return jsonify({"message": "Elementos insertados correctamente"}), 200
+
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({
+            "error": "Registro duplicado por constraint UNIQUE en la base de datos",
+            "detalle": str(e)
         }), 409
 
     except Exception as e:
@@ -924,7 +1000,6 @@ def insert_modelo_sri():
         if isinstance(data, dict):
             data = [data]
 
-        # Se compara por nombre + año (para permitir modelos repetidos con diferente año)
         registros_existentes = db.session.query(ModeloSRI).all()
         claves_existentes = {
             (r.nombre_modelo.strip().lower(), int(r.anio_modelo)) for r in registros_existentes
@@ -937,7 +1012,6 @@ def insert_modelo_sri():
             nombre = item.get("nombre_modelo")
             anio = item.get("anio_modelo")
 
-            # Mapeo flexible de estado_modelo
             estado_raw = item.get("estado_modelo")
             if isinstance(estado_raw, str):
                 estado = 1 if estado_raw.strip().upper() == "ACTIVO" else 0
@@ -948,7 +1022,6 @@ def insert_modelo_sri():
 
             cod_mdl_importacion = item.get("cod_mdl_importacion")
 
-            # Validación
             if not nombre or estado not in [0, 1] or not (1950 <= int(anio) <= 2100):
                 duplicados.append(item)
                 continue
@@ -1057,64 +1130,102 @@ def insert_modelo_homologado():
 @jwt_required()
 def insert_matriculacion_marca():
     try:
-        data = request.json
+        payload = request.json
         user = get_jwt_identity()
 
-        codigo_homologado = data.get("codigo_modelo_homologado")
-        placa = data.get("placa")
-        fecha_matriculacion_str = data.get("fecha_matriculacion")
-        fecha_facturacion_str = data.get("fecha_facturacion")
-        detalle = data.get("detalle_matriculacion")
+        if isinstance(payload, dict):
+            datos = [payload]
+        elif isinstance(payload, list):
+            datos = payload
+        else:
+            return jsonify({"error": "Formato inválido. Se esperaba un objeto o una lista"}), 400
 
-        # Validación de obligatorios
-        if not codigo_homologado or not placa:
-            return jsonify({"error": "Los campos 'codigo_modelo_homologado' y 'placa' son obligatorios"}), 400
+        insertados = []
+        errores = []
 
-        # Conversión de fechas con validación
-        try:
-            fecha_matriculacion = datetime.strptime(fecha_matriculacion_str, '%Y-%m-%d') if fecha_matriculacion_str else None
-            fecha_facturacion = datetime.strptime(fecha_facturacion_str, '%Y-%m-%d') if fecha_facturacion_str else None
-        except ValueError:
-            return jsonify({"error": "Formato de fecha inválido. Use 'YYYY-MM-DD'."}), 400
+        for item in datos:
+            try:
+                codigo_homologado = item.get("codigo_modelo_homologado")
+                modelo_sri = item.get("nombre_modelo_sri")
+                placa = item.get("placa")
+                detalle = item.get("detalle_matriculacion")
+                fecha_matriculacion_str = item.get("fecha_matriculacion")
+                fecha_facturacion_str = item.get("fecha_facturacion")
 
-        # Validar existencia de modelo
-        existe_modelo = db.session.query(ModeloHomologado).filter_by(
-            codigo_modelo_homologado=codigo_homologado
-        ).first()
-        if not existe_modelo:
-            return jsonify({"error": "El código de modelo homologado no existe"}), 404
+                if not codigo_homologado:
+                    if modelo_sri:
+                        homologado = db.session.query(ModeloHomologado).join(ModeloSRI).filter(
+                            func.upper(ModeloSRI.nombre_modelo) == modelo_sri.upper()
+                        ).first()
+                        if homologado:
+                            codigo_homologado = homologado.codigo_modelo_homologado
+                        else:
+                            errores.append({"error": "Modelo SRI no encontrado", "placa": placa})
+                            continue
+                    else:
+                        errores.append({"error": "Falta modelo_sri o codigo_modelo_homologado", "placa": placa})
+                        continue
 
-        # Validar placa única
-        existe_placa = db.session.query(MatriculacionMarca).filter(
-            func.upper(MatriculacionMarca.placa) == placa.upper()
-        ).first()
-        if existe_placa:
-            return jsonify({"error": "Ya existe una matrícula con esa placa"}), 409
+                if not codigo_homologado or not placa:
+                    errores.append({"error": "Faltan campos obligatorios", "placa": placa})
+                    continue
 
-        # Crear registro
-        nueva = MatriculacionMarca(
-            codigo_modelo_homologado=codigo_homologado,
-            placa=placa,
-            fecha_matriculacion=fecha_matriculacion,
-            fecha_facturacion=fecha_facturacion,
-            detalle_matriculacion=detalle,
-            usuario_crea=user,
-            fecha_creacion=datetime.now()
-        )
+                try:
+                    fecha_matriculacion = datetime.strptime(fecha_matriculacion_str, '%Y-%m-%d') if fecha_matriculacion_str else None
+                    fecha_facturacion = datetime.strptime(fecha_facturacion_str, '%Y-%m-%d') if fecha_facturacion_str else None
+                except ValueError:
+                    errores.append({"error": "Formato de fecha inválido", "placa": placa})
+                    continue
 
-        db.session.add(nueva)
-        db.session.flush()
-        db.session.refresh(nueva)
+                existe_modelo = db.session.query(ModeloHomologado).filter_by(
+                    codigo_modelo_homologado=codigo_homologado
+                ).first()
+                if not existe_modelo:
+                    errores.append({"error": "El modelo homologado no existe", "placa": placa})
+                    continue
+
+                existe_placa = db.session.query(MatriculacionMarca).filter(
+                    func.upper(MatriculacionMarca.placa) == placa.upper()
+                ).first()
+                if existe_placa:
+                    errores.append({"error": "Ya existe una matrícula con esa placa", "placa": placa})
+                    continue
+
+                nueva = MatriculacionMarca(
+                    codigo_modelo_homologado=codigo_homologado,
+                    placa=placa,
+                    fecha_matriculacion=fecha_matriculacion,
+                    fecha_facturacion=fecha_facturacion,
+                    detalle_matriculacion=detalle,
+                    usuario_crea=user,
+                    fecha_creacion=datetime.now()
+                )
+
+                db.session.add(nueva)
+                db.session.flush()
+                db.session.refresh(nueva)
+
+                insertados.append({
+                    "codigo_matricula_marca": nueva.codigo_matricula_marca,
+                    "placa": placa
+                })
+
+            except Exception as e:
+                errores.append({"error": str(e), "placa": item.get("placa")})
+                continue
+
         db.session.commit()
 
         return jsonify({
-            "message": "Matrícula registrada correctamente",
-            "codigo_matricula_marca": nueva.codigo_matricula_marca
+            "insertados": insertados,
+            "errores": errores,
+            "message": f"Se insertaron {len(insertados)} registros"
         })
 
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
 
 @bench.route('/insert_modelo_comercial', methods=['POST'])
 @jwt_required()
@@ -1244,20 +1355,21 @@ def insert_segmento():
                 def normalizar(texto):
                     return unidecode(str(texto or "")).strip().lower()
 
-                nombre_linea_norm = normalizar(row.get("nombre_linea"))
+                codigo_linea = row.get("codigo_linea")
+                nombre_linea = row.get("nombre_linea")
 
-                # Buscar por nombre_linea
-                lineas = db.session.query(Linea).all()
-                linea = next(
-                    (l for l in lineas if normalizar(l.nombre_linea) == nombre_linea_norm),
-                    None
-                )
+                if codigo_linea:
+                    linea = db.session.query(Linea).filter_by(codigo_linea=codigo_linea).first()
+                else:
+                    nombre_linea_norm = normalizar(nombre_linea)
+                    linea = db.session.query(Linea).filter(
+                        func.lower(func.trim(Linea.nombre_linea)) == nombre_linea_norm
+                    ).first()
 
                 if not linea:
-                    errores.append(f"Fila {idx + 2}: Línea '{row.get('nombre_linea')}' no encontrada")
+                    errores.append(f"Fila {idx + 2}: Línea '{nombre_linea or codigo_linea}' no encontrada")
                     continue
 
-                # Resolver modelo comercial
                 codigo_modelo_comercial = row.get("codigo_modelo_comercial")
                 nombre_modelo = row.get("nombre_modelo")
                 if codigo_modelo_comercial:
@@ -1275,7 +1387,6 @@ def insert_segmento():
                     errores.append(f"Fila {idx + 2}: Modelo comercial no encontrado")
                     continue
 
-                # Validar duplicado
                 existe = db.session.query(Segmento).filter(
                     func.lower(Segmento.nombre_segmento) == nombre_segmento.lower(),
                     Segmento.codigo_modelo_comercial == modelo.codigo_modelo_comercial
@@ -1284,7 +1395,6 @@ def insert_segmento():
                     errores.append(f"Fila {idx + 2}: Segmento '{nombre_segmento}' ya existe para el modelo")
                     continue
 
-                # Insertar nuevo segmento
                 cod_actual += 1
                 nuevo = Segmento(
                     codigo_segmento=cod_actual,
@@ -1338,7 +1448,6 @@ def insert_version():
                 duplicados.append(item)
                 continue
 
-            # Normalizar estado
             if isinstance(estado, str):
                 estado_normalizado = estado.strip().lower()
                 if estado_normalizado == "activo":
@@ -1411,7 +1520,6 @@ def insert_modelo_version_repuesto():
                     if prod:
                         cod_producto = prod.cod_producto
                         empresa = prod.empresa
-
                     else:
                         errores.append({"error": "Producto no encontrado", "repuestos": item})
                         continue
@@ -1421,12 +1529,14 @@ def insert_modelo_version_repuesto():
                 if ext:
                     codigo_prod_externo = ext.codigo_prod_externo
                 else:
-                    errores.append({"error": "Producto externo no encontrado", "repuestos": item})
-                    continue
-
+                    codigo_prod_externo = None
 
             if not codigo_version and item.get("nombre_version"):
-                version = db.session.query(Version).filter_by(nombre_version=item["nombre_version"]).first()
+                nombre_version = str(item["nombre_version"]).strip()
+                version = db.session.query(Version).filter(
+                    func.upper(func.trim(Version.nombre_version)) == nombre_version.upper()
+                ).first()
+
                 if version:
                     codigo_version = version.codigo_version
                 else:
@@ -1438,9 +1548,8 @@ def insert_modelo_version_repuesto():
             precio_venta_distribuidor = item.get("precio_venta_distribuidor")
 
             campos_obligatorios = [
-                cod_producto, empresa, codigo_prod_externo,
-                codigo_version,
-                precio_producto_modelo, precio_venta_distribuidor
+                cod_producto, empresa,
+                codigo_version
             ]
 
             if any(c is None or c == "" for c in campos_obligatorios):
@@ -1455,14 +1564,20 @@ def insert_modelo_version_repuesto():
                 duplicados.append({"error": "Registro duplicado", "repuestos": item})
                 continue
 
+            def parse_decimal(val):
+                try:
+                    return float(str(val).replace('.', '').replace(',', '.'))
+                except Exception:
+                    return None
+
             nuevo = ModeloVersionRepuesto(
                 codigo_prod_externo=codigo_prod_externo,
                 codigo_version=codigo_version,
                 empresa=empresa,
                 cod_producto=cod_producto,
                 descripcion=descripcion,
-                precio_producto_modelo=precio_producto_modelo,
-                precio_venta_distribuidor=precio_venta_distribuidor
+                precio_producto_modelo=parse_decimal(precio_producto_modelo),
+                precio_venta_distribuidor=parse_decimal(precio_venta_distribuidor),
             )
             db.session.add(nuevo)
             insertados += 1
@@ -1499,10 +1614,15 @@ def insert_cliente_canal():
 
         for item in data:
             codigo_canal = item.get("codigo_canal")
+            codigo_cliente = item.get("codigo_cliente")
             descripcion = item.get("descripcion_cliente_canal")
             cod_modelo_vers_repuesto = item.get("codigo_mod_vers_repuesto")
             cod_producto = item.get("cod_producto")
             empresa = item.get("empresa")
+
+            if not db.session.get(StCliente, codigo_cliente):
+                errores.append({"error": "Cliente no existe", "cliente": item})
+                continue
 
             if not all([cod_modelo_vers_repuesto, cod_producto, empresa]):
                 nombre_producto = item.get("nombre_producto")
@@ -1528,16 +1648,17 @@ def insert_cliente_canal():
                     errores.append({"error": "No se pudo resolver modelo_version_repuesto", "cliente": item})
                     continue
 
-            campos_obligatorios = [codigo_canal, cod_modelo_vers_repuesto, cod_producto, empresa]
+            campos_obligatorios = [codigo_canal, codigo_cliente, cod_modelo_vers_repuesto, cod_producto, empresa]
             if any(c is None or c == '' for c in campos_obligatorios):
                 errores.append({"error": "Faltan campos obligatorios", "cliente": item})
                 continue
 
             nuevo = ClienteCanal(
                 codigo_canal=codigo_canal,
+                codigo_cliente=codigo_cliente,
                 codigo_mod_vers_repuesto=cod_modelo_vers_repuesto,
-                empresa=empresa,
                 cod_producto=cod_producto,
+                empresa=empresa,
                 descripcion_cliente_canal=descripcion
             )
             db.session.add(nuevo)
@@ -1545,14 +1666,24 @@ def insert_cliente_canal():
 
         if insertados:
             db.session.commit()
-            return jsonify({"message": "Registros insertados correctamente", "insertados": insertados}), 201
+            return jsonify({
+                "message": "Registros insertados correctamente",
+                "insertados": insertados,
+                "errores": errores
+            }), 201
         else:
             db.session.rollback()
-            return jsonify({"error": "No se insertó ningún registro", "detalles": errores}), 409
+            return jsonify({
+                "error": "No se insertó ningún registro",
+                "detalles": errores
+            }), 409
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
+        return jsonify({
+            "error": "Ocurrió un error interno",
+            "detalle": str(e)
+        }), 500
 
 @bench.route('/insert_modelo_version', methods=["POST"])
 @jwt_required()
@@ -1682,7 +1813,6 @@ def insert_modelo_version():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
-
 
 @bench.route('/insert_modelo_version_masivo', methods=['POST'])
 @jwt_required()
@@ -2010,7 +2140,6 @@ def get_imagenes():
                 "fecha_creacion": im.fecha_creacion.isoformat() if im.fecha_creacion else None,
                 "fecha_modificacion": im.fecha_modificacion.isoformat() if im.fecha_modificacion else None
             })
-
         return jsonify(resultado)
 
     except Exception as e:
@@ -2034,7 +2163,6 @@ def get_transmision():
                 "fecha_creacion": tr.fecha_creacion.isoformat() if tr.fecha_creacion else None,
                 "fecha_modificacion": tr.fecha_modificacion.isoformat() if tr.fecha_modificacion else None
             })
-
         return jsonify(resultado)
 
     except Exception as e:
@@ -2059,7 +2187,29 @@ def get_canal():
                 "fecha_creacion": c.fecha_creacion.isoformat() if c.fecha_creacion else None,
                 "fecha_modificacion": c.fecha_modificacion.isoformat() if c.fecha_modificacion else None
             })
+        return jsonify(resultado)
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/get_cliente', methods=["GET"])
+@jwt_required()
+def get_cliente():
+    try:
+        #canal = db.session.query(Canal).all()
+        canal = db.session.query(StCliente).order_by(StCliente.codigo_cliente.asc()).all()
+
+        resultado = []
+        for c in canal:
+            resultado.append({
+                "codigo_cliente": c.codigo_cliente,
+                "nombre_cliente": c.nombre_cliente,
+                "estado_cliente": c.estado_cliente,
+                "usuario_crea": c.usuario_crea,
+                "usuario_modifica": c.usuario_modifica,
+                "fecha_creacion": c.fecha_creacion.isoformat() if c.fecha_creacion else None,
+                "fecha_modificacion": c.fecha_modificacion.isoformat() if c.fecha_modificacion else None
+            })
         return jsonify(resultado)
 
     except Exception as e:
@@ -2088,7 +2238,6 @@ def get_lineas():
                 "fecha_creacion": l.fecha_creacion.isoformat() if l.fecha_creacion else None,
                 "fecha_modificacion": l.fecha_modificacion.isoformat() if l.fecha_modificacion else None
             })
-
         return jsonify(resultado)
 
     except Exception as e:
@@ -2112,7 +2261,6 @@ def get_marca_repuestos():
                 "fecha_creacion": r.fecha_creacion.isoformat() if r.fecha_creacion else None,
                 "fecha_modificacion": r.fecha_modificacion.isoformat() if r.fecha_modificacion else None
             })
-
         return jsonify(resultado)
 
     except Exception as e:
@@ -2144,7 +2292,6 @@ def get_productos_externos():
             }
             for producto, nombre_marca in resultados
         ]
-
         return jsonify(respuesta)
 
     except Exception as e:
@@ -2170,7 +2317,6 @@ def get_version():
             })
 
         return jsonify(resultado)
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -2242,7 +2388,6 @@ def get_marca():
                 "fecha_creacion": m.fecha_creacion.isoformat() if m.fecha_creacion else None,
                 "fecha_modificacion": m.fecha_modificacion.isoformat() if m.fecha_modificacion else None
             })
-
         return jsonify(resultado)
 
     except Exception as e:
@@ -2269,7 +2414,6 @@ def get_modelos_comerciales():
                 "fecha_creacion": modelo.fecha_creacion.isoformat() if modelo.fecha_creacion else None,
                 "fecha_modificacion": modelo.fecha_modificacion.isoformat() if modelo.fecha_modificacion else None
             })
-
         return jsonify(resultados), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2295,12 +2439,16 @@ def get_modelos_version_repuesto():
             ModeloVersionRepuesto.precio_producto_modelo,
             ModeloVersionRepuesto.precio_venta_distribuidor,
             ModeloVersionRepuesto.descripcion
-        ).join(Producto, (ModeloVersionRepuesto.cod_producto == Producto.cod_producto) & (ModeloVersionRepuesto.empresa == Producto.empresa))\
-         .join(ProductoExterno, ModeloVersionRepuesto.codigo_prod_externo == ProductoExterno.codigo_prod_externo)\
-         .join(Version, ModeloVersionRepuesto.codigo_version == Version.codigo_version)\
-         .join(Empresa, ModeloVersionRepuesto.empresa == Empresa.empresa)\
-         .join(modelo_item_alias, (Producto.empresa == modelo_item_alias.empresa) & (Producto.cod_modelo == modelo_item_alias.cod_modelo) & (Producto.cod_item == modelo_item_alias.cod_item))\
-         .all()
+        ).join(Producto, (ModeloVersionRepuesto.cod_producto == Producto.cod_producto) & (
+                    ModeloVersionRepuesto.empresa == Producto.empresa)) \
+            .outerjoin(ProductoExterno,
+                       ModeloVersionRepuesto.codigo_prod_externo == ProductoExterno.codigo_prod_externo) \
+            .join(Version, ModeloVersionRepuesto.codigo_version == Version.codigo_version) \
+            .join(Empresa, ModeloVersionRepuesto.empresa == Empresa.empresa) \
+            .join(modelo_item_alias, (Producto.empresa == modelo_item_alias.empresa) & (
+                    Producto.cod_modelo == modelo_item_alias.cod_modelo) & (
+                              Producto.cod_item == modelo_item_alias.cod_item)) \
+            .all()
 
         return jsonify([{
             "codigo_mod_vers_repuesto": r.codigo_mod_vers_repuesto,
@@ -2326,7 +2474,6 @@ def get_modelos_version_repuesto():
 @cross_origin()
 def get_cliente_canal():
     try:
-        #registros = db.session.query(ClienteCanal).all()
         registros = db.session.query(ClienteCanal).order_by(ClienteCanal.codigo_cliente_canal.asc()).all()
         resultados = []
 
@@ -2345,12 +2492,22 @@ def get_cliente_canal():
                 codigo_mod_vers_repuesto=cliente.codigo_mod_vers_repuesto
             ).first()
 
+            producto_externo = None
+            if modelo_version and modelo_version.codigo_prod_externo:
+                producto_externo = db.session.query(ProductoExterno).filter_by(
+                    codigo_prod_externo=modelo_version.codigo_prod_externo
+                ).first()
+
             version = db.session.query(Version).filter_by(
                 codigo_version=modelo_version.codigo_version
             ).first() if modelo_version else None
 
             empresa_data = db.session.query(Empresa).filter_by(
                 empresa=cliente.empresa
+            ).first()
+
+            cliente_data = db.session.query(StCliente).filter_by(
+                codigo_cliente=cliente.codigo_cliente
             ).first()
 
             resultados.append({
@@ -2364,7 +2521,11 @@ def get_cliente_canal():
                 "nombre_empresa": empresa_data.nombre if empresa_data else None,
                 "nombre_producto": producto.nombre if producto else None,
                 "codigo_version": cliente.codigo_mod_vers_repuesto,
-                "nombre_version": version.nombre_version if version else None
+                "nombre_version": version.nombre_version if version else None,
+                "codigo_cliente": cliente.codigo_cliente,
+                "nombre_cliente": cliente_data.nombre_cliente if cliente_data else None,
+                "codigo_prod_externo": modelo_version.codigo_prod_externo if modelo_version else None,
+                "nombre_producto_externo": producto_externo.nombre_producto if producto_externo else None
             })
 
         return jsonify(resultados), 200
@@ -2411,7 +2572,6 @@ def get_productos():
             }
             for p in productos
         ]
-
         return jsonify(resultado), 200
 
     except Exception as e:
@@ -2479,6 +2639,8 @@ def get_modelo_version():
             Motor.nombre_motor,
             Motor.codigo_motor,
             Motor.codigo_tipo_motor,
+            ModeloVersionRepuesto.codigo_prod_externo,
+            ProductoExterno.nombre_producto.label("nombre_producto_externo"),
             TipoMotor.nombre_tipo.label("nombre_tipo"),
             Transmision.codigo_transmision,
             Transmision.caja_cambios,
@@ -2495,24 +2657,28 @@ def get_modelo_version():
             Empresa.nombre.label("nombre_empresa"),
             Version.nombre_version
         ).join(ClienteCanal, ModeloVersion.codigo_cliente_canal == ClienteCanal.codigo_cliente_canal) \
-         .join(ModeloComercial, (ModeloVersion.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
-                               (ModeloVersion.codigo_marca == ModeloComercial.codigo_marca)) \
-         .join(Marca, ModeloVersion.codigo_marca == Marca.codigo_marca) \
-         .join(Empresa, ClienteCanal.empresa == Empresa.empresa) \
-         .outerjoin(DimensionPeso, ModeloVersion.codigo_dim_peso == DimensionPeso.codigo_dim_peso) \
-         .outerjoin(Imagenes, ModeloVersion.codigo_imagen == Imagenes.codigo_imagen) \
-         .outerjoin(ElectronicaOtros, ModeloVersion.codigo_electronica == ElectronicaOtros.codigo_electronica) \
-         .outerjoin(Motor, (ModeloVersion.codigo_motor == Motor.codigo_motor) &
-                          (ModeloVersion.codigo_tipo_motor == Motor.codigo_tipo_motor)) \
-         .outerjoin(TipoMotor, Motor.codigo_tipo_motor == TipoMotor.codigo_tipo_motor) \
-         .outerjoin(Transmision, ModeloVersion.codigo_transmision == Transmision.codigo_transmision) \
-         .outerjoin(Color, ModeloVersion.codigo_color_bench == Color.codigo_color_bench) \
-         .outerjoin(Chasis, ModeloVersion.codigo_chasis == Chasis.codigo_chasis) \
-         .outerjoin(Canal, ClienteCanal.codigo_cliente_canal == Canal.codigo_canal) \
-         .outerjoin(Producto, (ClienteCanal.cod_producto == Producto.cod_producto) &
-                              (ClienteCanal.empresa == Producto.empresa)) \
-         .outerjoin(Version, ModeloVersion.codigo_version == Version.codigo_version) \
-         .all()
+            .join(ModeloComercial, (ModeloVersion.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
+                  (ModeloVersion.codigo_marca == ModeloComercial.codigo_marca)) \
+            .join(Marca, ModeloVersion.codigo_marca == Marca.codigo_marca) \
+            .join(Empresa, ClienteCanal.empresa == Empresa.empresa) \
+            .outerjoin(DimensionPeso, ModeloVersion.codigo_dim_peso == DimensionPeso.codigo_dim_peso) \
+            .outerjoin(Imagenes, ModeloVersion.codigo_imagen == Imagenes.codigo_imagen) \
+            .outerjoin(ElectronicaOtros, ModeloVersion.codigo_electronica == ElectronicaOtros.codigo_electronica) \
+            .outerjoin(Motor, (ModeloVersion.codigo_motor == Motor.codigo_motor) &
+                       (ModeloVersion.codigo_tipo_motor == Motor.codigo_tipo_motor)) \
+            .outerjoin(TipoMotor, Motor.codigo_tipo_motor == TipoMotor.codigo_tipo_motor) \
+            .outerjoin(Transmision, ModeloVersion.codigo_transmision == Transmision.codigo_transmision) \
+            .outerjoin(Color, ModeloVersion.codigo_color_bench == Color.codigo_color_bench) \
+            .outerjoin(Chasis, ModeloVersion.codigo_chasis == Chasis.codigo_chasis) \
+            .outerjoin(Canal, ClienteCanal.codigo_canal == Canal.codigo_canal) \
+            .outerjoin(Producto, (ClienteCanal.cod_producto == Producto.cod_producto) &
+                       (ClienteCanal.empresa == Producto.empresa)) \
+            .outerjoin(ModeloVersionRepuesto,
+                       ClienteCanal.codigo_mod_vers_repuesto == ModeloVersionRepuesto.codigo_mod_vers_repuesto) \
+            .outerjoin(ProductoExterno,
+                       ModeloVersionRepuesto.codigo_prod_externo == ProductoExterno.codigo_prod_externo) \
+            .outerjoin(Version, ModeloVersion.codigo_version == Version.codigo_version) \
+            .all()
 
         return jsonify([{
             "codigo_modelo_version": r.codigo_modelo_version,
@@ -2532,7 +2698,7 @@ def get_modelo_version():
             "codigo_transmision": r.codigo_transmision,
             "codigo_color_bench": r.codigo_color_bench,
             "caja_cambios": r.caja_cambios,
-            "nombre_color": r.nombre_color.upper(),
+            "nombre_color": r.nombre_color.upper() if r.nombre_color else None,
             "codigo_chasis": r.codigo_chasis,
             "nombre_modelo_comercial": r.nombre_modelo_comercial,
             "nombre_marca": r.nombre_marca,
@@ -2542,7 +2708,9 @@ def get_modelo_version():
             "nombre_producto": r.nombre_producto,
             "empresa": r.empresa,
             "nombre_empresa": r.nombre_empresa,
-            "nombre_version": r.nombre_version
+            "nombre_version": r.nombre_version,
+            "nombre_producto_externo": r.nombre_producto_externo,
+            "codigo_prod_externo": r.codigo_prod_externo
         } for r in resultados]), 200
 
     except Exception as e:
@@ -2553,16 +2721,35 @@ def get_modelo_version():
 @jwt_required()
 def get_matriculacion_marca():
     try:
-        registros = db.session.query(MatriculacionMarca).order_by(MatriculacionMarca.codigo_matricula_marca.asc()).all()
+        resultados = (
+            db.session.query(
+                MatriculacionMarca.codigo_matricula_marca,
+                MatriculacionMarca.codigo_modelo_homologado,
+                ModeloSRI.nombre_modelo.label('nombre_modelo_sri'),
+                MatriculacionMarca.placa,
+                MatriculacionMarca.fecha_matriculacion,
+                MatriculacionMarca.fecha_facturacion,
+                MatriculacionMarca.detalle_matriculacion,
+                MatriculacionMarca.usuario_crea,
+                MatriculacionMarca.usuario_modifica,
+                MatriculacionMarca.fecha_creacion,
+                MatriculacionMarca.fecha_modificacion
+            )
+            .join(ModeloHomologado, ModeloHomologado.codigo_modelo_homologado == MatriculacionMarca.codigo_modelo_homologado)
+            .join(ModeloSRI, ModeloSRI.codigo_modelo_sri == ModeloHomologado.codigo_modelo_sri)
+            .order_by(MatriculacionMarca.codigo_matricula_marca.asc())
+            .all()
+        )
 
-        resultado = []
-        for r in registros:
-            resultado.append({
+        response = []
+        for r in resultados:
+            response.append({
                 "codigo_matricula_marca": r.codigo_matricula_marca,
                 "codigo_modelo_homologado": r.codigo_modelo_homologado,
+                "nombre_modelo_sri": r.nombre_modelo_sri,
                 "placa": r.placa,
-                "fecha_matriculacion": r.fecha_matriculacion,
-                "fecha_facturacion": r.fecha_facturacion,
+                "fecha_matriculacion": r.fecha_matriculacion.isoformat() if r.fecha_matriculacion else None,
+                "fecha_facturacion": r.fecha_facturacion.isoformat() if r.fecha_facturacion else None,
                 "detalle_matriculacion": r.detalle_matriculacion,
                 "usuario_crea": r.usuario_crea,
                 "usuario_modifica": r.usuario_modifica,
@@ -2570,12 +2757,49 @@ def get_matriculacion_marca():
                 "fecha_modificacion": r.fecha_modificacion.isoformat() if r.fecha_modificacion else None
             })
 
-        return jsonify(resultado)
+        return jsonify(response)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 # ACTUALIZAR/ MODIFICAR DATOS -------------------------------------------------------------------------->
+@bench.route('/update_matriculacion_marca/<int:codigo>', methods=["PUT"])
+@jwt_required()
+def update_matriculacion_marca(codigo):
+    try:
+        data = request.get_json()
+        usuario = get_jwt_identity()
+
+        registro = db.session.query(MatriculacionMarca).filter_by(
+            codigo_matricula_marca=codigo
+        ).first()
+
+        if not registro:
+            return jsonify({"error": f"Registro con ID {codigo} no encontrado"}), 404
+
+        modelo = db.session.query(ModeloHomologado).filter_by(
+            codigo_modelo_homologado=data.get("codigo_modelo_homologado")
+        ).first()
+
+        if not modelo:
+            return jsonify({"error": f"Modelo homologado con código {data.get('codigo_modelo_homologado')} no encontrado"}), 400
+
+        registro.codigo_modelo_homologado = data.get("codigo_modelo_homologado")
+        registro.placa = data.get("placa", "").strip()
+        registro.fecha_matriculacion = datetime.fromisoformat(data["fecha_matriculacion"]) if data.get(
+            "fecha_matriculacion") else None
+        registro.fecha_facturacion = datetime.fromisoformat(data["fecha_facturacion"]) if data.get("fecha_facturacion") else None
+        registro.detalle_matriculacion = (data.get("detalle_matriculacion") or "").strip() or None
+        registro.usuario_modifica = usuario
+        registro.fecha_modificacion = datetime.now()
+
+        db.session.commit()
+
+        return jsonify({"message": "Registro actualizado correctamente"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 @bench.route('/update_chasis/<int:codigo_chasis>', methods=["PUT"])
 @jwt_required()
@@ -2642,9 +2866,6 @@ def update_electronica_otros(codigo_electronica):
     try:
         user = get_jwt_identity()
         data = request.json
-
-        def normalize(value):
-            return (value or '').strip().lower()
 
         registro = db.session.query(ElectronicaOtros).get(codigo_electronica)
         if not registro:
@@ -2803,6 +3024,29 @@ def update_canal(codigo_canal):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
+@bench.route('/update_cliente/<int:codigo_cliente>', methods=["PUT"])
+@jwt_required()
+def update_cliente(codigo_cliente):
+    try:
+        data = request.json
+        user = get_jwt_identity()
+
+        cliente = db.session.query(StCliente).filter_by(codigo_cliente=codigo_cliente).first()
+        if not cliente:
+            return jsonify({"error": "Datos no encontrados"}), 404
+
+        cliente.nombre_cliente = data.get("nombre_cliente", cliente.nombre_cliente)
+        cliente.estado_cliente = data.get("estado_cliente", cliente.estado_cliente)
+        cliente.usuario_modifica = user
+        cliente.fecha_modificacion = datetime.now()
+
+        db.session.commit()
+        return jsonify({"message": "Datos actualizados correctamente", "codigo_cliente": cliente.codigo_cliente})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
 @bench.route('/update_marca_repuesto/<int:codigo_marca_rep>', methods=["PUT"])
 @jwt_required()
 def update_marca_repuesto(codigo_marca_rep):
@@ -2865,7 +3109,6 @@ def update_producto_externo(codigo_prod_externo):
         nombre_producto = data.get("nombre_producto", registro.nombre_producto)
         estado = data.get("estado_prod_externo", registro.estado_prod_externo)
         descripcion_producto = data.get("descripcion_producto", registro.descripcion_producto)
-
 
         if isinstance(estado, str):
             estado_normalizado = estado.strip().lower()
@@ -3007,7 +3250,6 @@ def update_modelo_sri(codigo_modelo_sri):
         estado = data.get("estado_modelo")
         cod_mdl_importacion = data.get("cod_mdl_importacion")
 
-        # Validar si se desea cambiar el nombre
         if nombre and nombre.strip().lower() != modelo.nombre_modelo.strip().lower():
             existe_nombre = db.session.query(ModeloSRI).filter(
                 func.lower(ModeloSRI.nombre_modelo) == nombre.strip().lower(),
@@ -3122,7 +3364,7 @@ def update_modelo_version_repuesto(codigo):
         data = request.get_json()
 
         required_fields = ["cod_producto", "empresa",
-                           "codigo_version", "codigo_prod_externo", "descripcion",
+                           "codigo_version", "descripcion",
                            "precio_producto_modelo", "precio_venta_distribuidor"]
         for field in required_fields:
             if field not in data:
@@ -3132,12 +3374,13 @@ def update_modelo_version_repuesto(codigo):
         if not registro:
             return jsonify({"error": "Registro no encontrado"}), 404
 
-        producto = db.session.query(Producto).filter_by(empresa=data["empresa"], cod_producto=data["cod_producto"]).first()
-        version = db.session.query(Version).filter_by(codigo_version=data["codigo_version"]).first()
-        prod_ext = db.session.query(ProductoExterno).filter_by(codigo_prod_externo=data["codigo_prod_externo"]).first()
-
-        if not all([producto,  version, prod_ext]):
-            return jsonify({"error": "Alguna FK referenciada no existe"}), 409
+        codigo_prod_externo = data.get("codigo_prod_externo")
+        if codigo_prod_externo in [None, ""]:
+            prod_ext = None
+        else:
+            prod_ext = db.session.query(ProductoExterno).filter_by(codigo_prod_externo=codigo_prod_externo).first()
+            if not prod_ext:
+                return jsonify({"error": "Producto externo no encontrado"}), 409
 
         registro.cod_producto = data["cod_producto"]
         registro.empresa = data["empresa"]
@@ -3178,6 +3421,7 @@ def update_cliente_canal(codigo):
         cliente.codigo_mod_vers_repuesto = data.get('codigo_mod_vers_repuesto')
         cliente.cod_producto = data.get('cod_producto')
         cliente.codigo_marca = data.get('codigo_marca')
+        cliente.codigo_cliente = data.get('codigo_cliente')
         cliente.codigo_version = data.get('codigo_version')  #
         cliente.descripcion_cliente_canal = data.get('descripcion_cliente_canal', '')
 
@@ -3511,9 +3755,6 @@ def update_segmentos_masivo():
         errores = []
         actualizados = 0
 
-        def normalizar(texto):
-            return unidecode(str(texto or "")).strip().lower()
-
         lineas = db.session.query(Linea).all()
         modelos = db.session.query(ModeloComercial).all()
 
@@ -3549,7 +3790,7 @@ def update_segmentos_masivo():
 
                 # Buscar línea
                 linea = next(
-                    (l for l in lineas if normalizar(l.nombre_linea) == normalizar(nombre_linea)),
+                    (l for l in lineas if normalize(l.nombre_linea) == normalize(nombre_linea)),
                     None
                 )
                 if not linea:
@@ -3557,7 +3798,7 @@ def update_segmentos_masivo():
                     continue
 
                 modelo = next(
-                    (m for m in modelos if normalizar(m.nombre_modelo) == normalizar(nombre_modelo)),
+                    (m for m in modelos if normalize(m.nombre_modelo) == normalize(nombre_modelo)),
                     None
                 )
                 if not modelo:
@@ -3718,8 +3959,6 @@ def update_dimemsiones_masivo():
 @jwt_required()
 def update_electronica_masivo():
     try:
-        def normalize(value):
-            return (value or '').strip().lower()
 
         user = get_jwt_identity()
         data = request.json
@@ -3757,7 +3996,6 @@ def update_electronica_masivo():
                     filas_duplicadas.append(idx)
                     continue
 
-                # Actualizar campos
                 registro.capacidad_combustible = item.get("capacidad_combustible")
                 registro.tablero = item.get("tablero")
                 registro.luces_delanteras = item.get("luces_delanteras")
@@ -3788,7 +4026,7 @@ def update_electronica_masivo():
         db.session.rollback()
         return jsonify({"error": f"Error general: {str(e)}"}), 500
 
-@bench.route('/update_modelo_version_masivo', methods=["POST"])
+@bench.route('/update_modelo_version_masivo', methods=["PUT"])
 @jwt_required()
 def update_modelo_version_masivo():
     try:
@@ -3936,7 +4174,6 @@ def update_producto_externo_masivo():
                     errores.append(f"Fila {idx + 2}: Marca repuesto '{nombre_marca}' no encontrada.")
                     continue
 
-                # Normalizar estado
                 if isinstance(estado, str):
                     estado_normalizado = estado.strip().lower()
                     if estado_normalizado == "activo":
@@ -3974,6 +4211,173 @@ def update_producto_externo_masivo():
             "message": f"{actualizados} producto(s) externo(s) actualizado(s) correctamente.",
             "errores": errores
         })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bench.route('/update_modelo_version_repuesto_masivo', methods=['PUT'])
+@jwt_required()
+def update_modelo_version_repuesto_masivo():
+    try:
+        payload = request.get_json()
+
+        repuestos = payload.get("repuestos")
+        if not isinstance(repuestos, list):
+            return jsonify({"error": "El body debe contener una lista bajo 'repuestos'"}), 400
+
+        errores = []
+        actualizados = 0
+        usuario = get_jwt_identity()
+
+        def parse_decimal(val):
+            try:
+                if val is None or str(val).strip() == "":
+                    return None
+                return float(str(val).replace('.', '').replace(',', '.'))
+            except Exception:
+                return None
+
+        for index, item in enumerate(repuestos, start=1):
+            try:
+                producto = db.session.query(Producto).filter(
+                    func.upper(func.trim(Producto.nombre)) == item["nombre_producto"].strip().upper()
+                ).first()
+
+                if not producto:
+                    errores.append(f"Fila {index}: Producto '{item['nombre_producto']}' no encontrado.")
+                    continue
+
+                cod_producto = producto.cod_producto
+                empresa = producto.empresa
+
+                registro = db.session.query(ModeloVersionRepuesto).filter_by(
+                    codigo_mod_vers_repuesto=item["codigo_mod_vers_repuesto"]
+                ).first()
+
+                if not registro:
+                    errores.append(f"Fila {index}: Registro no encontrado.")
+                    continue
+
+                nombre_version = str(item["nombre_version"]).strip()
+
+                version = db.session.query(Version).filter(
+                    func.trim(Version.nombre_version) == nombre_version
+                ).first()
+
+                if not isinstance(item["nombre_version"], (str, int)):
+                    errores.append(f"Fila {index}: nombre_version inválido.")
+                    continue
+
+                # Manejo opcional del producto externo
+                codigo_prod_externo = None
+                nombre_producto_ext = item.get("nombre_producto_externo")
+                if nombre_producto_ext and nombre_producto_ext.strip() != "":
+                    prod_ext = db.session.query(ProductoExterno).filter(
+                        func.upper(func.trim(ProductoExterno.nombre_producto)) == nombre_producto_ext.strip().upper()
+                    ).first()
+                    if prod_ext:
+                        codigo_prod_externo = prod_ext.codigo_prod_externo
+                    else:
+                        errores.append(f"Fila {index}: Producto externo '{nombre_producto_ext}' no encontrado.")
+                        continue
+
+                # Asignación segura
+                registro.codigo_version = version.codigo_version
+                registro.codigo_prod_externo = codigo_prod_externo
+                registro.descripcion = item.get("descripcion", "")
+                registro.precio_producto_modelo = parse_decimal(item.get("precio_producto_modelo"))
+                registro.precio_venta_distribuidor = parse_decimal(item.get("precio_venta_distribuidor"))
+                registro.usuario_modifica = usuario
+                registro.fecha_modificacion = datetime.now()
+
+                actualizados += 1
+
+            except Exception as e:
+                errores.append(f"Fila {index}: Error inesperado - {str(e)}")
+
+        db.session.commit()
+
+        return jsonify({
+            "message": f"{actualizados} registros actualizados correctamente.",
+            "errores": errores
+        }), 200 if actualizados > 0 else 409
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@bench.route('/update_matriculacion_marca_masiva', methods=["PUT"])
+@jwt_required()
+def update_matriculacion_marca_masiva():
+    try:
+        data = request.get_json()
+        matricula = data
+
+        if not isinstance(matricula, list):
+            return jsonify({"error": "El body debe contener una lista bajo 'matriculacion'"}), 400
+
+        errores = []
+        actualizados = 0
+        usuario = get_jwt_identity()
+
+        for index, item in enumerate(matricula, start=1):
+            try:
+                codigo_matricula = item.get("codigo_matricula_marca")
+                nombre_modelo_sri = item.get("nombre_modelo_sri")
+                placa = (item.get("placa") or "").strip()
+                detalle = (item.get("detalle_matriculacion") or "").strip() or None
+                fecha_matriculacion_str = item.get("fecha_matriculacion")
+                fecha_facturacion_str = item.get("fecha_facturacion")
+
+                if not codigo_matricula or not nombre_modelo_sri or not placa:
+                    errores.append(f"Fila {index}: Campos obligatorios faltantes.")
+                    continue
+
+                modelo = db.session.query(ModeloHomologado).join(ModeloSRI).filter(
+                    func.upper(func.trim(ModeloSRI.nombre_modelo)) == nombre_modelo_sri.strip().upper()
+                ).first()
+
+                if not modelo:
+                    errores.append(f"Fila {index}: Modelo SRI '{nombre_modelo_sri}' no encontrado.")
+                    continue
+
+                registro = db.session.query(MatriculacionMarca).filter_by(
+                    codigo_matricula_marca=codigo_matricula
+                ).first()
+
+                if not registro:
+                    errores.append(f"Fila {index}: Matrícula con código {codigo_matricula} no encontrada.")
+                    continue
+
+                try:
+                    fecha_matriculacion = datetime.fromisoformat(fecha_matriculacion_str) if fecha_matriculacion_str else None
+                    fecha_facturacion = datetime.fromisoformat(fecha_facturacion_str) if fecha_facturacion_str else None
+                except ValueError:
+                    errores.append(f"Fila {index}: Formato de fecha inválido. Use 'YYYY-MM-DD'.")
+                    continue
+
+                # Actualización de campos
+                registro.codigo_modelo_homologado = modelo.codigo_modelo_homologado
+                registro.placa = placa
+                registro.fecha_matriculacion = fecha_matriculacion
+                registro.fecha_facturacion = fecha_facturacion
+                registro.detalle_matriculacion = detalle
+                registro.usuario_modifica = usuario
+                registro.fecha_modificacion = datetime.now()
+
+                actualizados += 1
+
+            except Exception as e:
+                errores.append(f"Fila {index}: Error inesperado - {str(e)}")
+
+        db.session.commit()
+
+        return jsonify({
+            "message": f"{actualizados} registros actualizados correctamente.",
+            "errores": errores
+        }), 200 if actualizados > 0 else 409
 
     except Exception as e:
         db.session.rollback()
