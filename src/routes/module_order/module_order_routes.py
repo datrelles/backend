@@ -1,8 +1,8 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from src.routes.module_order.db_connection import get_oracle_connection
-import datetime
-
+from datetime import datetime
+import uuid
 rmor = Blueprint('routes_module_order', __name__)
 
 @rmor.route('/credit_policies', methods=['GET'])
@@ -959,6 +959,622 @@ def get_politica_credito_detalle():
         if c:
             c.rollback()
         return jsonify({"error": f"Error consultando política de crédito: {str(ex)}"}), 500
+    finally:
+        if c:
+            c.close()
+
+
+@rmor.route('/productos_disponibles', methods=['GET'])
+@jwt_required()
+def get_productos_disponibles():
+    """
+    GET /productos_disponibles
+
+    Retorna productos activos filtrando por modelo, modelo_cat, item_cat (lista), empresa.
+
+    Query Params:
+      - empresa (int): Código de empresa (requerido)
+      - cod_modelo_cat (str): Código de modelo categoría (requerido)
+      - cod_item_cat (str): Lista de códigos de ítem cat, separados por coma, ejemplo: 'Y,E,T,L' (requerido)
+      - cod_modelo (str): Código de modelo (requerido)
+    """
+    c = None
+    try:
+        empresa_str = request.args.get('empresa')
+        cod_modelo_cat = request.args.get('cod_modelo_cat')
+        cod_item_cat = request.args.get('cod_item_cat')
+        cod_modelo = request.args.get('cod_modelo')
+
+        # Validar requeridos
+        if not all([empresa_str, cod_modelo_cat, cod_item_cat, cod_modelo]):
+            return jsonify({"error": "Faltan parámetros requeridos (empresa, cod_modelo_cat, cod_item_cat, cod_modelo)"}), 400
+
+        try:
+            empresa = int(empresa_str)
+        except ValueError:
+            return jsonify({"error": "'empresa' debe ser un número entero"}), 400
+
+        # Lista de items: 'Y,E,T,L' => ['Y', 'E', ...]
+        cod_item_cat_list = [x.strip() for x in cod_item_cat.split(',') if x.strip()]
+
+        c = get_oracle_connection()
+        cur = c.cursor()
+
+        sql = f"""
+        SELECT 
+            p.cod_producto,
+            REPLACE(REPLACE(REPLACE(REPLACE(p.nombre, 'AÑO ', ''), ')', ''), '(', ''), 'XX ', '') AS nombre,
+            p.precio,
+            p.cod_marca,
+            p.cod_modelo,
+            p.cod_modelo,
+            p.cod_item_cat
+        FROM producto p
+        WHERE p.activo = 'S'
+          AND p.empresa = :empresa
+          AND p.cod_modelo_cat = :cod_modelo_cat
+          AND p.cod_modelo = :cod_modelo
+          AND p.cod_item_cat IN ({','.join([':' + f'item{i}' for i in range(len(cod_item_cat_list))])})
+        """
+
+        # Construye los bindings
+        params = {
+            'empresa': empresa,
+            'cod_modelo_cat': cod_modelo_cat,
+            'cod_modelo': cod_modelo
+        }
+        for i, val in enumerate(cod_item_cat_list):
+            params[f'item{i}'] = val
+
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        cols = [desc[0].lower() for desc in cur.description]
+        result = [dict(zip(cols, row)) for row in rows]
+
+        cur.close()
+        return jsonify(result), 200
+
+    except Exception as ex:
+        if c:
+            c.rollback()
+        return jsonify({"error": f"Error consultando productos: {str(ex)}"}), 500
+    finally:
+        if c:
+            c.close()
+
+
+@rmor.route('/procesar_detalle_producto', methods=['GET'])
+@jwt_required()
+def procesar_detalle_producto():
+    """
+    GET /procesar_detalle_producto
+
+    Procesa el detalle de un producto en pedido, extrae lote, valida línea permitida en política,
+    calcula descuentos y precios.
+
+    Query Parameters:
+        cod_producto (str): Código de producto (puede venir con '*' para lote) (requerido)
+        empresa (int): Código de empresa (requerido)
+        cod_politica (str): Código de política de crédito (requerido)
+        num_cuotas (int): Número de cuotas (requerido)
+        lv_cod_modelo_cat (str): Código de modelo de categoría (requerido)
+        lv_cod_item_cat (str): Código de item de categoría (requerido)
+        cod_promocion (str): Código de promoción (opcional)
+    Returns:
+        200: JSON con todos los datos procesados para el detalle de pedido
+        400: Si faltan parámetros o validación
+        500: Si ocurre error de BD
+    """
+    c = None
+    try:
+        # --- Obtener y validar params ---
+        cod_producto = request.args.get('cod_producto')
+        empresa = request.args.get('empresa')
+        cod_politica = request.args.get('cod_politica')
+        num_cuotas = request.args.get('num_cuotas')
+        lv_cod_modelo_cat = request.args.get('lv_cod_modelo_cat')
+        lv_cod_item_cat = request.args.get('lv_cod_item_cat')
+        cod_promocion = request.args.get('cod_promocion', None)
+
+        # Validaciones básicas
+        if not all([cod_producto, empresa, cod_politica, num_cuotas, lv_cod_modelo_cat, lv_cod_item_cat]):
+            return jsonify({"error": "Missing one or more required parameters (cod_producto, empresa, cod_politica, num_cuotas, lv_cod_modelo_cat, lv_cod_item_cat)"}), 400
+
+        try:
+            empresa = int(empresa)
+            num_cuotas = int(num_cuotas)
+        except Exception:
+            return jsonify({"error": "'empresa' and 'num_cuotas' must be integers"}), 400
+
+        # --- Procesa el producto/lote ---
+        detalle = {
+            "cod_producto": cod_producto,
+            "cod_comprobante_lote": None,
+            "tipo_comprobante_lote": None
+        }
+        # 1. Extraer lote si existe
+        if "*" in cod_producto:
+            posicion_pipe = cod_producto.find("*")
+            detalle["cod_comprobante_lote"] = cod_producto[posicion_pipe+1:]
+            if len(detalle["cod_comprobante_lote"]) == 6:
+                detalle["cod_comprobante_lote"] = "A1-" + detalle["cod_comprobante_lote"]
+            detalle["tipo_comprobante_lote"] = "LT"
+            cod_producto_real = cod_producto[:posicion_pipe]
+            detalle["cod_producto"] = cod_producto_real
+        else:
+            cod_producto_real = cod_producto
+
+        # --- Lógica de producto (puedes ampliar) ---
+        # Por ahora solo agrego el cod_producto procesado
+
+        # --- Conexión Oracle ---
+        c = get_oracle_connection()
+        cur = c.cursor()
+
+        # 2. Valida línea permitida para política
+        # 2. Valida línea permitida para política usando bloque PL/SQL
+        out_valida = cur.var(int)
+        try:
+            plsql = """
+            DECLARE
+                res BOOLEAN;
+                res_num NUMBER;
+            BEGIN
+                res := KS_POLITICA_CREDITO_LINEA.EXISTE(
+                    :empresa, :cod_politica, :num_cuotas, :cod_modelo, :cod_item
+                );
+                IF res THEN
+                    res_num := 1;
+                ELSE
+                    res_num := 0;
+                END IF;
+                :out_valida := res_num;
+            END;
+            """
+            cur.execute(
+                plsql,
+                {
+                    "empresa": empresa,
+                    "cod_politica": cod_politica,
+                    "num_cuotas": num_cuotas,
+                    "cod_modelo": lv_cod_modelo_cat,
+                    "cod_item": lv_cod_item_cat,
+                    "out_valida": out_valida
+                }
+            )
+        except Exception as e:
+            return jsonify({"error": f"Error llamando a KS_POLITICA_CREDITO_LINEA.EXISTE: {str(e)}"}), 500
+
+        if out_valida.getvalue() == 0:
+            return jsonify({
+                "error": f"Línea de producto {lv_cod_item_cat} no permitida para esta política/cuotas.",
+                "cod_politica": cod_politica,
+                "num_cuotas": num_cuotas
+            }), 400
+
+        # 3. Lógica de descuento: Solo si no hay promoción
+        descuento_producto = None
+        if not cod_promocion:
+            # Puedes reemplazar por llamada a tu proc o lógica PL/SQL real
+            try:
+                # Ejemplo con un paquete, personaliza el nombre real:
+                out_descuento = cur.var(float)
+                out_error = cur.var(str)
+                cur.callproc(
+                    "PK_OBTENER_ST_POLCRE_D_PRODUCT.P_SACA_POR_DESCUENTO",
+                    [
+                        cod_producto_real,
+                        num_cuotas,
+                        cod_politica,
+                        empresa,
+                        out_descuento,
+                        None,   # fecha, por defecto SYSDATE
+                        out_error
+                    ]
+                )
+                if out_error.getvalue():
+                    return jsonify({"error": out_error.getvalue()}), 400
+                descuento_producto = out_descuento.getvalue()
+                detalle["descuento_producto"] = descuento_producto
+                detalle["descuento"] = descuento_producto if descuento_producto is not None else 0
+            except Exception:
+                detalle["descuento_producto"] = None
+                detalle["descuento"] = 0
+        else:
+            detalle["descuento_producto"] = None
+            detalle["descuento"] = 0
+
+        # 4. Calcula precios (simulación, reemplaza por llamada real si aplica)
+        try:
+            # Ejemplo: podrías llamar a p_calcula_precios_v2 si es necesario
+            # cur.callproc("P_CALCULA_PRECIOS_V2", [...])
+            detalle["precios_actualizados"] = True  # Placeholder
+        except Exception:
+            detalle["precios_actualizados"] = False
+
+        cur.close()
+        return jsonify(detalle), 200
+
+    except Exception as ex:
+        if c:
+            c.rollback()
+        return jsonify({"error": str(ex)}), 500
+    finally:
+        if c:
+            c.close()
+
+
+@rmor.route('/obtener_descuento', methods=['GET'])
+@jwt_required()
+def obtener_descuento():
+    """
+    Calcula el porcentaje de descuento aplicando toda la lógica de F_OBTENER_DESCUENTO.
+    Query Params:
+        empresa: int
+        cod_politica: int
+        num_cuotas: int
+        cod_producto: str
+        lv_cod_modelo_cat: str
+        lv_cod_item_cat: str
+        cod_persona_cli: str
+        cod_pedido: str
+        cod_tipo_pedido: str
+        secuencia: int
+    Returns:
+        200: JSON {"descuento": ...}
+        400: Si faltan parámetros o hay error de lógica
+        500: Si hay error de BD
+    """
+    c = None
+    try:
+        # Obtener y validar parámetros
+        params = {}
+        campos = ["empresa", "cod_politica", "num_cuotas", "cod_producto", "lv_cod_modelo_cat",
+                  "lv_cod_item_cat", "cod_persona_cli", "cod_pedido", "cod_tipo_pedido", "secuencia"]
+        for campo in campos:
+            valor = request.args.get(campo)
+            if not valor:
+                return jsonify({"error": f"Missing parameter: {campo}"}), 400
+            params[campo] = valor
+
+        # Convertir a los tipos correctos
+        params["empresa"] = int(params["empresa"])
+        params["cod_politica"] = int(params["cod_politica"])
+        params["num_cuotas"] = int(params["num_cuotas"])
+        params["secuencia"] = int(params["secuencia"])
+
+        c = get_oracle_connection()
+        cur = c.cursor()
+        descuento = 0
+
+        # 1. P_SACA_POR_DESCUENTO_PRECIO (por persona)
+        v_por_descuento = cur.var(float)
+        v_codigo_error = cur.var(str)
+        cur.callproc("PK_V6_OBTENER_ST_POL_CRE_PER.P_SACA_POR_DESCUENTO_PRECIO", [
+            params["empresa"],
+            params["cod_politica"],
+            params["num_cuotas"],
+            params["lv_cod_modelo_cat"],
+            params["lv_cod_item_cat"],
+            'CLI',
+            params["cod_persona_cli"],
+            v_por_descuento,
+            v_codigo_error
+        ])
+
+        descuento = v_por_descuento.getvalue() or 0
+
+        # 2. Si sigue en 0, P_SACA_POR_DESCUENTO_CLI
+        if not descuento:
+            v_por_descuento2 = cur.var(float)
+            v_codigo_error2 = cur.var(str)
+            cur.callproc("PK_OBTENER_ST_POLCRE_D_PRODUCT.P_SACA_POR_DESCUENTO_CLI", [
+                params["cod_producto"],
+                params["num_cuotas"],
+                params["cod_politica"],
+                params["empresa"],
+                params["cod_persona_cli"],
+                v_por_descuento2,
+                None,  # fecha (SYSDATE en Oracle)
+                v_codigo_error2
+            ])
+            descuento = v_por_descuento2.getvalue() or 0
+
+        # 3. Si sigue en 0, P_SACA_POR_DESCUENTO
+        if not descuento:
+            v_por_descuento3 = cur.var(float)
+            v_codigo_error3 = cur.var(str)
+            cur.callproc("PK_OBTENER_ST_POLCRE_D_PRODUCT.P_SACA_POR_DESCUENTO", [
+                params["cod_producto"],
+                params["num_cuotas"],
+                params["cod_politica"],
+                params["empresa"],
+                v_por_descuento3,
+                None,  # fecha (SYSDATE)
+                v_codigo_error3
+            ])
+            descuento = v_por_descuento3.getvalue() or 0
+
+        # 4. Si sigue en 0, P_SACA_POR_DESCUENTO_PRECIO (por línea)
+        if not descuento:
+            v_por_descuento4 = cur.var(float)
+            v_codigo_error4 = cur.var(str)
+            cur.callproc("PK_V6_OBTENER_ST_POL_CRE_LIN.P_SACA_POR_DESCUENTO_PRECIO", [
+                params["empresa"],
+                params["cod_politica"],
+                params["num_cuotas"],
+                params["lv_cod_modelo_cat"],
+                params["lv_cod_item_cat"],
+                v_por_descuento4,
+                v_codigo_error4
+            ])
+            descuento = v_por_descuento4.getvalue() or 0
+
+        # 5. Si sigue en 0, consulta marca y KS_POLCRE_LINEA_MARCA.consulta_descuento
+        if not descuento:
+            cur.execute(
+                "SELECT cod_marca FROM producto WHERE empresa=:empresa AND cod_producto=:cod_producto",
+                empresa=params["empresa"],
+                cod_producto=params["cod_producto"]
+            )
+            row = cur.fetchone()
+            if row and row[0]:
+                cod_marca = row[0]
+                # Llamar a la función con SELECT FROM dual
+                sql_func = """
+                           SELECT KS_POLCRE_LINEA_MARCA.consulta_descuento(
+                                          :empresa,
+                                          :cod_politica,
+                                          :num_cuotas,
+                                          :lv_cod_modelo_cat,
+                                          :lv_cod_item_cat,
+                                          :cod_marca
+                                  ) \
+                           FROM dual \
+                           """
+                cur.execute(sql_func, {
+                    "empresa": params["empresa"],
+                    "cod_politica": params["cod_politica"],
+                    "num_cuotas": params["num_cuotas"],
+                    "lv_cod_modelo_cat": params["lv_cod_modelo_cat"],
+                    "lv_cod_item_cat": params["lv_cod_item_cat"],
+                    "cod_marca": cod_marca
+                })
+                func_row = cur.fetchone()
+                descuento = func_row[0] if func_row and func_row[0] is not None else 0
+
+        # Capar a 100 máximo
+        if descuento > 100:
+            descuento = 100
+
+        # 6. Revisa si hay serie específica asociada
+        v_numero_serie = None
+        try:
+            cur.execute("""
+                SELECT numero_serie 
+                FROM st_pedidos_detalles_s 
+                WHERE cod_pedido=:cod_pedido AND cod_tipo_pedido=:cod_tipo_pedido
+                AND empresa=:empresa AND secuencia=:secuencia
+            """, cod_pedido=params["cod_pedido"], cod_tipo_pedido=params["cod_tipo_pedido"],
+                 empresa=params["empresa"], secuencia=params["secuencia"])
+            row = cur.fetchone()
+            if row:
+                v_numero_serie = row[0]
+        except Exception:
+            v_numero_serie = None
+
+        # Si hay serie, buscar el descuento específico por serie
+        if v_numero_serie:
+            v_desc_serie = cur.var(float)
+            # Devuelve un registro, pero solo usamos el campo descuento
+            cur.callproc("ks_polcre_producto_serie.consulta", [
+                params["empresa"],
+                params["cod_politica"],
+                params["cod_producto"],
+                v_numero_serie,
+                params["num_cuotas"],
+                0  # Asumido (ver tu lógica)
+            ])
+            # El valor que retorna la función es un RECORD, aquí hay que adaptar según cómo se obtenga el valor en Python cx_Oracle (revisa la docu de tu ORM/driver)
+            # Para ahora, lo dejamos como None, deberás completar aquí si tu driver permite obtener fields de records devueltos por procedimientos
+            # descuento = ... # Extrae descuento del record
+            # Por defecto:
+            # descuento = v_desc_serie.getvalue() or descuento
+
+        cur.close()
+        return jsonify({"descuento": descuento}), 200
+
+    except Exception as ex:
+        if c:
+            c.rollback()
+        return jsonify({"error": str(ex)}), 500
+    finally:
+        if c:
+            c.close()
+
+
+@rmor.route('/calcula_precios', methods=['GET'])
+@jwt_required()
+def calcula_precios():
+    """
+    Endpoint para cálculo de precios usando tabla temporal y wrapper PL/SQL.
+    """
+    c = None
+    try:
+        # 1. Obtener y validar parámetros
+        campos = [
+            "empresa", "cod_agencia", "cod_producto", "cod_unidad", "cod_persona_cli",
+            "cod_forma_pago", "cod_divisa", "fecha", "cod_forma_pago2",
+            "cod_comprobante_lote", "tipo_comprobante_lote", "descuento",
+            "num_cuotas", "pc_factor_credito", "cantidad_calculo",
+            "lv_tiene_iva", "lv_tiene_ice", "anio_modelo"
+        ]
+        params = {}
+        for campo in campos:
+            valor = request.args.get(campo)
+            if valor is None:
+                return jsonify({"error": f"Missing parameter: {campo}"}), 400
+            params[campo] = valor
+
+        params["empresa"] = int(params["empresa"])
+        params["cod_agencia"] = int(params["cod_agencia"])
+        params["descuento"] = float(params["descuento"])
+        params["num_cuotas"] = int(params["num_cuotas"])
+        params["pc_factor_credito"] = float(params["pc_factor_credito"])
+        params["cantidad_calculo"] = float(params["cantidad_calculo"])
+        params["anio_modelo"] = int(params["anio_modelo"])
+        # Formateo de fecha
+        try:
+            params["fecha"] = datetime.strptime(params["fecha"], "%Y-%m-%d")
+        except Exception:
+            try:
+                params["fecha"] = datetime.strptime(params["fecha"], "%Y/%m/%d")
+            except Exception:
+                return jsonify({"error": "Formato de fecha inválido, usa YYYY-MM-DD o YYYY/MM/DD"}), 400
+
+        # 2. Conexión a Oracle
+        c = get_oracle_connection()
+        cur = c.cursor()
+
+        # 3. Consulta interes_mora, descuento, divisa
+        lv_interes_mora = cur.var(float)
+        lv_descuento = cur.var(float)
+        lv_divisa = cur.var(str)
+        lv_codigoerror = cur.var(str)
+        cur.callproc("pk_v6_empresa_obtener.p_interes_mora_descuento", [
+            params["empresa"],
+            lv_interes_mora,
+            lv_descuento,
+            lv_divisa,
+            lv_codigoerror
+        ])
+        if lv_codigoerror.getvalue():
+            return jsonify({"error": lv_codigoerror.getvalue()}), 400
+
+        # 4. Wrapper para consulta de lista de precios y tabla temporal
+        session_id = str(uuid.uuid4())
+        # El wrapper debe llenar la tabla TMP_LISTA_PRECIO con el resultado
+        cur.callproc("WRAP_CON_REG_PRECIO_ACTUAL", [
+            params["empresa"],              # p_cod_empresa
+            params["cod_agencia"],          # p_cod_agencia
+            params["cod_producto"],         # p_cod_producto
+            params["cod_unidad"],           # p_cod_unidad
+            params["cod_persona_cli"],      # p_cod_cliente
+            params["cod_forma_pago"],       # p_cod_forma_pago
+            params["cod_divisa"],           # p_cod_divisa
+            params["fecha"],                # p_fecha (datetime)
+            params["cod_forma_pago2"],      # p_cod_forma_pago2
+            params["cod_comprobante_lote"], # p_lote_serie
+            params["tipo_comprobante_lote"],# p_tipo_lote
+            session_id                      # p_session_id
+        ])
+        # Recupera registro de la tabla temporal usando session_id
+        cur.execute("SELECT * FROM TMP_LISTA_PRECIO WHERE SESSION_ID = :sid", sid=session_id)
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "No se pudo calcular el precio"}), 400
+        columnas = [desc[0].lower() for desc in cur.description]
+        reg_lista_precio = dict(zip(columnas, row))
+
+        # 5. Traer la info de empresa para IVA
+        cur.execute("SELECT * FROM EMPRESA WHERE EMPRESA=:empresa", empresa=params["empresa"])
+        reg_empresa = cur.fetchone()
+        if not reg_empresa:
+            return jsonify({"error": "No existe la empresa"}), 400
+        colnames = [desc[0].lower() for desc in cur.description]
+        empresa_dict = dict(zip(colnames, reg_empresa))
+        iva = empresa_dict.get("iva")
+        if iva is None or iva == 0:
+            return jsonify({"error": "Error NO TIENE DEFINIDO IVA EN LA TABLA EMPRESA"}), 400
+
+        # 6. ICE
+        ln_ice = 0
+        if params["lv_tiene_ice"] == "S":
+            ln_ice = cur.callfunc("computo.kg_reg2_general.parametro_sistema", float, [
+                params["empresa"], "VEN", "CE"
+            ])
+
+        # 7. Cálculos (igual que tu lógica anterior)
+        precio_lista = reg_lista_precio.get("precio")
+        if round(params["pc_factor_credito"] * params["num_cuotas"], 2) > 1:
+            ln_precio_lista = precio_lista * params["pc_factor_credito"] * params["num_cuotas"]
+        else:
+            ln_precio_lista = precio_lista
+
+        if params["num_cuotas"] > 0:
+            ln_precio = round(
+                (ln_precio_lista - ln_precio_lista * (params["descuento"] / 100)) /
+                params["num_cuotas"] * params["num_cuotas"], 2)
+        else:
+            ln_precio = round(
+                ln_precio_lista - ln_precio_lista * (params["descuento"] / 100), 2)
+
+        ln_por_interes = 0  # O traerlo de la cabecera, depende tu flujo real
+        financiamiento = 0
+        porcentaje_interes = 0
+
+        if params["num_cuotas"] > 0:
+            ln_valor_cuota = round(ln_precio / params["num_cuotas"], 2)
+            if ln_por_interes > 0:
+                v_pago = ln_precio / params["num_cuotas"]
+                ln_capital = round(
+                    v_pago * ((1 - pow(1 + (ln_por_interes / 1200), params["num_cuotas"] * -1)) / (ln_por_interes / 1200)), 2)
+                ln_financiamiento = ln_precio - ln_capital
+            else:
+                ln_financiamiento = 0
+            ln_suma_financiamiento = ln_financiamiento
+            if ln_suma_financiamiento < 0:
+                ln_suma_financiamiento = 0
+            financiamiento = round(ln_suma_financiamiento * params["cantidad_calculo"], 2)
+            porcentaje_interes = ln_por_interes
+        else:
+            financiamiento = 0
+            porcentaje_interes = 0
+
+        # IVA
+        if params["lv_tiene_iva"] == "S":
+            if params["cantidad_calculo"] > 0:
+                vln_precio_sin_iva = (ln_precio - (financiamiento / params["cantidad_calculo"])) / (1 + (iva / 100))
+            else:
+                vln_precio_sin_iva = 0
+            valor_iva = round((vln_precio_sin_iva * (iva / 100)) * params["cantidad_calculo"], 2)
+        else:
+            vln_precio_sin_iva = ln_precio
+            valor_iva = 0
+
+        # ICE
+        ice = 0
+        if params["lv_tiene_ice"] == "S":
+            # Si tienes lógica adicional, agrégala aquí, o usa ln_ice calculado antes
+            ice = ln_ice
+        else:
+            ice = 0
+
+        valor_linea = round((vln_precio_sin_iva * params["cantidad_calculo"]) - ice, 2)
+        ln_total_linea = (
+            (valor_linea or 0) + (valor_iva or 0) + (ice or 0) + (financiamiento or 0)
+        )
+
+        # Armar el JSON resultado
+        resultado = {
+            "precio_lista": precio_lista,
+            "precio_descontado": ln_precio,
+            "precio": round(ln_precio_lista, 2),
+            "financiamiento": financiamiento,
+            "porcentaje_interes": porcentaje_interes,
+            "valor_iva": valor_iva,
+            "ice": ice,
+            "valor_linea": valor_linea,
+            "ln_total_linea": ln_total_linea,
+            "reg_lista_precio": reg_lista_precio
+        }
+
+        return jsonify(resultado), 200
+
+    except Exception as ex:
+        if c:
+            c.rollback()
+        return jsonify({"error": str(ex)}), 500
     finally:
         if c:
             c.close()
