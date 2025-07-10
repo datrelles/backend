@@ -1578,3 +1578,430 @@ def calcula_precios():
     finally:
         if c:
             c.close()
+
+@rmor.route('/direcciones_cliente', methods=['GET'])
+@jwt_required()
+def direcciones_cliente():
+    """
+    Retorna todas las direcciones activas de un cliente.
+    Query Params:
+        empresa: int
+        cod_persona_cli: str
+    Returns:
+        200: JSON listado de direcciones
+        400: Si faltan parámetros
+        500: Error de base de datos
+    """
+    c = None
+    try:
+        # 1. Parámetros obligatorios
+        empresa = request.args.get("empresa")
+        cod_persona_cli = request.args.get("cod_persona_cli")
+        if not empresa or not cod_persona_cli:
+            return jsonify({"error": "Faltan parámetros: empresa y cod_persona_cli"}), 400
+        empresa = int(empresa)
+
+        # 2. Conexión a la BD
+        c = get_oracle_connection()
+        cur = c.cursor()
+
+        # 3. Consulta de direcciones activas
+        sql = """
+            SELECT 
+                cod_direccion,
+                cod_cliente,
+                ciudad,
+                direccion,
+                direccion_larga,
+                es_activo
+            FROM ST_CLIENTE_DIRECCION_GUIAS
+            WHERE empresa = :empresa
+              AND cod_cliente = :cod_persona_cli
+              AND es_activo = 1
+        """
+        cur.execute(sql, empresa=empresa, cod_persona_cli=cod_persona_cli)
+        columnas = [col[0].lower() for col in cur.description]
+        resultados = [
+            dict(zip(columnas, row)) for row in cur.fetchall()
+        ]
+        cur.close()
+        return jsonify(resultados), 200
+
+    except Exception as ex:
+        if c:
+            c.rollback()
+        return jsonify({"error": str(ex)}), 500
+    finally:
+        if c:
+            c.close()
+
+@rmor.route('/consulta_existencia', methods=['GET'])
+@jwt_required()
+def consulta_existencia():
+    """
+    Consulta existencias e inventario para un producto, agencia y empresa.
+    Query Params:
+      empresa: int
+      agencia: int
+      cod_producto: str
+      unidad: str
+    Returns:
+      200: JSON con los datos de inventario
+      400/500: error
+    """
+    c = None
+    try:
+        # 1. Obtener parámetros
+        campos = ["empresa", "cod_agencia", "cod_producto", "cod_unidad"]
+        params = {}
+        for campo in campos:
+            valor = request.args.get(campo)
+            if valor is None:
+                return jsonify({"error": f"Missing parameter: {campo}"}), 400
+            params[campo] = valor
+        params["empresa"] = int(params["empresa"])
+        params["agencia"] = int(params["cod_agencia"])
+
+        # 2. Conexión Oracle
+        c = get_oracle_connection()
+        cur = c.cursor()
+
+        # 3. Llamar procedimiento de existencia (adaptado según tu entorno real)
+        existencia = cur.callfunc(
+            "KS_INVENTARIO.CONSULTA_EXISTENCIA", float, [
+                params["empresa"],
+                params["agencia"],
+                params["cod_producto"],
+                params["cod_unidad"],
+                datetime.now(),
+                1,      # Suplir los otros flags como en tu lógica real
+                'A',
+                1
+            ]
+        )
+
+        # 4. Consultar inventarios adicionales
+        cur.execute("""
+            SELECT 
+                SUM(NVL(inv_b1, 0)) AS inv_b1,
+                SUM(DECODE(cod_bodega, 2, NVL(inv_mp, 0), 0)) AS inv_mp,
+                SUM(DECODE(cod_bodega, 3, NVL(inv_linea, 0) - NVL(inv_calidad, 0), 0)) AS inv_lin,
+                SUM(DECODE(cod_bodega, 3, NVL(inv_calidad, 0), 0)) AS inv_calidad,
+                SUM(NVL(inv_dc, 0)) AS inv_dc
+            FROM VT_INVENTARIO_CKD
+            WHERE cod_producto = :cod_producto
+              AND empresa = :empresa
+              AND cod_estado_producto = 'A'
+        """, cod_producto=params["cod_producto"], empresa=params["empresa"])
+        inv_row = cur.fetchone()
+        colnames = [desc[0].lower() for desc in cur.description]
+        inventarios = dict(zip(colnames, inv_row))
+
+        # Combina resultados
+        resultado = {
+            "empresa": params["empresa"],
+            "agencia": params["agencia"],
+            "cod_producto": params["cod_producto"],
+            "unidad": params["cod_unidad"],
+            "existencia": existencia
+        }
+        resultado.update(inventarios)
+
+        return jsonify(resultado), 200
+
+    except Exception as ex:
+        if c:
+            c.rollback()
+        return jsonify({"error": str(ex)}), 500
+    finally:
+        if c:
+            c.close()
+
+@rmor.route('/generar__cod_pedido', methods=['GET', 'POST'])
+@jwt_required()
+def generar_pedido():
+    """
+    empresa, cod_agencia, cod_tipo_pedido, cod_pedido (puede venir vacío o None).
+    Return: cod_pedido generado y cod_tipo_pedido.
+    """
+    c = None
+    try:
+        # Recibir parámetros
+        campos = ['empresa', 'cod_agencia', 'cod_tipo_pedido', 'cod_pedido']
+        params = {}
+        data = request.get_json() if request.method == 'POST' else request.args
+        for campo in campos:
+            valor = data.get(campo)
+            if campo in ('empresa', 'cod_agencia') and valor is not None:
+                valor = int(valor)
+            params[campo] = valor if valor is not None else None
+            if campo in ('empresa', 'cod_agencia', 'cod_tipo_pedido') and params[campo] is None:
+                return jsonify({"error": f"Falta el parámetro: {campo}"}), 400
+
+        # Conexión
+        c = get_oracle_connection()
+        cur = c.cursor()
+
+        # PREPARAR variables de error y cod_pedido (IN OUT)
+        lv_codigo_error = cur.var(str)
+        cod_pedido_var = cur.var(str)
+        cod_pedido_inicial = params.get('cod_pedido', None)
+        cod_pedido_var.setvalue(0, cod_pedido_inicial if cod_pedido_inicial else "")
+
+        # Paso 1: obtener secuencia de pedido
+        cur.callproc("PK_OBTENER_ORDEN.P_SACA_SECUENCIA_PEDIDO", [
+            params['empresa'],
+            params['cod_agencia'],
+            params['cod_tipo_pedido'],
+            cod_pedido_var,    # IN OUT: se actualizará con el nuevo código
+            lv_codigo_error
+        ])
+        if lv_codigo_error.getvalue():
+            c.rollback()
+            return jsonify({"error": f"Error secuencia pedido: {lv_codigo_error.getvalue()}"}), 400
+
+        nuevo_cod_pedido = cod_pedido_var.getvalue()
+
+        # Paso 2: actualizar la secuencia en tabla ORDEN
+        lv_codigo_error2 = cur.var(str)
+        cur.callproc("PK_ACTUALIZAR_ORDEN.P_ACTUALIZA_SECUENCIA_PEDIDO", [
+            params['empresa'],
+            params['cod_agencia'],
+            params['cod_tipo_pedido'],
+            1,  # fijo según el ejemplo
+            lv_codigo_error2
+        ])
+        if lv_codigo_error2.getvalue():
+            c.rollback()
+            return jsonify({"error": f"Error actualizando secuencia: {lv_codigo_error2.getvalue()}"}), 400
+
+        c.commit()
+        return jsonify({
+            "success": True,
+            "cod_pedido": nuevo_cod_pedido,
+            "cod_tipo_pedido": params['cod_tipo_pedido']
+        }), 200
+
+    except Exception as ex:
+        if c:
+            c.rollback()
+        return jsonify({"error": str(ex)}), 500
+    finally:
+        if c:
+            c.close()
+
+
+##HELPERS DEUDA TECNICA CREAR UN HELPER.PY
+
+def parse_fecha(valor):
+    if not valor:
+        return None
+    if isinstance(valor, datetime):
+        return valor
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(valor[:19], fmt)
+        except Exception:
+            continue
+    raise ValueError(f"Formato de fecha inválido: {valor}")
+
+@rmor.route('/guardar_pedido', methods=['POST'])
+@jwt_required()
+def guardar_pedido():
+    """
+    Guarda la cabecera y los detalles de un pedido.
+    - Recibe JSON:
+      {
+        "cabecera": {...},
+        "detalles": [{...}, {...}, ...]
+      }
+    - Convierte todas las claves a mayúsculas antes de procesar.
+    - Valida obligatorios, hace rollback si hay error.
+    """
+    c = None
+    try:
+        data = request.get_json()
+        if not data or "cabecera" not in data or "detalles" not in data:
+            return jsonify({"error": "Se requiere 'cabecera' y 'detalles' en el JSON"}), 400
+
+        # Convertir todas las claves a mayúsculas
+        def keys_to_upper(d):
+            return {k.upper(): v for k, v in d.items()}
+
+        cab = keys_to_upper(data["cabecera"])
+        detalles = [keys_to_upper(det) for det in data["detalles"]]
+        if not isinstance(detalles, list) or len(detalles) == 0:
+            return jsonify({"error": "La lista 'detalles' no puede estar vacía"}), 400
+
+        # Conexión y cursor
+        c = get_oracle_connection()
+        cur = c.cursor()
+
+        # -------- INSERTAR CABECERA ---------
+        campos_cab = [
+            'COD_TIPO_PERSONA_VEN',
+            'TIENE_ICE',
+            'ES_PENDIENTE',
+            'OBSERVACIONES',
+            'COD_TIPO_PEDIDO',
+            'COD_LIQUIDACION',
+            'CIUDAD',
+            'COD_PEDIDO',
+            'ES_APROBADO_VEN',
+            'ES_BLOQUEADO',
+            'ES_APROBADO_CAR',
+            'REVISADO',
+            'ES_FACTURADO',
+            'ES_ANULADO',
+            'ES_PEDIDO_REPUESTOS',
+            'ADICIONADO_POR',
+            'MODIFICADO_POR',
+            'COD_PERSONA_VEN',
+            'COD_FORMA_PAGO',
+            'COD_TIPO_PERSONA_CLI',
+            'COD_PERSONA_CLI',
+            'COD_TIPO_PERSONA_GAR',
+            'DIRECCION_ENVIO',
+            'TIPO_PEDIDO',
+            'COD_POLITICA',
+            'ICE',
+            'TELEFONO',
+            'DIAS_VALIDEZ',
+            'COD_BODEGA_DESPACHO',
+            'COD_AGENCIA',
+            'EMPRESA',
+            'NUM_CUOTAS',
+            'VALOR_PEDIDO',
+            'FECHA_MODIFICACION',
+            'FECHA_ADICION',
+            'FECHA_PEDIDO',
+            'FINANCIAMIENTO',
+            'COMPROBANTE_MANUAL',
+            'ES_FACTURA_CONSIGNACION'
+        ]
+
+        valores_cab = []
+        for campo in campos_cab:
+            if campo not in cab:
+                c.rollback()
+                return jsonify({"error": f"Falta el campo obligatorio en cabecera: {campo}"}), 400
+            valores_cab.append(cab[campo])
+
+        # Conversión de fechas si son string
+        for campo_fecha in ["FECHA_PEDIDO", "FECHA_ADICION", "FECHA_MODIFICACION"]:
+            if campo_fecha in campos_cab:
+                idx = campos_cab.index(campo_fecha)
+                valores_cab[idx] = parse_fecha(valores_cab[idx])
+
+        # Insertar cabecera
+        sql_cab = f"""
+            INSERT INTO JAHER.ST_PEDIDOS_CABECERAS ({', '.join(campos_cab)})
+            VALUES ({', '.join([':' + str(i + 1) for i in range(len(campos_cab))])})
+        """
+        cur.execute(sql_cab, valores_cab)
+
+        # -------- INSERTAR DETALLES ---------
+        campos_det = [
+            'ES_PENDIENTE',
+            'COD_TIPO_PEDIDO',
+            'TIPO_CANTIDAD',
+            'COD_PEDIDO',
+            'ES_ANULADO',
+            'COD_PRODUCTO',
+            'COD_TIPO_PRODUCTO',
+            'VALOR_LINEA',
+            'PLAZO',
+            'ICE',
+            'COD_AGENCIA',
+            'EMPRESA',
+            'NUM_CUOTAS',
+            'VALOR_IVA',
+            'COD_CLIENTE',
+            'PRECIO_LISTA',
+            'PRECIO_DESCONTADO',
+            'PRECIO',
+            'CANTIDAD_PEDIDA',
+            'SECUENCIA',
+            'COD_DIRECCION',
+            'DESCUENTO',
+            'CANTIDAD_DESPACHADA',
+            'FINANCIAMIENTO',
+            'PORCENTAJE_INTERES',
+            'CANTIDAD_PRODUCIDA',
+            'ES_CONFIRMADO_BOD',
+            'CANTIDAD_A_ENVIAR'
+        ]
+
+        sql_det = f"""
+            INSERT INTO JAHER.ST_PEDIDOS_DETALLES ({', '.join(campos_det)})
+            VALUES ({', '.join([':' + str(i + 1) for i in range(len(campos_det))])})
+        """
+
+        for det in detalles:
+            valores_det = []
+            for campo in campos_det:
+                if campo not in det:
+                    c.rollback()
+                    return jsonify({"error": f"Falta el campo obligatorio en detalle: {campo}"}), 400
+                valores_det.append(det[campo])
+            cur.execute(sql_det, valores_det)
+
+        c.commit()
+        return jsonify({"msg": "Pedido guardado exitosamente", "cod_pedido": cab["COD_PEDIDO"]}), 200
+
+    except Exception as ex:
+        if c:
+            c.rollback()
+        return jsonify({"error": str(ex)}), 500
+    finally:
+        if c:
+            c.close()
+
+
+@rmor.route('/obtener_cod_liquidacion', methods=['GET'])
+@jwt_required()
+def obtener_cod_liquidacion():
+    """
+    Devuelve el código de liquidación usando el procedimiento PL/SQL.
+    Params: empresa, cod_agencia (la fecha de pedido es el día actual, tomada del backend)
+    """
+    c = None
+    try:
+        empresa = request.args.get('empresa')
+        cod_agencia = request.args.get('cod_agencia')
+        if not empresa or not cod_agencia:
+            return jsonify({"error": "Faltan parámetros: empresa, cod_agencia"}), 400
+
+        empresa = int(empresa)
+        cod_agencia = int(cod_agencia)
+        fecha_pedido = datetime.now()  # <-- Aquí se toma la fecha actual del sistema
+
+        c = get_oracle_connection()
+        cur = c.cursor()
+
+        cod_liquidacion = cur.var(str)
+        lv_codigoerror = cur.var(str)
+
+        cur.callproc('PK_V6_OBTENER_LIQUIDACION.P_SACA_COD_LIQUIDACION', [
+            empresa,
+            cod_agencia,
+            fecha_pedido,
+            cod_liquidacion,
+            lv_codigoerror
+        ])
+
+        if lv_codigoerror.getvalue():
+            return jsonify({"error": lv_codigoerror.getvalue()}), 400
+
+        return jsonify({
+            "cod_liquidacion": cod_liquidacion.getvalue(),
+            "fecha_pedido_usada": fecha_pedido.strftime("%Y-%m-%d %H:%M:%S")
+        }), 200
+
+    except Exception as ex:
+        if c:
+            c.rollback()
+        return jsonify({"error": str(ex)}), 500
+    finally:
+        if c:
+            c.close()
