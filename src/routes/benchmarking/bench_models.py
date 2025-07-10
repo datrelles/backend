@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, request
 from flask_cors import cross_origin
 from flask_jwt_extended import jwt_required
 from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
-from sqlalchemy import func
+from sqlalchemy import func, text, Integer, Float
 from openpyxl import Workbook
 from flask import send_file
 from collections import defaultdict
@@ -137,11 +137,19 @@ def comparar_modelos():
                 "cilindrada", "peso_seco", "caballos_fuerza", "torque_maximo",
                 "altura_total", "ancho_total", "longitud_total"
             })
-        elif segmento_nombre == "advento":
+        elif segmento_nombre == "adventure":
             mejor_si_mayor.update({
                 "altura_total", "ancho_total", "longitud_total"
             })
         elif segmento_nombre == "utilitaria":
+            mejor_si_menor.update({
+                "cilindrada", "altura_total", "ancho_total", "longitud_total"
+            })
+        elif segmento_nombre == "street":
+            mejor_si_menor.update({
+                "cilindrada", "altura_total", "ancho_total", "longitud_total"
+            })
+        elif segmento_nombre == "ninja":
             mejor_si_menor.update({
                 "cilindrada", "altura_total", "ancho_total", "longitud_total"
             })
@@ -248,6 +256,25 @@ def comparar_modelos():
                     "estado": estado
                 })
 
+            comparar("cilindrada",
+                     detalles_base["motor"].cilindrada,
+                     detalles_comp["motor"].cilindrada, "motor")
+            comparar("caballos_fuerza",
+                     detalles_base["motor"].caballos_fuerza,
+                     detalles_comp["motor"].caballos_fuerza, "motor")
+            comparar("torque_maximo",
+                     detalles_base["motor"].torque_maximo,
+                     detalles_comp["motor"].torque_maximo, "motor")
+            comparar("sistema_combustible",
+                     detalles_base["motor"].sistema_combustible,
+                     detalles_comp["motor"].sistema_combustible, "motor")
+            comparar("arranque",
+                     detalles_base["motor"].arranque,
+                     detalles_comp["motor"].arranque, "motor")
+            comparar("sistema_refrigeracion",
+                     detalles_base["motor"].sistema_refrigeracion,
+                     detalles_comp["motor"].sistema_refrigeracion, "motor")
+
             comparar("suspension_delantera",
                      detalles_base["chasis"].suspension_delantera,
                      detalles_comp["chasis"].suspension_delantera, "chasis")
@@ -272,25 +299,6 @@ def comparar_modelos():
             comparar("frenos_delanteros",
                      detalles_base["chasis"].frenos_delanteros,
                      detalles_comp["chasis"].frenos_delanteros, "chasis")
-
-            comparar("cilindrada",
-                     detalles_base["motor"].cilindrada,
-                     detalles_comp["motor"].cilindrada, "motor")
-            comparar("caballos_fuerza",
-                     detalles_base["motor"].caballos_fuerza,
-                     detalles_comp["motor"].caballos_fuerza, "motor")
-            comparar("torque_maximo",
-                     detalles_base["motor"].torque_maximo,
-                     detalles_comp["motor"].torque_maximo, "motor")
-            comparar("sistema_combustible",
-                     detalles_base["motor"].sistema_combustible,
-                     detalles_comp["motor"].sistema_combustible, "motor")
-            comparar("arranque",
-                     detalles_base["motor"].arranque,
-                     detalles_comp["motor"].arranque, "motor")
-            comparar("sistema_refrigeracion",
-                     detalles_base["motor"].sistema_refrigeracion,
-                     detalles_comp["motor"].sistema_refrigeracion, "motor")
 
             comparar("altura_total",
                      detalles_base["dimensiones"].altura_total,
@@ -691,19 +699,35 @@ def get_marcas_por_linea_segmento():
         return jsonify({"error": str(e)}), 500
 
 
-@bench_model.route('/get_modelos_por_linea_segmento_marca', methods=['GET'])
+@bench_model.route('/get_modelos_por_linea_segmento_marca_cilindraje', methods=['GET'])
 @jwt_required()
 @cross_origin()
-def get_modelos_por_linea_segmento_marca():
+def get_modelos_por_linea_segmento_marca_cilindraje():
     try:
+        # Obtener parámetros
         codigo_linea = request.args.get('codigo_linea', type=int)
         nombre_segmento = request.args.get('nombre_segmento', type=str)
         codigo_marca = request.args.get('codigo_marca', type=int)
+        cil_min = request.args.get('cil_min', type=float)
+        cil_max = request.args.get('cil_max', type=float)
 
+        # Validar parámetros obligatorios
         if not codigo_linea or not nombre_segmento or not codigo_marca:
-            return jsonify({"error": "Parámetros 'codigo_linea', 'nombre_segmento' y 'codigo_marca' requeridos"}), 400
+            return jsonify({
+                "error": "Parámetros 'codigo_linea', 'nombre_segmento' y 'codigo_marca' requeridos"
+            }), 400
 
-        resultados = db.session.query(
+        # Subquery para extraer cilindrada como número (segura)
+        cilindrada_num = func.cast(
+            func.nullif(
+                func.regexp_replace(Motor.cilindrada, '[^0-9.]', ''),
+                ''
+            ),
+            Float
+        )
+
+        # Query base con joins y filtros obligatorios
+        query = db.session.query(
             ModeloVersion.codigo_modelo_version,
             ModeloVersion.nombre_modelo_version,
             ModeloVersion.anio_modelo_version,
@@ -714,22 +738,29 @@ def get_modelos_por_linea_segmento_marca():
             Version.nombre_version,
             Marca.nombre_marca,
             Imagenes.path_imagen,
-        ) \
-        .join(ModeloComercial, (ModeloVersion.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
-                              (ModeloVersion.codigo_marca == ModeloComercial.codigo_marca)) \
-        .join(Segmento, (Segmento.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
-                        (Segmento.codigo_marca == ModeloComercial.codigo_marca)) \
-        .join(Motor, ModeloVersion.codigo_motor == Motor.codigo_motor) \
-        .join(TipoMotor, Motor.codigo_tipo_motor == TipoMotor.codigo_tipo_motor) \
-        .join(Version, ModeloVersion.codigo_version == Version.codigo_version) \
-        .join(Imagenes, ModeloVersion.codigo_imagen == Imagenes.codigo_imagen) \
-        .join(Marca, ModeloVersion.codigo_marca == Marca.codigo_marca) \
-        .filter(Segmento.codigo_linea == codigo_linea) \
-        .filter(func.upper(Segmento.nombre_segmento) == func.upper(nombre_segmento.strip())) \
-        .filter(ModeloVersion.codigo_marca == codigo_marca) \
-        .all()
+            Motor.cilindrada,
+        ).join(ModeloComercial,
+               (ModeloVersion.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
+               (ModeloVersion.codigo_marca == ModeloComercial.codigo_marca)) \
+         .join(Segmento,
+               (Segmento.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
+               (Segmento.codigo_marca == ModeloComercial.codigo_marca)) \
+         .join(Motor, ModeloVersion.codigo_motor == Motor.codigo_motor) \
+         .join(TipoMotor, Motor.codigo_tipo_motor == TipoMotor.codigo_tipo_motor) \
+         .join(Version, ModeloVersion.codigo_version == Version.codigo_version) \
+         .join(Imagenes, ModeloVersion.codigo_imagen == Imagenes.codigo_imagen) \
+         .join(Marca, ModeloVersion.codigo_marca == Marca.codigo_marca) \
+         .filter(Segmento.codigo_linea == codigo_linea) \
+         .filter(func.upper(Segmento.nombre_segmento) == func.upper(nombre_segmento.strip())) \
+         .filter(ModeloVersion.codigo_marca == codigo_marca)
 
-        modelos = [ {
+        # Filtro opcional por cilindraje si se especifica
+        if cil_min is not None and cil_max is not None:
+            query = query.filter(cilindrada_num.between(cil_min, cil_max))
+
+        resultados = query.all()
+
+        modelos = [{
             "codigo_modelo_version": r[0],
             "nombre_modelo_version": r[1],
             "anio_modelo_version": r[2],
@@ -740,10 +771,107 @@ def get_modelos_por_linea_segmento_marca():
             "nombre_version": r[7],
             "nombre_marca": r[8],
             "path_imagen": r[9],
+            "cilindrada": r[10],
         } for r in resultados]
 
         return jsonify(modelos), 200
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+#-----------------------------------------------------------------------------------------------------------------------
+#-----------------------------------------------------NUEVO-------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------------------------------
+
+@bench_model.route('/get_modelos_canal', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_modelos():
+    try:
+        nombre_canal = request.args.get('canal', type=str)
+        cilindrada = request.args.get('cilindrada', type=str)
+
+        if not nombre_canal or not cilindrada:
+            return jsonify({"error": "Los parámetros 'canal' y 'cilindrada' son requeridos."}), 400
+
+        query = text("""
+                SELECT MV.CODIGO_MODELO_VERSION,
+                       SMC.NOMBRE_MODELO AS NOMBRE_MODELO_COMERCIAL,
+                       SM.NOMBRE_MARCA,
+                       SS.NOMBRE_SEGMENTO,
+                       C.NOMBRE_CANAL,
+                       M.CILINDRADA
+                FROM ST_MODELO_VERSION mv
+                JOIN ST_CLIENTE_CANAL cc
+                    ON mv.CODIGO_CLIENTE_CANAL = cc.CODIGO_CLIENTE_CANAL
+                    AND mv.CODIGO_MOD_VERS_REPUESTO = cc.CODIGO_MOD_VERS_REPUESTO
+                    AND mv.EMPRESA = cc.EMPRESA
+                    AND mv.COD_PRODUCTO = cc.COD_PRODUCTO
+                JOIN ST_CANAL c
+                    ON cc.CODIGO_CANAL = c.CODIGO_CANAL
+                JOIN STOCK.ST_MODELO_COMERCIAL SMC
+                    ON mv.CODIGO_MODELO_COMERCIAL = SMC.CODIGO_MODELO_COMERCIAL
+                JOIN STOCK.ST_MARCA SM
+                    ON SMC.CODIGO_MARCA = SM.CODIGO_MARCA
+                JOIN STOCK.ST_SEGMENTO SS
+                    ON SMC.CODIGO_MODELO_COMERCIAL = SS.CODIGO_MODELO_COMERCIAL
+                    AND SMC.CODIGO_MARCA = SS.CODIGO_MARCA
+                JOIN STOCK.ST_MOTOR M
+                    ON mv.CODIGO_MOTOR = M.CODIGO_MOTOR
+                    AND mv.CODIGO_TIPO_MOTOR = M.CODIGO_TIPO_MOTOR
+                WHERE c.NOMBRE_CANAL = :canal                  
+                  AND REPLACE(UPPER(M.CILINDRADA), ' ', '') LIKE UPPER(CONCAT(:cilindrada, '%'))
+
+            """)
+
+        resultados = db.session.execute(
+            query,
+            {"canal": nombre_canal.strip(), "cilindrada": f"%{cilindrada.strip()}%"}
+        ).fetchall()
+
+        modelos = [{
+            "codigo_modelo_version": r[0],
+            "nombre_modelo": r[1],
+            "nombre_marca": r[2],
+            "nombre_segmento": r[3],
+            "nombre_canal": r[4],
+            "cilindrada": r[5]
+        } for r in resultados]
+
+        return jsonify(modelos), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bench_model.route('/get_cilindradas_disponibles', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_cilindradas_disponibles():
+    try:
+        resultados = db.session.query(Motor.cilindrada).distinct().all()
+
+        # Convertimos a valores numéricos redondeados
+        cilindros = []
+        for c in resultados:
+            try:
+                valor = float(str(c[0]).replace('CC', '').strip())
+                cilindros.append(valor)
+            except:
+                continue
+
+        cilindros = sorted(set(cilindros))
+
+        # Rangos fijos de 50 en 50
+        rangos_fijos = [(100, 149), (150, 199), (200, 249), (250, 300)]
+        etiquetas_rango = []
+
+        for r_min, r_max in rangos_fijos:
+            if any(r_min <= c <= r_max for c in cilindros):
+                etiquetas_rango.append(f"{r_min} CC -{r_max} CC")
+
+        return jsonify(etiquetas_rango), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
