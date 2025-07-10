@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, request
 from flask_cors import cross_origin
 from flask_jwt_extended import jwt_required
 from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
-from sqlalchemy import func, text, Integer, Float
+from sqlalchemy import func, text, Float
 from openpyxl import Workbook
 from flask import send_file
 from collections import defaultdict
@@ -863,13 +863,13 @@ def get_cilindradas_disponibles():
 
         cilindros = sorted(set(cilindros))
 
-        # Rangos fijos de 50 en 50
-        rangos_fijos = [(100, 149), (150, 199), (200, 249), (250, 300)]
-        etiquetas_rango = []
+        rangos_fijos = [(100, 149), (150, 199), (200, 249), (250, 299), (300, 399), (400, 450), (500, 550)]
 
-        for r_min, r_max in rangos_fijos:
-            if any(r_min <= c <= r_max for c in cilindros):
-                etiquetas_rango.append(f"{r_min} CC -{r_max} CC")
+        etiquetas_rango = [{
+            "label": f"{r_min} CC",
+            "min": r_min,
+            "max": r_max
+        } for r_min, r_max in rangos_fijos]
 
         return jsonify(etiquetas_rango), 200
     except Exception as e:
