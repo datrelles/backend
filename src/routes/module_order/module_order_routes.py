@@ -2005,3 +2005,121 @@ def obtener_cod_liquidacion():
     finally:
         if c:
             c.close()
+
+
+@rmor.route('/pedidos_list', methods=['GET'])
+@jwt_required()
+def listar_pedidos_por_fecha():
+    """
+    Lista las cabeceras de pedidos entre dos fechas de pedido, y filtra por cod_agencia si se provee.
+    """
+    c = None
+    try:
+        fecha_ini = request.args.get('fecha_ini')
+        fecha_fin = request.args.get('fecha_fin')
+        cod_agencia = request.args.get('cod_agencia')  # puede ser None
+
+        if not fecha_ini or not fecha_fin:
+            return jsonify({"error": "Debe indicar fecha_ini y fecha_fin en el formato YYYY-MM-DD"}), 400
+
+        # Validar y convertir fechas
+        try:
+            fecha_ini_dt = datetime.strptime(fecha_ini, "%Y-%m-%d")
+            fecha_fin_dt = datetime.strptime(fecha_fin, "%Y-%m-%d")
+        except Exception:
+            return jsonify({"error": "Formato de fecha inválido, debe ser YYYY-MM-DD"}), 400
+
+        c = get_oracle_connection()
+        cur = c.cursor()
+
+        sql = """
+            SELECT *
+            FROM JAHER.ST_PEDIDOS_CABECERAS
+            WHERE FECHA_PEDIDO BETWEEN :ini AND :fin
+        """
+        params = {"ini": fecha_ini_dt, "fin": fecha_fin_dt}
+
+        # Si cod_agencia viene como parámetro, agrega el filtro
+        if cod_agencia:
+            sql += " AND COD_AGENCIA = :cod_agencia"
+            params["cod_agencia"] = cod_agencia
+
+        sql += " ORDER BY FECHA_PEDIDO DESC"
+
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        columnas = [col[0] for col in cur.description]
+        pedidos = [dict(zip(columnas, row)) for row in rows]
+        return jsonify(pedidos), 200
+
+    except Exception as ex:
+        if c:
+            c.rollback()
+        return jsonify({"error": str(ex)}), 500
+    finally:
+        if c:
+            c.close()
+
+@rmor.route('/pedido_detalle', methods=['GET'])
+@jwt_required()
+def obtener_pedido_con_detalles():
+    """
+    Devuelve la cabecera y detalles de un pedido filtrando por cod_pedido, empresa, cod_tipo_pedido.
+    """
+    c = None
+    try:
+        cod_pedido = request.args.get('cod_pedido')
+        empresa = request.args.get('empresa')
+        cod_tipo_pedido = request.args.get('cod_tipo_pedido')
+
+        if not cod_pedido:
+            return jsonify({"error": "Debe indicar cod_pedido en los parámetros"}), 400
+
+        c = get_oracle_connection()
+        cur = c.cursor()
+
+        # Buscar cabecera
+        sql_cab = "SELECT * FROM JAHER.ST_PEDIDOS_CABECERAS WHERE COD_PEDIDO = :cod_pedido"
+        params = {'cod_pedido': cod_pedido}
+        if empresa:
+            sql_cab += " AND EMPRESA = :empresa"
+            params['empresa'] = empresa
+        if cod_tipo_pedido:
+            sql_cab += " AND COD_TIPO_PEDIDO = :cod_tipo_pedido"
+            params['cod_tipo_pedido'] = cod_tipo_pedido
+
+        cur.execute(sql_cab, params)
+        cab_row = cur.fetchone()
+        if not cab_row:
+            return jsonify({"error": "No existe pedido"}), 404
+
+        columnas_cab = [col[0] for col in cur.description]
+        cabecera = dict(zip(columnas_cab, cab_row))
+
+        # Buscar detalles
+        sql_det = """
+            SELECT * FROM JAHER.ST_PEDIDOS_DETALLES
+            WHERE COD_PEDIDO = :cod_pedido
+        """
+        params_det = {'cod_pedido': cod_pedido}
+        if empresa:
+            sql_det += " AND EMPRESA = :empresa"
+            params_det['empresa'] = empresa
+        if cod_tipo_pedido:
+            sql_det += " AND COD_TIPO_PEDIDO = :cod_tipo_pedido"
+            params_det['cod_tipo_pedido'] = cod_tipo_pedido
+
+        cur.execute(sql_det, params_det)
+        rows_det = cur.fetchall()
+        columnas_det = [col[0] for col in cur.description]
+        detalles = [dict(zip(columnas_det, row)) for row in rows_det]
+
+        return jsonify({"cabecera": cabecera, "detalles": detalles}), 200
+
+    except Exception as ex:
+        if c:
+            c.rollback()
+        return jsonify({"error": str(ex)}), 500
+    finally:
+        if c:
+            c.close()
