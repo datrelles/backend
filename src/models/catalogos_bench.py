@@ -1,6 +1,6 @@
 # coding: utf-8
 from sqlalchemy import Column, Index, VARCHAR, ForeignKey, CheckConstraint, UniqueConstraint, \
-    ForeignKeyConstraint, PrimaryKeyConstraint
+    ForeignKeyConstraint, PrimaryKeyConstraint, text
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
@@ -242,7 +242,7 @@ class ProductoExterno(Base):
         nullable=False
     )
 
-    nombre_producto = Column(VARCHAR(60), nullable=False)
+    nombre_producto = Column(VARCHAR(200), nullable=False)
     estado_prod_externo = Column(NUMBER(1))
     descripcion_producto = Column(VARCHAR(150))
     usuario_crea = Column(VARCHAR(50), nullable=False)
@@ -463,7 +463,7 @@ class ModeloVersionRepuesto(Base):
     )
 
     codigo_mod_vers_repuesto = Column(NUMBER(14, 0), Sequence('seq_st_modelo_version_repuesto', schema='stock'), nullable=False)
-    codigo_prod_externo = Column(VARCHAR(14), ForeignKey('stock.st_producto_externo.codigo_prod_externo'), nullable=False)
+    codigo_prod_externo = Column(VARCHAR(14), ForeignKey('stock.st_producto_externo.codigo_prod_externo'))
     codigo_version = Column(NUMBER(14), ForeignKey('stock.st_version.codigo_version'), nullable=False)
     empresa = Column(NUMBER(2), nullable=False)
     cod_producto = Column(VARCHAR(14), nullable=False)
@@ -492,11 +492,22 @@ class ClienteCanal(Base):
              'stock.st_modelo_version_repuesto.empresa'],
             name='fk_st_cliente_canal_modvers'
         ),
+        ForeignKeyConstraint(
+            ['codigo_canal'],
+            ['stock.st_canal.codigo_canal'],
+            name='fk_st_cliente_canal_canal'
+        ),
+        ForeignKeyConstraint(
+            ['codigo_cliente'],
+            ['stock.st_cliente.codigo_cliente'],
+            name='fk_cliente_canal_cliente'
+        ),
         {'schema': 'stock'}
     )
 
     codigo_cliente_canal = Column(NUMBER(14), Sequence('seq_st_cliente_canal', schema='stock'))
     codigo_canal = Column(NUMBER(14), nullable=False)
+    codigo_cliente = Column(NUMBER(14), nullable=False)
     codigo_mod_vers_repuesto = Column(NUMBER(14), nullable=False)
     empresa = Column(NUMBER(2), nullable=False)
     cod_producto = Column(VARCHAR(14), nullable=False)
@@ -549,6 +560,22 @@ class ModeloVersion(Base):
     precio_venta_distribuidor = Column(NUMBER(10), nullable=False)
 
 
+class StCliente(Base):
+    __tablename__ = 'st_cliente'
+    __table_args__ = {'schema': 'stock'}
 
+    codigo_cliente = Column(
+        NUMBER(14, 0),
+        Sequence('seq_st_cliente', schema='stock'),
+        primary_key=True
+    )
+
+    nombre_cliente = Column(VARCHAR(50), nullable=False)
+    estado_cliente = Column(NUMBER(1))
+
+    usuario_crea = Column(VARCHAR(50))
+    usuario_modifica = Column(VARCHAR(50))
+    fecha_creacion = Column(DateTime, default=func.now(), nullable=False)
+    fecha_modificacion = Column(DateTime, nullable=True)
 
 
