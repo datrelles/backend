@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, request
 from flask_cors import cross_origin
 from flask_jwt_extended import jwt_required
 from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
-from sqlalchemy import func, text, Float
+from sqlalchemy import func, text, Float, or_, and_
 from openpyxl import Workbook
 from flask import send_file
 from collections import defaultdict
@@ -671,22 +671,48 @@ def get_marcas_por_linea_segmento():
     try:
         codigo_linea = request.args.get('codigo_linea', type=int)
         nombre_segmento = request.args.get('nombre_segmento', type=str)
+        cil_min = request.args.get('cil_min', type=float)
+        cil_max = request.args.get('cil_max', type=float)
 
         if not codigo_linea or not nombre_segmento:
             return jsonify({"error": "Parámetros 'codigo_linea' y 'nombre_segmento' requeridos"}), 400
 
-        resultados = db.session.query(
-            Marca.codigo_marca,
-            Marca.nombre_marca
-        ) \
-        .join(ModeloComercial, Marca.codigo_marca == ModeloComercial.codigo_marca) \
-        .join(Segmento, (Segmento.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
-                        (Segmento.codigo_marca == ModeloComercial.codigo_marca)) \
-        .filter(Segmento.codigo_linea == codigo_linea) \
-        .filter(func.upper(Segmento.nombre_segmento) == func.upper(nombre_segmento.strip())) \
-        .filter(Marca.estado_marca == 1) \
-        .distinct() \
-        .all()
+        # Subquery para extraer cilindrada como número
+        cilindrada_num = func.cast(
+            func.nullif(
+                func.regexp_replace(Motor.cilindrada, '[^0-9.]', ''),
+                ''
+            ),
+            Float
+        )
+        # Subquery: marcas que tengan al menos un modelo válido (por cilindrada o SPARTA)
+        subquery = db.session.query(Marca.codigo_marca) \
+            .join(ModeloComercial, Marca.codigo_marca == ModeloComercial.codigo_marca) \
+            .join(Segmento, (Segmento.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
+                            (Segmento.codigo_marca == ModeloComercial.codigo_marca)) \
+            .join(ModeloVersion, (ModeloVersion.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
+                                  (ModeloVersion.codigo_marca == Marca.codigo_marca)) \
+            .join(Motor, ModeloVersion.codigo_motor == Motor.codigo_motor) \
+            .filter(Segmento.codigo_linea == codigo_linea) \
+            .filter(func.upper(Segmento.nombre_segmento) == func.upper(nombre_segmento.strip())) \
+            .filter(Marca.estado_marca == 1)
+
+        if cil_min is not None and cil_max is not None:
+            subquery = subquery.filter(
+                or_(
+                    cilindrada_num.between(cil_min, cil_max),
+                    func.upper(ModeloComercial.nombre_modelo) == 'SPARTA 200'
+                )
+            )
+
+        subquery = subquery.distinct().subquery()
+
+        # Consulta final de marcas válidas
+        resultados = db.session.query(Marca.codigo_marca, Marca.nombre_marca) \
+            .filter(Marca.codigo_marca.in_(subquery)) \
+            .filter(Marca.estado_marca == 1) \
+            .distinct() \
+            .all()
 
         marcas = [{
             "codigo_marca": r[0],
@@ -754,9 +780,36 @@ def get_modelos_por_linea_segmento_marca_cilindraje():
          .filter(func.upper(Segmento.nombre_segmento) == func.upper(nombre_segmento.strip())) \
          .filter(ModeloVersion.codigo_marca == codigo_marca)
 
-        # Filtro opcional por cilindraje si se especifica
         if cil_min is not None and cil_max is not None:
-            query = query.filter(cilindrada_num.between(cil_min, cil_max))
+            filtro_cilindrada = cilindrada_num.between(cil_min, cil_max)
+
+            codigo_sparta = db.session.query(ModeloComercial.codigo_modelo_comercial) \
+                .filter(func.upper(ModeloComercial.nombre_modelo) == 'SPARTA 200') \
+                .filter(ModeloComercial.codigo_marca == codigo_marca) \
+                .scalar()
+
+            if cil_min == 200 and cil_max == 249:
+                # Incluir SPARTA 200 explícitamente solo en este rango
+                if codigo_sparta:
+                    query = query.filter(
+                        or_(
+                            filtro_cilindrada,
+                            ModeloComercial.codigo_modelo_comercial == codigo_sparta
+                        )
+                    )
+                else:
+                    query = query.filter(filtro_cilindrada)
+            else:
+                # Excluir SPARTA 200 de otros rangos, incluso si cae por cilindrada
+                if codigo_sparta:
+                    query = query.filter(
+                        and_(
+                            filtro_cilindrada,
+                            ModeloComercial.codigo_modelo_comercial != codigo_sparta
+                        )
+                    )
+                else:
+                    query = query.filter(filtro_cilindrada)
 
         resultados = query.all()
 
