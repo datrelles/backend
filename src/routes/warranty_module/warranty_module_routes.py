@@ -365,7 +365,6 @@ def generate_comprobante_code(data, dataCaso, c):
     finally:
         if cur:
             cur.close()
-
 def get_taller_info(data, c):
     """
     Retrieves COD_PROVINCIA and COD_CANTON from AR_TALLER_SERVICIO_TECNICO
@@ -1523,7 +1522,7 @@ def get_costo():
         # Roll back if there's any exception
         if c:
             c.rollback()
-        print(f"Error in get_costo endpoint: {e}")
+        #print(f"Error in get_costo endpoint: {e}")
         return jsonify({"error": str(e)}), 500
 
     finally:
