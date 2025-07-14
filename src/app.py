@@ -441,6 +441,68 @@ def generate_netsuite_token():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/gen_api_token", methods=["POST"])
+@cross_origin()
+# @jwt_required()
+def gen_api_token():
+    try:
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur_01 = c.cursor()
+
+        sql_select = """SELECT empresa, token, fecha_inicio, fecha_final  
+                            FROM (
+                            SELECT empresa, token, fecha_inicio, fecha_final  
+                            FROM COMPUTO.TG_TOKEN_API_NETSUITE  
+                            ORDER BY fecha_final DESC
+                                    ) 
+                            WHERE ROWNUM = 1"""
+        cur_01.execute(sql_select)
+        last_token = cur_01.fetchone()
+
+        now = datetime.now()
+
+        if last_token:
+            empresa, token, fecha_inicio, fecha_final = last_token
+            if fecha_final > now:
+                return jsonify({
+                    "token": token,
+                    "empresa": empresa,
+                    "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d %H:%M:%S"),
+                    "fecha_final": fecha_final.strftime("%Y-%m-%d %H:%M:%S"),
+                    "message": "Token aún válido, no se generó uno nuevo."
+                })
+            else:
+                headers = {
+                    "x-api-key": getenv("MASSLINE_API_KEY")
+                }
+                response = requests.post(getenv("NESTJS_TOKEN_URL"), headers=headers)
+                if response.status_code != 201 and response.status_code != 200:
+                    return jsonify({"error": "No se pudo generar el JWT desde NestJS", "detalle": response.text}), 400
+                token_data = response.json()
+                jwt_token = token_data.get("token")
+                fecha_inicio = datetime.now()
+                fecha_final = fecha_inicio + timedelta(hours=24)
+
+                sql = """INSERT INTO COMPUTO.TG_TOKEN_API_NETSUITE (empresa, token, fecha_inicio, fecha_final)
+                                     VALUES (:empresa, :token, :fecha_inicio, :fecha_final)"""
+                cur_01.execute(sql, {
+                    "empresa": 20,
+                    "token": jwt_token,
+                    "fecha_inicio": fecha_inicio,
+                    "fecha_final": fecha_final
+                })
+                c.commit()
+                return jsonify({
+                    "token": jwt_token,
+                    "empresa": 20,
+                    "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d %H:%M:%S"),
+                    "fecha_final": fecha_final.strftime("%Y-%m-%d %H:%M:%S"),
+                    "message": "Token generado."
+                })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 def scheduled_task():
     with app.app_context():
         execute_send_alert_emails_for_role()
