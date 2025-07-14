@@ -2011,7 +2011,10 @@ def obtener_cod_liquidacion():
 @jwt_required()
 def listar_pedidos_por_fecha():
     """
-    Lista las cabeceras de pedidos entre dos fechas de pedido, y filtra por cod_agencia si se provee.
+    Lista las cabeceras de pedidos entre dos fechas de pedido,
+    filtra por cod_agencia si se provee,
+    EMPRESA fijo en 20,
+    e incluye el nombre del cliente en el campo CLIENTE.
     """
     c = None
     try:
@@ -2033,18 +2036,22 @@ def listar_pedidos_por_fecha():
         cur = c.cursor()
 
         sql = """
-            SELECT *
-            FROM JAHER.ST_PEDIDOS_CABECERAS
-            WHERE FECHA_PEDIDO BETWEEN :ini AND :fin
+            SELECT C.*, 
+                   (P.APELLIDO1 || ' ' || P.NOMBRE) AS CLIENTE
+            FROM ST_PEDIDOS_CABECERAS C
+            LEFT JOIN cliente  P
+                ON P.COD_CLIENTE = C.COD_PERSONA_CLI
+                AND P.EMPRESA = C.EMPRESA
+            WHERE C.FECHA_PEDIDO BETWEEN :ini AND :fin
+              AND C.EMPRESA = 20
         """
         params = {"ini": fecha_ini_dt, "fin": fecha_fin_dt}
 
-        # Si cod_agencia viene como parámetro, agrega el filtro
         if cod_agencia:
-            sql += " AND COD_AGENCIA = :cod_agencia"
+            sql += " AND C.COD_AGENCIA = :cod_agencia"
             params["cod_agencia"] = cod_agencia
 
-        sql += " ORDER BY FECHA_PEDIDO DESC"
+        sql += " ORDER BY C.FECHA_PEDIDO DESC"
 
         cur.execute(sql, params)
         rows = cur.fetchall()
@@ -2059,6 +2066,7 @@ def listar_pedidos_por_fecha():
     finally:
         if c:
             c.close()
+
 
 @rmor.route('/pedido_detalle', methods=['GET'])
 @jwt_required()
