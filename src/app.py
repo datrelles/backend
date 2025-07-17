@@ -8,19 +8,24 @@ import oracle
 from routes.web_services import web_services
 from routes.auth import auth
 from dotenv import load_dotenv, find_dotenv
+
 from src.models.entities.User import User
 from flask_login import LoginManager
 from os import getenv
 import dotenv
 from flask_cors import CORS, cross_origin
+from logging_config import configure_logging
 
-import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import jwt
-from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, \
+from flask_jwt_extended import create_access_token, get_jwt_identity, unset_jwt_cookies, jwt_required, \
     JWTManager
+from flask_jwt_extended import create_access_token, unset_jwt_cookies, jwt_required, JWTManager, get_jwt_identity
 import urllib3
+
+from src.routes.benchmarking.bench_models import bench_model
+from src.routes.benchmarking.bench_repuestos import bench_rep
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 ###################################################
@@ -34,6 +39,11 @@ from src.routes.routes_fin import bpfin
 from src.routes.routes_logis import bplog
 from src.routes.routes_com import bpcom
 from src.routes.module_contabilidad import rmc
+from src.routes.warranty_module.warranty_module_routes import rmwa
+from src.routes.module_order.module_order_routes import rmor
+from src.routes.email_alert import aem, execute_send_alert_emails_for_role
+from src.routes.benchmarking.catalog_benchmarking import bench
+from src.routes.images.s3_upload import s3
 from src.routes.warranty_module import rmwa
 from src.routes.email_alert import aem, execute_send_alert_emails, execute_send_alert_emails_for_role
 from src.routes.routes_modulo_formulas import formulas_b
@@ -44,6 +54,9 @@ from src.routes.routes_modulo_importaciones import importaciones_b
 dotenv.load_dotenv()
 
 app = Flask(__name__)
+
+configure_logging(app)
+
 ####################mail################################
 
 app.config['MAIL_SERVER'] = 'smtp.office365.com'
@@ -83,10 +96,14 @@ app.register_blueprint(bpcom, url_prefix="/com")
 app.register_blueprint(aem, url_prefix="/alert_email")
 app.register_blueprint(rmc, url_prefix="/cont")
 app.register_blueprint(rmwa, url_prefix="/warranty")
+app.register_blueprint(rmor, url_prefix="/order_mot")
 app.register_blueprint(net, url_prefix="/net")
+app.register_blueprint(bench, url_prefix="/bench")
+app.register_blueprint(s3, url_prefix="/s3")
+app.register_blueprint(bench_model, url_prefix="/bench_model")
+app.register_blueprint(bench_rep, url_prefix="/bench_rep")
 app.register_blueprint(formulas_b, url_prefix="/modulo-formulas")
 app.register_blueprint(importaciones_b, url_prefix="/modulo-importaciones")
-
 #############################################################################
 
 jwt_manager = JWTManager(app)
@@ -119,13 +136,17 @@ def create_token():
 
     try:
         db = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        if db is None:
+            return {"msg": "Error connecting to database"}, 500
+
         cursor = db.cursor()
         sql = """SELECT USUARIO_ORACLE, PASSWORD, NOMBRE FROM USUARIO 
                 WHERE USUARIO_ORACLE = '{}'""".format(user.upper())
         cursor.execute(sql)
-        db.close
         row = cursor.fetchone()
-        if row != None:
+        db.close()
+
+        if row is not None:
             isCorrect = User.check_password(row[1], password)
             if isCorrect:
                 access_token = create_access_token(identity=user)
@@ -317,6 +338,11 @@ def logout():
     return response
 
 
+@app.route("/health")
+def health_check():
+    return "OK", 200
+
+
 @app.route("/gen_jwt", methods=["POST"])
 @cross_origin()
 @jwt_required()
@@ -358,10 +384,13 @@ def generate_netsuite_token():
         c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur_01 = c.cursor()
 
-        sql_select = """SELECT empresa, token, fecha_inicio, fecha_final 
-                                FROM COMPUTO.TG_TOKEN_API_NETSUITE 
-                                ORDER BY fecha_final DESC 
-                                FETCH FIRST 1 ROWS ONLY"""
+        sql_select = """SELECT empresa, token, fecha_inicio, fecha_final  
+                            FROM (
+                            SELECT empresa, token, fecha_inicio, fecha_final  
+                            FROM COMPUTO.TG_TOKEN_API_NETSUITE  
+                            ORDER BY fecha_final DESC
+                                    ) 
+                            WHERE ROWNUM = 1"""
         cur_01.execute(sql_select)
         last_token = cur_01.fetchone()
 
@@ -380,7 +409,6 @@ def generate_netsuite_token():
 
         jwt_response = gen_jwt()
         jwt_token = jwt_response.json.get("token")
-
         if not jwt_token:
             return jsonify({"error": "No se pudo generar el JWT"}), 400
 
@@ -421,8 +449,70 @@ def generate_netsuite_token():
         })
 
         c.commit()
-
         return jsonify(response.json())
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/gen_api_token", methods=["POST"])
+@cross_origin()
+# @jwt_required()
+def gen_api_token():
+    try:
+        c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur_01 = c.cursor()
+
+        sql_select = """SELECT empresa, token, fecha_inicio, fecha_final  
+                            FROM (
+                            SELECT empresa, token, fecha_inicio, fecha_final  
+                            FROM COMPUTO.TG_TOKEN_API_NETSUITE  
+                            ORDER BY fecha_final DESC
+                                    ) 
+                            WHERE ROWNUM = 1"""
+        cur_01.execute(sql_select)
+        last_token = cur_01.fetchone()
+
+        now = datetime.now()
+
+        if last_token:
+            empresa, token, fecha_inicio, fecha_final = last_token
+            if fecha_final > now:
+                return jsonify({
+                    "token": token,
+                    "empresa": empresa,
+                    "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d %H:%M:%S"),
+                    "fecha_final": fecha_final.strftime("%Y-%m-%d %H:%M:%S"),
+                    "message": "Token aún válido, no se generó uno nuevo."
+                })
+            else:
+                headers = {
+                    "x-api-key": getenv("MASSLINE_API_KEY")
+                }
+                response = requests.post(getenv("NESTJS_TOKEN_URL"), headers=headers)
+                if response.status_code != 201 and response.status_code != 200:
+                    return jsonify({"error": "No se pudo generar el JWT desde NestJS", "detalle": response.text}), 400
+                token_data = response.json()
+                jwt_token = token_data.get("token")
+                fecha_inicio = datetime.now()
+                fecha_final = fecha_inicio + timedelta(hours=24)
+
+                sql = """INSERT INTO COMPUTO.TG_TOKEN_API_NETSUITE (empresa, token, fecha_inicio, fecha_final)
+                                     VALUES (:empresa, :token, :fecha_inicio, :fecha_final)"""
+                cur_01.execute(sql, {
+                    "empresa": 20,
+                    "token": jwt_token,
+                    "fecha_inicio": fecha_inicio,
+                    "fecha_final": fecha_final
+                })
+                c.commit()
+                return jsonify({
+                    "token": jwt_token,
+                    "empresa": 20,
+                    "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d %H:%M:%S"),
+                    "fecha_final": fecha_final.strftime("%Y-%m-%d %H:%M:%S"),
+                    "message": "Token generado."
+                })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -5,25 +5,21 @@ from io import BytesIO
 import base64
 from src.models.users import Usuario, Empresa
 from src.models.tipo_comprobante import TipoComprobante
-from src.models.proveedores import Proveedor, TgModelo, TgModeloItem, ProveedorHor, TcCoaProveedor, st_transportistas
+from src.models.proveedores import Proveedor,TgModelo,TgModeloItem, ProveedorHor, TcCoaProveedor, st_transportistas
 from src.models.orden_compra import StOrdenCompraCab, StOrdenCompraDet, StTracking, StPackinglist, stProformaImpFp
 from src.models.productos import Producto, st_lista_precio, st_gen_lista_precio
 from src.models.formula import StFormula, StFormulaD
 from src.models.despiece import StDespiece, StDespieceD
-from src.models.st_proforma import st_proforma, st_proforma_movimiento, st_cab_deuna, st_det_deuna, st_cab_datafast, \
-    st_det_datafast, st_metodos_de_pago_ecommerce, st_cab_credito_directo, st_det_credito_directo, st_cab_datafast_b2b, \
-    st_det_datafast_b2b, st_cab_deuna_b2b, st_det_deuna_b2b
+from src.models.st_proforma import st_proforma, st_proforma_movimiento, st_cab_deuna, st_det_deuna, st_cab_datafast, st_det_datafast, st_metodos_de_pago_ecommerce, st_cab_credito_directo, st_det_credito_directo, st_cab_datafast_b2b, st_det_datafast_b2b, st_cab_deuna_b2b, st_det_deuna_b2b
 from src.models.producto_despiece import StProductoDespiece
 from src.models.unidad_importacion import StUnidadImportacion
-from src.models.financiero import StFinCabCredito, StFinDetCredito, StFinClientes, StFinPagos
-from src.models.embarque_bl import StEmbarquesBl, StTrackingBl, StPuertosEmbarque, StNaviera, StEmbarqueContenedores, \
-    StTipoContenedor, StTrackingContenedores
+from src.models.financiero import StFinCabCredito,StFinDetCredito,StFinClientes,StFinPagos
+from src.models.embarque_bl import StEmbarquesBl,StTrackingBl, StPuertosEmbarque, StNaviera, StEmbarqueContenedores, StTipoContenedor, StTrackingContenedores
 from src.models.tipo_aforo import StTipoAforo
 from src.models.comprobante_electronico import tc_doc_elec_recibidos
-from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, \
-    st_casos_tipo_problema, st_casos_url, ArCiudades, ADcantones, ADprovincias
-from src.models.despiece_repuestos import st_producto_despiece, st_despiece, st_producto_rep_anio, \
-    st_modelo_crecimiento_bi
+from src.models.postVenta import st_prod_packing_list, st_casos_postventa, vt_casos_postventas, st_casos_postventas_obs, st_casos_tipo_problema, st_casos_url, ArCiudades, ADcantones, ADprovincias
+from src.models.despiece_repuestos import st_producto_despiece, st_despiece, st_producto_rep_anio, st_modelo_crecimiento_bi
+from src.routes.warranty_module.task import send_mail_postventa
 from src.models.images import st_material_imagen, st_despiece_d_imagen
 from src.config.database import db, engine, session
 from sqlalchemy import func, text, bindparam, Integer, event, desc
@@ -42,13 +38,11 @@ import cx_Oracle
 import json
 from sqlalchemy import and_
 from werkzeug.utils import secure_filename
-
 bp = Blueprint('routes', __name__)
 
 logger = logging.getLogger(__name__)
 
-
-# METODOS GET
+#METODOS GET
 
 @bp.route('/usuarios')
 @jwt_required()
@@ -74,19 +68,17 @@ def obtener_usuarios():
         })
     return jsonify(serialized_usuarios)
 
-
 @bp.route('/empresas')
 @jwt_required()
 @cross_origin()
 def obtener_empresas():
     empresas = Empresa.query.all()
-    # print(type(empresas))
+    #print(type(empresas))
     resultados = []
     for empresa in empresas:
         resultados.append(empresa.to_dict())
-    # empresas_dict = [e.__dict__ for e in empresas]
+    #empresas_dict = [e.__dict__ for e in empresas]
     return jsonify(resultados)
-
 
 @bp.route('/tipo_comprobante')
 @jwt_required()
@@ -98,20 +90,17 @@ def obtener_tipo_comprobante():
     for comprobante in comprobantes:
         serialized_comprobantes.append({
             'empresa': comprobante.empresa,
-            'tipo': comprobante.TIPO,
+            'tipo': comprobante.tipo,
             'nombre': comprobante.nombre,
             'cod_sistema': comprobante.cod_sistema,
         })
     return jsonify(serialized_comprobantes)
 
-
 @bp.route('/proveedores_ext')
 @jwt_required()
 @cross_origin()
 def obtener_proveedores_ext():
-    query = db.session.query(Proveedor).join(ProveedorHor,
-                                             Proveedor.cod_proveedor == ProveedorHor.cod_proveedorh).filter(
-        ProveedorHor.cod_tipo_proveedorh == 'EXT')
+    query = db.session.query(Proveedor).join(ProveedorHor, Proveedor.cod_proveedor == ProveedorHor.cod_proveedorh).filter(ProveedorHor.cod_tipo_proveedorh == 'EXT')
     proveedores = query.all()
     serialized_proveedores = []
     for proveedor in proveedores:
@@ -121,10 +110,9 @@ def obtener_proveedores_ext():
         direccion = proveedor.direccion if proveedor.direccion else ""
         telefono = proveedor.telefono if proveedor.telefono else ""
         # Consulta adicional para obtener la ciudad del proveedor
-        ciudad_query = db.session.query(TcCoaProveedor.ciudad_matriz).filter(
-            TcCoaProveedor.ruc == proveedor.cod_proveedor)
+        ciudad_query = db.session.query(TcCoaProveedor.ciudad_matriz).filter(TcCoaProveedor.ruc == proveedor.cod_proveedor)
         ciudad = ciudad_query.scalar()
-        # cod_proveedores = [cod_proveedor.to_dict() for cod_proveedor in proveedor.cod_proveedores]
+        #cod_proveedores = [cod_proveedor.to_dict() for cod_proveedor in proveedor.cod_proveedores]
         serialized_proveedores.append({
             'empresa': empresa,
             'cod_proveedor': cod_proveedor,
@@ -134,15 +122,12 @@ def obtener_proveedores_ext():
             'telefono': telefono
         })
     return jsonify(serialized_proveedores)
-
 
 @bp.route('/proveedores_nac')
 @jwt_required()
 @cross_origin()
 def obtener_proveedores_nac():
-    query = db.session.query(Proveedor).join(ProveedorHor,
-                                             Proveedor.cod_proveedor == ProveedorHor.cod_proveedorh).filter(
-        ProveedorHor.cod_tipo_proveedorh == 'NAC')
+    query = db.session.query(Proveedor).join(ProveedorHor, Proveedor.cod_proveedor == ProveedorHor.cod_proveedorh).filter(ProveedorHor.cod_tipo_proveedorh == 'NAC')
     proveedores = query.all()
     serialized_proveedores = []
     for proveedor in proveedores:
@@ -152,10 +137,9 @@ def obtener_proveedores_nac():
         direccion = proveedor.direccion if proveedor.direccion else ""
         telefono = proveedor.telefono if proveedor.telefono else ""
         # Consulta adicional para obtener la ciudad del proveedor
-        ciudad_query = db.session.query(TcCoaProveedor.ciudad_matriz).filter(
-            TcCoaProveedor.ruc == proveedor.cod_proveedor)
+        ciudad_query = db.session.query(TcCoaProveedor.ciudad_matriz).filter(TcCoaProveedor.ruc == proveedor.cod_proveedor)
         ciudad = ciudad_query.scalar()
-        # cod_proveedores = [cod_proveedor.to_dict() for cod_proveedor in proveedor.cod_proveedores]
+        #cod_proveedores = [cod_proveedor.to_dict() for cod_proveedor in proveedor.cod_proveedores]
         serialized_proveedores.append({
             'empresa': empresa,
             'cod_proveedor': cod_proveedor,
@@ -165,7 +149,6 @@ def obtener_proveedores_nac():
             'telefono': telefono
         })
     return jsonify(serialized_proveedores)
-
 
 @bp.route('/puertos_embarque')
 @jwt_required()
@@ -184,7 +167,6 @@ def obtener_puertos_embarque():
             'descripcion': descripcion
         })
     return jsonify(serialized_puertos)
-
 
 @bp.route('/naviera')
 @jwt_required()
@@ -212,8 +194,7 @@ def obtener_naviera():
             "usuario_modifica": usuario_modifica,
             "fecha_modifica": fecha_modifica
         })
-    return jsonify(serialized_navieras)
-
+    return jsonify(serialized_navieras)        
 
 @bp.route('/orden_compra_cab')
 @jwt_required()
@@ -231,19 +212,16 @@ def obtener_orden_compra_cab():
         nombre = orden.nombre if orden.nombre else ""
         proforma = orden.proforma if orden.proforma else ""
         usuario_crea = orden.usuario_crea if orden.usuario_crea else ""
-        fecha_crea = datetime.strftime(orden.fecha_crea, "%d/%m/%Y") if orden.fecha_crea else ""
+        fecha_crea = datetime.strftime(orden.fecha_crea,"%d/%m/%Y") if orden.fecha_crea else ""
         usuario_modifica = orden.usuario_modifica if orden.usuario_modifica else ""
-        fecha_modifica = datetime.strftime(orden.fecha_modifica, "%d/%m/%Y") if orden.fecha_modifica else ""
+        fecha_modifica = datetime.strftime(orden.fecha_modifica,"%d/%m/%Y") if orden.fecha_modifica else ""
         cod_modelo = orden.cod_modelo if orden.cod_modelo else ""
         cod_item = orden.cod_item if orden.cod_item else ""
         bodega = orden.bodega if orden.bodega else ""
         ciudad = orden.ciudad if orden.ciudad else ""
-        fecha_estimada_produccion = datetime.strftime(orden.fecha_estimada_produccion,
-                                                      "%d/%m/%Y") if orden.fecha_estimada_produccion else ""
-        fecha_estimada_puerto = datetime.strftime(orden.fecha_estimada_puerto,
-                                                  "%d/%m/%Y") if orden.fecha_estimada_puerto else ""
-        fecha_estimada_llegada = datetime.strftime(orden.fecha_estimada_llegada,
-                                                   "%d/%m/%Y") if orden.fecha_estimada_llegada else ""
+        fecha_estimada_produccion = datetime.strftime(orden.fecha_estimada_produccion,"%d/%m/%Y") if orden.fecha_estimada_produccion else ""
+        fecha_estimada_puerto = datetime.strftime(orden.fecha_estimada_puerto,"%d/%m/%Y") if orden.fecha_estimada_puerto else ""
+        fecha_estimada_llegada = datetime.strftime(orden.fecha_estimada_llegada,"%d/%m/%Y") if orden.fecha_estimada_llegada else ""
         cod_opago = orden.cod_opago if orden.cod_opago else ""
         serialized_ordenes_compra.append({
             'empresa': empresa,
@@ -268,7 +246,6 @@ def obtener_orden_compra_cab():
         })
 
     return jsonify(serialized_ordenes_compra)
-
 
 @bp.route('/orden_compra_det')
 @jwt_required()
@@ -299,13 +276,13 @@ def obtener_orden_compra_det():
         saldo_producto = detalle.saldo_producto if detalle.saldo_producto else ""
         unidad_medida = detalle.unidad_medida if detalle.unidad_medida else ""
         usuario_crea = detalle.usuario_crea if detalle.usuario_crea else ""
-        fecha_crea = datetime.strftime(detalle.fecha_crea, "%d/%m/%Y") if detalle.fecha_crea else ""
+        fecha_crea = datetime.strftime(detalle.fecha_crea,"%d/%m/%Y") if detalle.fecha_crea else ""
         usuario_modifica = detalle.usuario_modifica if detalle.usuario_modifica else ""
-        fecha_modifica = datetime.strftime(detalle.fecha_modifica, "%d/%m/%Y") if detalle.fecha_modifica else ""
+        fecha_modifica = datetime.strftime(detalle.fecha_modifica,"%d/%m/%Y") if detalle.fecha_modifica else ""
         serialized_detalles.append({
             'exportar': exportar,
             'cod_po': cod_po,
-            'tipo_comprobante': tipo_comprobante,
+            'tipo_comprobante': tipo_comprobante, 
             'secuencia': secuencia,
             'empresa': empresa,
             'cod_producto': cod_producto,
@@ -314,7 +291,7 @@ def obtener_orden_compra_det():
             'nombre_ingles': nombre_i,
             'nombre_china': nombre_c,
             'nombre_mod_prov': nombre_mod_prov,
-            'nombre_comercial': nombre_comercial,
+            'nombre_comercial':nombre_comercial,
             'costo_sistema': costo_sistema,
             'costo_cotizado': costo_cotizado,
             'fecha_costo': fecha_costo,
@@ -329,7 +306,6 @@ def obtener_orden_compra_det():
             'fecha_modifica': fecha_modifica,
         })
     return jsonify(serialized_detalles)
-
 
 @bp.route('/productos')
 @jwt_required()
@@ -351,7 +327,7 @@ def obtener_productos():
         volumen = producto.volumen if producto.volumen else ""
         grado = producto.grado if producto.grado else ""
         costo = producto.costo if producto.costo else ""
-        activo = producto.ACTIVO if producto.ACTIVO else ""
+        activo = producto.activo if producto.activo else ""
         cod_modelo = producto.cod_modelo if producto.cod_modelo else ""
         cod_item = producto.cod_item if producto.cod_item else ""
         cod_modelo_cat = producto.cod_modelo_cat if producto.cod_modelo_cat else ""
@@ -383,7 +359,6 @@ def obtener_productos():
         })
     return jsonify(serialized_detalles)
 
-
 @bp.route('/estados')
 @jwt_required()
 @cross_origin()
@@ -391,7 +366,7 @@ def obtener_estados():
     try:
         query = TgModeloItem.query()
         estados = query.all()
-        # print(estados)
+        #print(estados)
         serialized_estados = []
         for estado in estados:
             empresa = estado.empresa if estado.empresa else ""
@@ -399,7 +374,7 @@ def obtener_estados():
             cod_item = estado.cod_item if estado.cod_item else ""
             nombre = str(estado.nombre) if estado.nombre else ""
             observaciones = str(estado.observaciones) if estado.observaciones else ""
-            tipo = str(estado.TIPO) if estado.TIPO else ""
+            tipo = str(estado.tipo) if estado.tipo else ""
             orden = estado.orden if estado.orden else ""
             serialized_estados.append({
                 'empresa': empresa,
@@ -411,13 +386,12 @@ def obtener_estados():
                 'orden': orden
             })
         return jsonify(serialized_estados)
-
+    
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
-        # logging.error('Ocurrio un error: %s',e)
+        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/orden_compra_track')
 @jwt_required()
 @cross_origin()
@@ -432,14 +406,13 @@ def obtener_orden_compra_track():
             empresa = seguimiento.empresa if seguimiento.empresa else ""
             secuencia = seguimiento.secuencia if seguimiento.secuencia else ""
             observaciones = seguimiento.observaciones if seguimiento.observaciones else ""
-            fecha = datetime.strftime(seguimiento.fecha, "%d/%m/%Y") if seguimiento.fecha else ""
+            fecha = datetime.strftime(seguimiento.fecha,"%d/%m/%Y") if seguimiento.fecha else ""
             cod_modelo = seguimiento.cod_modelo if seguimiento.cod_modelo else ""
             cod_item = seguimiento.cod_item if seguimiento.cod_item else ""
             usuario_crea = seguimiento.usuario_crea if seguimiento.usuario_crea else ""
-            fecha_crea = datetime.strftime(seguimiento.fecha_crea, "%d/%m/%Y") if seguimiento.fecha_crea else ""
+            fecha_crea = datetime.strftime(seguimiento.fecha_crea,"%d/%m/%Y") if seguimiento.fecha_crea else ""
             usuario_modifica = seguimiento.usuario_modifica if seguimiento.usuario_modifica else ""
-            fecha_modifica = datetime.strftime(seguimiento.fecha_modifica,
-                                               "%d/%m/%Y") if seguimiento.fecha_modifica else ""
+            fecha_modifica = datetime.strftime(seguimiento.fecha_modifica,"%d/%m/%Y") if seguimiento.fecha_modifica else ""
             serialized_seguimientos.append({
                 'cod_po': cod_po,
                 'tipo_comprobante': tipo_comprobante,
@@ -458,10 +431,9 @@ def obtener_orden_compra_track():
 
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
-        # logging.error('Ocurrio un error: %s',e)
+        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/tracking_bl')
 @jwt_required()
 @cross_origin()
@@ -477,10 +449,10 @@ def obtener_tracking_bl():
             observaciones = bl.observaciones if bl.observaciones else ""
             cod_modelo = bl.cod_modelo if bl.cod_modelo else ""
             usuario_crea = bl.usuario_crea if bl.usuario_crea else ""
-            fecha_crea = datetime.strftime(bl.fecha_crea, "%d/%m/%Y") if bl.fecha_crea else ""
+            fecha_crea = datetime.strftime(bl.fecha_crea,"%d/%m/%Y") if bl.fecha_crea else ""
             usuario_modifica = bl.usuario_modifica if bl.usuario_modifica else ""
-            fecha_modifica = datetime.strftime(bl.fecha_modifica, "%d/%m/%Y") if bl.fecha_modifica else ""
-            fecha = datetime.strftime(bl.fecha, "%d/%m/%Y") if bl.fecha else ""
+            fecha_modifica = datetime.strftime(bl.fecha_modifica,"%d/%m/%Y") if bl.fecha_modifica else ""
+            fecha = datetime.strftime(bl.fecha,"%d/%m/%Y") if bl.fecha else ""
             cod_item = bl.cod_item if bl.cod_item else ""
             serialized_bls.append({
                 'cod_bl_house': cod_bl_house,
@@ -496,13 +468,12 @@ def obtener_tracking_bl():
                 'cod_item': cod_item,
             })
         return jsonify(serialized_bls)
-
+    
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
-        # logging.error('Ocurrio un error: %s',e)
+        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/packinglist')
 @jwt_required()
 @cross_origin()
@@ -524,9 +495,9 @@ def obtener_packinlist():
             cod_tipo_liquidacion = packing.cod_tipo_liquidacion if packing.cod_tipo_liquidacion else ""
             nro_contenedor = packing.nro_contenedor if packing.nro_contenedor else ""
             usuario_crea = packing.usuario_crea if packing.usuario_crea else ""
-            fecha_crea = datetime.strftime(packing.fecha_crea, "%d/%m/%Y") if packing.fecha_crea else ""
+            fecha_crea = datetime.strftime(packing.fecha_crea,"%d/%m/%Y") if packing.fecha_crea else ""
             usuario_modifica = packing.usuario_modifica if packing.usuario_modifica else ""
-            fecha_modifica = datetime.strftime(packing.fecha_modifica, "%d/%m/%Y") if packing.fecha_modifica else ""
+            fecha_modifica = datetime.strftime(packing.fecha_modifica,"%d/%m/%Y") if packing.fecha_modifica else ""
             serialized_packing.append({
                 'cod_po': cod_po,
                 'tipo_comprobante': tipo_comprobante,
@@ -545,13 +516,12 @@ def obtener_packinlist():
                 'fecha_modifica': fecha_modifica,
             })
         return jsonify(serialized_packing)
-
+    
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
-        # logging.error('Ocurrio un error: %s',e)
+        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/nombre_productos')
 @jwt_required()
 @cross_origin()
@@ -577,10 +547,9 @@ def obtener_nombre_productos():
 
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
-        # logging.error('Ocurrio un error: %s',e)
+        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/prod_despiece')
 @jwt_required()
 @cross_origin()
@@ -605,13 +574,12 @@ def obtener_producto_despiece():
                 'fecha_creacion': fecha_creacion,
             })
         return jsonify(serialized_prodespiece)
-
+    
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
-        # logging.error('Ocurrio un error: %s',e)
+        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/tgmodelo')
 @jwt_required()
 @cross_origin()
@@ -619,7 +587,7 @@ def obtener_tgmodelo():
     try:
         query = TgModelo.query()
         tgmodels = query.all()
-        # print(estados)
+        #print(estados)
         serialized_tgmodelo = []
         for tgmodelo in tgmodels:
             serialized_tgmodelo.append({
@@ -628,13 +596,12 @@ def obtener_tgmodelo():
                 'nombre': tgmodelo.nombre
             })
         return jsonify(serialized_tgmodelo)
-
+    
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
-        # logging.error('Ocurrio un error: %s',e)
+        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/embarque')
 @jwt_required()
 @cross_origin()
@@ -648,9 +615,9 @@ def obtener_embarques():
             codigo_bl_master = embarque.codigo_bl_master if embarque.codigo_bl_master else ""
             codigo_bl_house = embarque.codigo_bl_house if embarque.codigo_bl_house else ""
             cod_proveedor = embarque.cod_proveedor if embarque.cod_proveedor else ""
-            fecha_embarque = datetime.strftime(embarque.fecha_embarque, "%d/%m/%Y") if embarque.fecha_embarque else ""
-            fecha_llegada = datetime.strftime(embarque.fecha_llegada, "%d/%m/%Y") if embarque.fecha_llegada else ""
-            fecha_bodega = datetime.strftime(embarque.fecha_bodega, "%d/%m/%Y") if embarque.fecha_bodega else ""
+            fecha_embarque = datetime.strftime(embarque.fecha_embarque,"%d/%m/%Y") if embarque.fecha_embarque else ""
+            fecha_llegada = datetime.strftime(embarque.fecha_llegada,"%d/%m/%Y") if embarque.fecha_llegada else ""
+            fecha_bodega = datetime.strftime(embarque.fecha_bodega,"%d/%m/%Y") if embarque.fecha_bodega else ""
             numero_tracking = embarque.numero_tracking if embarque.numero_tracking else ""
             naviera = embarque.naviera if embarque.naviera else ""
             estado = embarque.estado if embarque.estado else ""
@@ -662,10 +629,9 @@ def obtener_embarques():
             descripcion = embarque.descripcion if embarque.descripcion else ""
             tipo_flete = embarque.tipo_flete if embarque.tipo_flete else ""
             adicionado_por = embarque.adicionado_por if embarque.adicionado_por else ""
-            fecha_adicion = datetime.strftime(embarque.fecha_adicion, "%d/%m/%Y") if embarque.fecha_adicion else ""
+            fecha_adicion = datetime.strftime(embarque.fecha_adicion,"%d/%m/%Y") if embarque.fecha_adicion else ""
             modificado_por = embarque.modificado_por if embarque.modificado_por else ""
-            fecha_modificacion = datetime.strftime(embarque.fecha_modificacion,
-                                                   "%d/%m/%Y") if embarque.fecha_modificacion else ""
+            fecha_modificacion = datetime.strftime(embarque.fecha_modificacion,"%d/%m/%Y") if embarque.fecha_modificacion else ""
             cod_modelo = embarque.cod_modelo if embarque.cod_modelo else ""
             cod_item = embarque.cod_item if embarque.cod_item else ""
             cod_aforo = embarque.cod_aforo
@@ -705,10 +671,9 @@ def obtener_embarques():
 
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
-        # logging.error('Ocurrio un error: %s',e)
+        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/tipo_aforo')
 @jwt_required()
 @cross_origin()
@@ -721,12 +686,12 @@ def obtener_tipo_aforo():
             empresa = aforo.empresa if aforo.empresa else ""
             cod_aforo = aforo.cod_aforo
             nombre = aforo.nombre if aforo.nombre else ""
-            valor = aforo.NUMERO
+            valor = aforo.valor
             observacion = aforo.observacion if aforo.observacion else ""
             usuario_crea = aforo.usuario_crea if aforo.usuario_crea else ""
-            fecha_crea = datetime.strftime(aforo.fecha_crea, "%d/%m/%Y") if aforo.fecha_crea else ""
+            fecha_crea = datetime.strftime(aforo.fecha_crea,"%d/%m/%Y") if aforo.fecha_crea else ""
             usuario_modifica = aforo.usuario_modifica if aforo.usuario_modifica else ""
-            fecha_modifica = datetime.strftime(aforo.fecha_modifica, "%d/%m/%Y") if aforo.fecha_modifica else ""
+            fecha_modifica = datetime.strftime(aforo.fecha_modifica,"%d/%m/%Y") if aforo.fecha_modifica else ""
             serialized_aforos.append({
                 'empresa': empresa,
                 'cod_aforo': cod_aforo,
@@ -742,35 +707,32 @@ def obtener_tipo_aforo():
 
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
-        # logging.error('Ocurrio un error: %s',e)
+        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
 
+    
+#METODOS POST
 
-# METODOS POST
-
-@bp.route('/orden_compra_cab', methods=['POST'])
+@bp.route('/orden_compra_cab', methods = ['POST'])
 @jwt_required()
 @cross_origin()
 def crear_orden_compra_cab():
     try:
         data = request.get_json()
-        fecha_crea = date.today()  # funcion para que se asigne la fecha actual al momento de crear la oden de compra
+        fecha_crea = date.today()#funcion para que se asigne la fecha actual al momento de crear la oden de compra
         fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
-        fecha_estimada_produccion = datetime.strptime(data['fecha_estimada_produccion'],
-                                                      '%d/%m/%Y').date() if 'fecha_estimada_produccion' in data else None
-        fecha_estimada_puerto = datetime.strftime(data['fecha_estimada_puerto'],
-                                                  '%d%m%Y').date() if 'fecha_estimada_puerto' in data else None
-        fecha_estimada_llegada = datetime.strftime(data['fecha_estimada_llegada'],
-                                                   '%d%m%Y').date() if 'fecha_estimada_llegada' in data else None
+        fecha_estimada_produccion = datetime.strptime(data['fecha_estimada_produccion'], '%d/%m/%Y').date() if 'fecha_estimada_produccion' in data else None
+        fecha_estimada_puerto = datetime.strftime(data['fecha_estimada_puerto'], '%d%m%Y').date() if 'fecha_estimada_puerto' in data else None
+        fecha_estimada_llegada = datetime.strftime(data['fecha_estimada_llegada'], '%d%m%Y').date() if 'fecha_estimada_llegada' in data else None
 
-        # busqueda para que se asigne de forma automatica la ciudad al buscarla por el cod_proveedor
+        #busqueda para que se asigne de forma automatica la ciudad al buscarla por el cod_proveedor
         busq_ciudad = TcCoaProveedor.query().filter_by(ruc=data['cod_proveedor']).first()
         ciudad = busq_ciudad.ciudad_matriz
 
-        # busqueda para obtener el nombre del estado para la orden de compra
-        # estado = TgModeloItem.query().filter_by(cod_modelo=data['cod_modelo'], cod_item=data['cod_item']).first()
-        # estado_nombre = estado.nombre if estado else ''
-
+        #busqueda para obtener el nombre del estado para la orden de compra
+        #estado = TgModeloItem.query().filter_by(cod_modelo=data['cod_modelo'], cod_item=data['cod_item']).first()
+        #estado_nombre = estado.nombre if estado else ''
+       
         # Generate the cod_po using the asigna_cod_comprobante function
         cod_po = asigna_cod_comprobante(data['empresa'], data['tipo_comprobante'], data['cod_agencia'])
 
@@ -788,12 +750,12 @@ def crear_orden_compra_cab():
             fecha_modifica=fecha_modifica,
             cod_modelo='IMPR',
             cod_item=data['cod_item'],
-            proforma=data.get('proforma'),
-            cod_opago=data.get('cod_opago'),
-            ciudad=ciudad if ciudad else "",
-            fecha_estimada_produccion=fecha_estimada_produccion,
-            fecha_estimada_puerto=fecha_estimada_puerto,
-            fecha_estimada_llegada=fecha_estimada_llegada
+            proforma = data.get('proforma'),
+            cod_opago = data.get('cod_opago'),
+            ciudad = ciudad if ciudad else "",
+            fecha_estimada_produccion = fecha_estimada_produccion,
+            fecha_estimada_puerto = fecha_estimada_puerto,
+            fecha_estimada_llegada = fecha_estimada_llegada
         )
         db.session.add(orden)
         db.session.commit()
@@ -808,17 +770,14 @@ def crear_orden_compra_cab():
         # Manejar otros errores y proporcionar un mensaje personalizado
         error_message = f"Se produjo un error: {str(e)}"
         return jsonify({'error': error_message}), 500
-
-
+    
 def asigna_cod_comprobante(p_cod_empresa, p_cod_tipo_comprobante, p_cod_agencia):
     # Realizar las operaciones de base de datos necesarias para generar el código comprobante
     # Ejecutar consultas SQL sin formato usando la función `texto` de SQLAlchemy
 
     # Encuentra el registro en la tabla 'orden'
-    sql = text(
-        "SELECT * FROM contabilidad.orden WHERE empresa=:empresa AND bodega=:bodega AND tipo_comprobante=:tipo_comprobante")
-    result = db.session.execute(sql, {'empresa': p_cod_empresa, 'bodega': p_cod_agencia,
-                                      'tipo_comprobante': p_cod_tipo_comprobante})
+    sql = text("SELECT * FROM contabilidad.orden WHERE empresa=:empresa AND bodega=:bodega AND tipo_comprobante=:tipo_comprobante")
+    result = db.session.execute(sql, {'empresa': p_cod_empresa, 'bodega': p_cod_agencia, 'tipo_comprobante': p_cod_tipo_comprobante})
     print(result)
     orden = result.fetchone()
     print(orden)
@@ -828,10 +787,8 @@ def asigna_cod_comprobante(p_cod_empresa, p_cod_tipo_comprobante, p_cod_agencia)
         raise ValueError('Secuencia de comprobante no existe')
 
     # Actualizar la secuencia comprobante
-    sql = text(
-        "UPDATE contabilidad.orden SET numero_comprobante=numero_comprobante+1 WHERE empresa=:empresa AND bodega=:bodega AND tipo_comprobante=:tipo_comprobante")
-    db.session.execute(sql,
-                       {'empresa': p_cod_empresa, 'bodega': p_cod_agencia, 'tipo_comprobante': p_cod_tipo_comprobante})
+    sql = text("UPDATE contabilidad.orden SET numero_comprobante=numero_comprobante+1 WHERE empresa=:empresa AND bodega=:bodega AND tipo_comprobante=:tipo_comprobante")
+    db.session.execute(sql, {'empresa': p_cod_empresa, 'bodega': p_cod_agencia, 'tipo_comprobante': p_cod_tipo_comprobante})
 
     print(sql)
     # Acceder a los valores de las columnas por su índice en la tupla
@@ -854,7 +811,7 @@ def crear_orden_compra_det_aprob():
         fecha_crea = date.today()
         empresa = data['empresa']
         cod_po = data['cod_po']
-        usuario_crea = data['usuario_crea'].upper()
+        usuario_crea=data['usuario_crea'].upper()
 
         #####################################Eliminar los detalles previos##########################################################
 
@@ -874,15 +831,15 @@ def crear_orden_compra_det_aprob():
         db.session.commit()
 
         ###########################################################################################################################
-
+        
         # Verificar si el usuario existe en la base de datos
         usuario = Usuario.query().filter_by(usuario_oracle=usuario_crea).first()
         if not usuario:
             return jsonify({'mensaje': 'El usuario no existe.'}), 404
 
-        cod_po_no_existe = []  # Lista para almacenar los codigo de productos que no existen
-        unidad_medida_no_existe = []  # Lista para almacenar las unidades mal ingresadas
-        cod_modelo_no_existe = []  # Lista para almacenar los cod_producto_modelo que no existen
+        cod_po_no_existe = [] #Lista para almacenar los codigo de productos que no existen
+        unidad_medida_no_existe = [] #Lista para almacenar las unidades mal ingresadas
+        cod_modelo_no_existe = [] #Lista para almacenar los cod_producto_modelo que no existen
         print(data)
         for order in data['orders']:
             print(order['cod_producto_modelo'])
@@ -890,33 +847,31 @@ def crear_orden_compra_det_aprob():
             cod_producto_modelo = order['cod_producto_modelo'].strip()
             unidad_medida = order['unidad_medida'].upper()
 
-            # Verificar si el producto existe en la tabla de Productos
-            query = Producto.query().filter_by(cod_producto=cod_producto).first()
-            query_umedida = StUnidadImportacion.query().filter_by(cod_unidad=unidad_medida).first()
-            query_modelo = Producto.query().filter_by(cod_producto=cod_producto_modelo).first()
+            #Verificar si el producto existe en la tabla de Productos
+            query = Producto.query().filter_by(cod_producto = cod_producto).first()
+            query_umedida = StUnidadImportacion.query().filter_by(cod_unidad = unidad_medida).first()
+            query_modelo = Producto.query().filter_by(cod_producto = cod_producto_modelo).first()
             if query and query_umedida and query_modelo:
                 secuencia = obtener_secuencia(cod_po)
                 costo_sistema = query.costo
 
                 # Consultar la tabla StDespiece para obtener los valores correspondientes
-                despiece = StProductoDespiece.query().filter_by(cod_producto=order['cod_producto'],
-                                                                empresa=empresa).first()  # usar la empresa
+                despiece = StProductoDespiece.query().filter_by(cod_producto=order['cod_producto'], empresa = empresa).first() #usar la empresa
                 if despiece is not None:
-                    nombre_busq = StDespieceD.query().filter_by(cod_despiece=despiece.cod_despiece,
-                                                                secuencia=despiece.secuencia).first()
+                    nombre_busq = StDespieceD.query().filter_by(cod_despiece =despiece.cod_despiece, secuencia = despiece.secuencia).first()
                     nombre = nombre_busq.nombre_e
                     nombre_i = nombre_busq.nombre_i
                     nombre_c = nombre_busq.nombre_c
                 else:
-                    nombre_busq = Producto.query().filter_by(cod_producto=order['cod_producto']).first()
+                    nombre_busq = Producto.query().filter_by(cod_producto = order['cod_producto']).first()
                     nombre = nombre_busq.nombre
                     nombre_i = nombre_busq.nombre
                     nombre_c = nombre_busq.nombre
 
                 detalle = StOrdenCompraDet(
-                    exportar=1 if order['agrupado'] == 'TRUE' else 0,
+                    exportar= 1 if order['agrupado'] == 'TRUE' else 0,
                     cod_po=cod_po,
-                    tipo_comprobante='PO',
+                    tipo_comprobante ='PO',
                     secuencia=secuencia,
                     empresa=empresa,
                     cod_producto=cod_producto,
@@ -924,8 +879,8 @@ def crear_orden_compra_det_aprob():
                     nombre=nombre if nombre else None,
                     nombre_i=nombre_i if nombre_i else order['nombre_ingles'],
                     nombre_c=nombre_c if nombre_c else None,
-                    nombre_mod_prov=order['nombre_proveedor'],
-                    nombre_comercial=order['nombre_comercial'],
+                    nombre_mod_prov = order['nombre_proveedor'],
+                    nombre_comercial = order['nombre_comercial'],
                     costo_sistema=costo_sistema if costo_sistema else 0,
                     cantidad_pedido=order['pedido'],
                     costo_cotizado=order['costo_cotizado'],
@@ -936,7 +891,7 @@ def crear_orden_compra_det_aprob():
                     usuario_modifica=usuario_crea,
                     fecha_modifica=date.today(),
                 )
-                # detalle.fob_total = order['FOB'] * order['CANTIDAD_PEDIDO']
+                #detalle.fob_total = order['FOB'] * order['CANTIDAD_PEDIDO']
                 db.session.add(detalle)
                 try:
                     # Intenta hacer la confirmación de la sesión
@@ -945,14 +900,14 @@ def crear_orden_compra_det_aprob():
                     # Captura la excepción si ocurre un error al confirmar
                     db.session.rollback()  # Realiza un rollback para deshacer cambios pendientes
                     print(f"Error al confirmar: {str(commit_error)}")
-                # secuencia = obtener_secuencia(order['COD_PO'])
+                #secuencia = obtener_secuencia(order['COD_PO'])
             else:
                 if query is None:
-                    cod_po_no_existe.append(cod_producto + '\n')
+                    cod_po_no_existe.append(cod_producto +'\n')
                 if query_modelo is None:
-                    cod_modelo_no_existe.append(cod_producto_modelo + '\n')
+                    cod_modelo_no_existe.append(cod_producto_modelo+'\n')
                 else:
-                    unidad_medida_no_existe.append(unidad_medida + '\n')
+                    unidad_medida_no_existe.append(unidad_medida+'\n')
         return jsonify({'mensaje': 'Orden de compra creada exitosamente', 'cod_po': cod_po,
                         'cod_producto_no_existe': list(set(cod_po_no_existe)),
                         'unidad_medida_no_existe': list(set(unidad_medida_no_existe)),
@@ -1063,25 +1018,23 @@ def crear_orden_compra_det():
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-
+    
 def obtener_secuencia(cod_po):
     # Verificar si el cod_po existe en la tabla StOrdenCompraCab
     existe_cod_po_cab = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po).first()
 
     if existe_cod_po_cab is not None:
-        print('EXISTE', existe_cod_po_cab.cod_po)
+        print('EXISTE',existe_cod_po_cab.cod_po)
         # Si el cod_po existe en la tabla StOrdenCompraCab, verificar si existe en la tabla StOrdenCompraDet
         existe_cod_po_det = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po).first()
 
         if existe_cod_po_det is not None:
-            print('EXISTE2', existe_cod_po_det.cod_po)
+            print('EXISTE2',existe_cod_po_det.cod_po)
             # Si el cod_po existe en la tabla StOrdenCompraDet, obtener el último número de secuencia
-            max_secuencia = db.session.query(func.max(StOrdenCompraDet.secuencia)).filter_by(
-                cod_po=cod_po).distinct().scalar()
-            print('MAXIMO', max_secuencia)
+            max_secuencia = db.session.query(func.max(StOrdenCompraDet.secuencia)).filter_by(cod_po=cod_po).distinct().scalar()
+            print('MAXIMO',max_secuencia)
             nueva_secuencia = int(max_secuencia) + 1
-            print('PROXIMO', nueva_secuencia)
+            print('PROXIMO',nueva_secuencia)
             return nueva_secuencia
         else:
             # Si el cod_po no existe en la tabla StOrdenCompraDet, generar secuencia desde 1
@@ -1115,23 +1068,17 @@ def obtener_secuencia_formule(cod_formula):
     else:
         raise ValueError('La Formula no existe.')
 
-
 def obtener_secuencia_pagos(empresa, cod_cliente, cod_proveedor, nro_operacion, nro_pago):
-    existe_cuota = db.session.query(StFinDetCredito).filter_by(empresa=empresa, cod_cliente=cod_cliente,
-                                                               cod_proveedor=cod_proveedor, nro_operacion=nro_operacion,
-                                                               nro_pago=nro_pago).first()
+    existe_cuota = db.session.query(StFinDetCredito).filter_by(empresa=empresa, cod_cliente=cod_cliente,cod_proveedor=cod_proveedor, nro_operacion=nro_operacion,nro_pago=nro_pago).first()
 
     if existe_cuota is not None:
-        print('Cuota', existe_cuota.nro_operacion, ' :', existe_cuota.nro_pago)
-        existe_pago = db.session.query(StFinPagos).filter_by(empresa=empresa, cod_cliente=cod_cliente,
-                                                             cod_proveedor=cod_proveedor, nro_operacion=nro_operacion,
-                                                             nro_cuota=nro_pago).first()
+        print('Cuota', existe_cuota.nro_operacion , ' :', existe_cuota.nro_pago)
+        existe_pago = db.session.query(StFinPagos).filter_by(empresa=empresa, cod_cliente=cod_cliente,cod_proveedor=cod_proveedor, nro_operacion=nro_operacion,nro_cuota=nro_pago).first()
 
         if existe_pago is not None:
             print('Pago', existe_pago.secuencia)
             max_secuencia = db.session.query(func.max(StFinPagos.secuencia)).filter_by(
-                empresa=empresa, cod_cliente=cod_cliente, cod_proveedor=cod_proveedor, nro_operacion=nro_operacion,
-                nro_cuota=nro_pago).distinct().scalar()
+                empresa=empresa, cod_cliente=cod_cliente,cod_proveedor=cod_proveedor, nro_operacion=nro_operacion,nro_cuota=nro_pago).distinct().scalar()
             print('MAXIMO', max_secuencia)
             nueva_secuencia = int(max_secuencia) + 1
             print('PROXIMO', nueva_secuencia)
@@ -1144,7 +1091,7 @@ def obtener_secuencia_pagos(empresa, cod_cliente, cod_proveedor, nro_operacion, 
         raise ValueError('No existe cuota.')
 
 
-# Funcion para obtener el cod_producto_modelo segun el cod_producto
+#Funcion para obtener el cod_producto_modelo segun el cod_producto
 def obtener_cod_producto_modelo(empresa, cod_producto):
     try:
         query = text("""
@@ -1164,7 +1111,6 @@ def obtener_cod_producto_modelo(empresa, cod_producto):
         print('Error:', e)
         raise
 
-
 @bp.route('/generar_orden_compra', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -1178,7 +1124,7 @@ def generar_orden_compra():
         p_cod_agencia = data["p_cod_agencia"]
         p_usuario = data["p_usuario"]
 
-        # Ejecutar el procedimiento PL/SQL
+        #Ejecutar el procedimiento PL/SQL
         query = """
                        DECLARE
                             p_tipo_compra VARCHAR(100);
@@ -1217,7 +1163,6 @@ def generar_orden_compra():
         print(str(e))
         return jsonify({"error": error_message}), 500
 
-
 @bp.route('/packinglist_contenedor', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -1227,8 +1172,7 @@ def crear_packinglist_contenedor():
         fecha_crea = date.today()
         empresa = data['empresa']
         nro_contenedor = data['nro_contenedor']
-        query_contenedor = StEmbarqueContenedores.query().filter_by(nro_contenedor=nro_contenedor,
-                                                                    empresa=empresa).first()
+        query_contenedor = StEmbarqueContenedores.query().filter_by(nro_contenedor=nro_contenedor, empresa=empresa).first()
         tipo_comprobante = data['tipo_comprobante']
         usuario_crea = data['usuario_crea'].upper()
         cod_prod_no_existe = []
@@ -1244,12 +1188,10 @@ def crear_packinglist_contenedor():
             query_prod = Producto.query().filter_by(cod_producto=cod_producto, empresa=empresa).first()
             if query_prod:
                 costo_sistema = query_prod.costo
-                query = StOrdenCompraDet.query().filter_by(cod_producto=cod_producto, cod_po=packing['cod_po'],
-                                                           empresa=empresa).first()
-                query_conte = StEmbarqueContenedores.query().filter_by(nro_contenedor=nro_contenedor,
-                                                                       empresa=empresa).first()
+                query = StOrdenCompraDet.query().filter_by(cod_producto=cod_producto, cod_po=packing['cod_po'], empresa=empresa).first()
+                query_conte = StEmbarqueContenedores.query().filter_by(nro_contenedor=nro_contenedor, empresa=empresa).first()
                 if query_conte:
-                    if query:
+                    if query :
                         packinlist = StPackinglist(
                             nro_contenedor=nro_contenedor,
                             empresa=empresa,
@@ -1299,8 +1241,7 @@ def crear_packinglist_contenedor():
                                 )
 
                                 if despiece is not None:
-                                    nombre_busq = StDespiece.query().filter_by(
-                                        cod_despiece=despiece.cod_despiece).first()
+                                    nombre_busq = StDespiece.query().filter_by(cod_despiece=despiece.cod_despiece).first()
                                     nombre = nombre_busq.nombre_e
                                     nombre_i = nombre_busq.nombre_i
                                     nombre_c = nombre_busq.nombre_c
@@ -1323,8 +1264,7 @@ def crear_packinglist_contenedor():
                                     costo_sistema=costo_sistema if costo_sistema else 0,
                                     cantidad_pedido=0,  # Cantidad en negativo
                                     saldo_producto=-packing['cantidad'],
-                                    unidad_medida=query_prod.cod_unidad if query_prod.cod_unidad else unidad_medida,
-                                    # setear el cod unidad del producto en vez del cod unidad ingresado por excel
+                                    unidad_medida=query_prod.cod_unidad if query_prod.cod_unidad else unidad_medida, #setear el cod unidad del producto en vez del cod unidad ingresado por excel
                                     usuario_crea=usuario_crea,
                                     fecha_crea=fecha_crea,
                                     fob=packing['fob'],
@@ -1335,10 +1275,10 @@ def crear_packinglist_contenedor():
                                 db.session.commit()
                                 cod_prod_no_existe.append(cod_producto)
                             else:
-                                prod_no_existe.append(cod_producto)
+                                 prod_no_existe.append(cod_producto)
                         else:
 
-                            unidad_medida_no_existe.append(cod_producto + " " + unidad_medida)
+                            unidad_medida_no_existe.append(cod_producto +" "+ unidad_medida)
 
                 else:
                     bl_no_existe.append(nro_contenedor)
@@ -1356,24 +1296,20 @@ def crear_packinglist_contenedor():
         logger.exception(f"Error al consultar: {str(e)}")
         # logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
-
-
+    
 def obtener_secuencia_packing(nro_contenedor, empresa):
     # Verificar si el codigo_bl_house existe en la tabla StEmbarquesBl
-    existe_contenedor = db.session.query(StEmbarqueContenedores).filter_by(nro_contenedor=nro_contenedor,
-                                                                           empresa=empresa).first()
+    existe_contenedor = db.session.query(StEmbarqueContenedores).filter_by(nro_contenedor=nro_contenedor, empresa=empresa).first()
 
     if existe_contenedor is not None:
         print('EXISTE', existe_contenedor.nro_contenedor)
         # Si el codigo_bl_house existe en la tabla StEmbarquesBl, verificar si existe en la tabla StPackinglist
-        existe_nro_cont_pack = db.session.query(StPackinglist).filter_by(nro_contenedor=nro_contenedor,
-                                                                         empresa=empresa).first()
+        existe_nro_cont_pack = db.session.query(StPackinglist).filter_by(nro_contenedor=nro_contenedor, empresa=empresa).first()
 
         if existe_nro_cont_pack is not None:
             print('EXISTE2', existe_nro_cont_pack.nro_contenedor)
             # Si el codigo_bl_house existe en la tabla StPackinglist, obtener el último número de secuencia
-            max_secuencia = db.session.query(func.max(StPackinglist.secuencia)).filter_by(nro_contenedor=nro_contenedor,
-                                                                                          empresa=empresa).distinct().scalar()
+            max_secuencia = db.session.query(func.max(StPackinglist.secuencia)).filter_by(nro_contenedor=nro_contenedor, empresa=empresa).distinct().scalar()
             print('MAXIMO', max_secuencia)
             nueva_secuencia = int(max_secuencia) + 1
             print('PROXIMO', nueva_secuencia)
@@ -1386,30 +1322,28 @@ def obtener_secuencia_packing(nro_contenedor, empresa):
     else:
         # Si el codigo_bl_house no existe en la tabla StEmbarquesBl, mostrar mensaje de error
         raise ValueError('El nro_contenedor no existe.')
-
-
+    
 @bp.route('/orden_compra_track', methods=['POST'])
 @jwt_required()
 @cross_origin()
 def crear_orden_compra_track():
     try:
         data = request.get_json()
-        fecha = datetime.strptime(data['fecha'],
-                                  '%d/%m/%Y').date()  # datetime.datetime.strptime(data['fecha_pedido'], '%d%m%Y') if data['fecha_pedido'] else None
-        fecha_crea = date.today()  # funcion para que se asigne la fecha actual al momento de crear el detalle de la oden de compra
+        fecha = datetime.strptime(data['fecha'], '%d/%m/%Y').date()         #datetime.datetime.strptime(data['fecha_pedido'], '%d%m%Y') if data['fecha_pedido'] else None
+        fecha_crea = date.today() #funcion para que se asigne la fecha actual al momento de crear el detalle de la oden de compra
         fecha_modifica = datetime.strptime(data['fecha_modifica'], '%d/%m/%Y').date()
         tracking = StTracking(
-            cod_po=data['cod_po'],
-            empresa=data['empresa'],
-            tipo_comprobante=data['tipo_comprobante'],
-            observaciones=data['observaciones'],
-            fecha=fecha,
-            cod_modelo=data['cod_modelo'],
-            cod_item=data['cod_item'],
-            usuario_crea=data['usuario_crea'].upper(),
-            fecha_crea=fecha_crea,
-            usuario_modifica=data['usuario_modifica'].upper(),
-            fecha_modifica=fecha_modifica
+            cod_po = data['cod_po'],
+            empresa = data['empresa'],
+            tipo_comprobante = data['tipo_comprobante'],
+            observaciones = data['observaciones'],
+            fecha = fecha,
+            cod_modelo = data['cod_modelo'],
+            cod_item = data['cod_item'],
+            usuario_crea = data['usuario_crea'].upper(),
+            fecha_crea = fecha_crea,
+            usuario_modifica = data['usuario_modifica'].upper(),
+            fecha_modifica = fecha_modifica
         )
         db.session.add(tracking)
         db.session.commit()
@@ -1417,10 +1351,9 @@ def crear_orden_compra_track():
 
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
-        # logging.error('Ocurrio un error: %s',e)
+        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/embarque', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -1473,9 +1406,9 @@ def crear_embarque():
             cod_modelo='BL',
             cod_item=data['cod_item'],
             cod_aforo=data.get('cod_aforo'),
-            cod_regimen=data.get('cod_regimen'),
-            nro_mrn=data.get('nro_mrn'),
-            bl_house_manual=data.get('bl_house_manual')
+            cod_regimen = data.get('cod_regimen'),
+            nro_mrn = data.get('nro_mrn'),
+            bl_house_manual = data.get('bl_house_manual')
         )
 
         db.session.add(embarque)
@@ -1491,53 +1424,46 @@ def crear_embarque():
         error_message = f"Se produjo un error: {str(e)}"
         return jsonify({'error': error_message}), 500
 
-
 def parse_date(date_string):
     if date_string:
         return datetime.strptime(date_string, '%d/%m/%Y').date()
     return None
-
-
+    
 def secuencia_trackingbl(cod_bl_house):
     # Verificar si el embarque existe en la tabla StEmbarquesBl
-    # existe_embarque = db.session.query(StEmbarquesBl).filter_by(codigo_bl_house=cod_bl_house).first()
+    #existe_embarque = db.session.query(StEmbarquesBl).filter_by(codigo_bl_house=cod_bl_house).first()
 
-    # if existe_embarque is not None:
-    # print('EXISTE',existe_embarque.cod_bl_house)
-    # Si el cod_po existe en la tabla StTrackingBl, verificar si existe en la tabla StTrackingBl
+    #if existe_embarque is not None:
+        #print('EXISTE',existe_embarque.cod_bl_house)
+        # Si el cod_po existe en la tabla StTrackingBl, verificar si existe en la tabla StTrackingBl
     existe_cod_bl_house = db.session.query(StTrackingBl).filter_by(cod_bl_house=cod_bl_house).first()
 
     if existe_cod_bl_house is not None:
-        print('EXISTE2', existe_cod_bl_house.cod_bl_house)
+        print('EXISTE2',existe_cod_bl_house.cod_bl_house)
         # Si el cod_po existe en la tabla StTrackingBl, obtener el último número de secuencia
-        max_secuencia = db.session.query(func.max(StTrackingBl.secuencial)).filter_by(
-            cod_bl_house=cod_bl_house).distinct().scalar()
-        print('MAXIMO', max_secuencia)
+        max_secuencia = db.session.query(func.max(StTrackingBl.secuencial)).filter_by(cod_bl_house=cod_bl_house).distinct().scalar()
+        print('MAXIMO',max_secuencia)
         nueva_secuencia = int(max_secuencia) + 1
-        print('PROXIMO', nueva_secuencia)
+        print('PROXIMO',nueva_secuencia)
         return nueva_secuencia
     else:
         # Si el cod_bl_house no existe en la tabla StTrackingBl, generar secuencia desde 1
         nueva_secuencia = 1
         print('Secuencia de inicio', nueva_secuencia)
         return nueva_secuencia
-    # else:
+    #else:
     # Si el embarque no existe en la tabla StEmbarquesBl, mostrar mensaje de error
     #    raise ValueError('El embarque no existe.')
 
-
 # Crear un diccionario para llevar un registro de la última combinación (codigo_bl_house, empresa, cod_item)
 ultimas_combinaciones_track_embarque = {}
-
 
 # Función para crear o actualizar el registro en StTrackingBl
 def crear_o_actualizar_registro_tracking_embarque(session):
     for target in session.new.union(session.dirty):
         if isinstance(target, StEmbarquesBl) and target.cod_item:
             # Verificar si el objeto tiene los atributos esperados
-            if hasattr(target, 'codigo_bl_house') and hasattr(target, 'empresa') and hasattr(target,
-                                                                                             'adicionado_por') and hasattr(
-                target, 'cod_modelo'):
+            if hasattr(target, 'codigo_bl_house') and hasattr(target, 'empresa') and hasattr(target, 'adicionado_por') and hasattr(target, 'cod_modelo'):
                 codigo_bl_house = target.codigo_bl_house
                 empresa = target.empresa
                 cod_item = target.cod_item
@@ -1563,12 +1489,10 @@ def crear_o_actualizar_registro_tracking_embarque(session):
                     # Actualizar la última combinación registrada
                     ultimas_combinaciones_track_embarque[(codigo_bl_house, empresa)] = {'cod_item': cod_item}
 
-
 # Registrar el evento before_commit en la sesión de SQLAlchemy para crear o actualizar registros en StTrackingBl
-event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_embarque)
+#event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_embarque)
 
-
-@bp.route('/tipo_aforo', methods=['POST'])
+@bp.route('/tipo_aforo' , methods = ['POST'])
 @jwt_required()
 @cross_origin()
 def crear_tipo_aforo():
@@ -1576,13 +1500,13 @@ def crear_tipo_aforo():
         data = request.get_json()
         fecha_crea = date.today()
         tipo_aforo = StTipoAforo(
-            cod_aforo=data['cod_aforo'],
-            empresa=data['empresa'],
-            nombre=data['nombre'].upper(),
-            valor=data['valor'],
-            observacion=data['observacion'],
-            usuario_crea=data['usuario_crea'].upper(),
-            fecha_crea=fecha_crea,
+            cod_aforo = data['cod_aforo'],
+            empresa = data['empresa'],
+            nombre = data['nombre'].upper(),
+            valor = data['valor'],
+            observacion = data['observacion'],
+            usuario_crea = data['usuario_crea'].upper(),
+            fecha_crea = fecha_crea,
         )
         db.session.add(tipo_aforo)
         db.session.commit()
@@ -1590,9 +1514,8 @@ def crear_tipo_aforo():
 
     except Exception as e:
         logger.exception(f"Error al consultar: {str(e)}")
-        # logging.error('Ocurrio un error: %s',e)
+        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
-
 
 # METODOS UPDATE DE TABLAS DE ORDEN DE COMPRA
 
@@ -1601,13 +1524,12 @@ def crear_tipo_aforo():
 @cross_origin()
 def actualizar_orden_compra_cab(cod_po, empresa, tipo_comprobante):
     try:
-        orden = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po, empresa=empresa,
-                                                             tipo_comprobante=tipo_comprobante).first()
+        orden = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante=tipo_comprobante).first()
         if not orden:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
 
         data = request.get_json()
-        # busqueda para que se asigne de forma automatica la ciudad al buscarla por el cod_proveedor
+        #busqueda para que se asigne de forma automatica la ciudad al buscarla por el cod_proveedor
         cod_proveedor = data.get('cod_proveedor')
         if cod_proveedor:
             busq_ciudad = TcCoaProveedor.query().filter_by(ruc=cod_proveedor).first()
@@ -1643,30 +1565,25 @@ def actualizar_orden_compra_cab(cod_po, empresa, tipo_comprobante):
     except Exception as e:
         logger.exception(f"Error al actualizar la orden de compra: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/orden_compra_det/<cod_po>/<empresa>/<tipo_comprobante>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
 def actualizar_orden_compra_det(cod_po, empresa, tipo_comprobante):
     try:
         print(cod_po, empresa, tipo_comprobante)
-        orden = db.session.query(StOrdenCompraDet).filter(StOrdenCompraDet.cod_po == cod_po,
-                                                          StOrdenCompraDet.empresa == empresa,
-                                                          StOrdenCompraDet.tipo_comprobante == tipo_comprobante).all()
+        orden = db.session.query(StOrdenCompraDet).filter(StOrdenCompraDet.cod_po == cod_po, StOrdenCompraDet.empresa == empresa, StOrdenCompraDet.tipo_comprobante == tipo_comprobante).all()
         print(orden)
         if not orden:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
-
+        
         data = request.get_json()
         cod_producto_no_existe = []
         usuario_modifica = data['usuario_modifica'].upper()
         fecha_modifica = date.today()
 
         for order in data['orders']:
-            query = StOrdenCompraDet.query().filter_by(cod_po=cod_po, empresa=empresa,
-                                                       tipo_comprobante=tipo_comprobante,
-                                                       cod_producto=order['cod_producto']).first()
+            query = StOrdenCompraDet.query().filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante=tipo_comprobante, cod_producto=order['cod_producto']).first()
             if query:
                 query.cod_producto = order.get('cod_producto', query.cod_producto).strip()
                 query.cod_producto_modelo = order.get('cod_producto_modelo', query.cod_producto_modelo).strip()
@@ -1689,37 +1606,36 @@ def actualizar_orden_compra_det(cod_po, empresa, tipo_comprobante):
                     query.costo_cotizado = order['costo_cotizado']
                     if query.costo_cotizado is not None:
                         query.fecha_costo = date.today()
-
+                
             else:
                 cod_producto_no_existe.append(order['cod_producto'])
-
+        
         if cod_producto_no_existe:
             return jsonify({'mensaje': 'Productos no Actualizados.', 'cod_producto_no_existe': cod_producto_no_existe})
         else:
             db.session.commit()
             return jsonify({'mensaje': 'Detalle(s) de orden de compra actualizados exitosamente', 'cod_po': cod_po})
-
+    
     except Exception as e:
         logger.exception(f"Error al actualizar: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-
+    
 @bp.route('/orden_compra_tracking/<cod_po>/<empresa>/<tipo_comprobante>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
-def actualizar_orden_compra_trancking(cod_po, empresa, tipo_comprobante):
+def actualizar_orden_compra_trancking(cod_po,empresa,tipo_comprobante):
     try:
-        tracking = db.session.query(StTracking).filter_by(cod_po=cod_po, empresa=empresa,
-                                                          tipo_comprobante=tipo_comprobante).first()
+        tracking = db.session.query(StTracking).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante = tipo_comprobante).first()
         if not tracking:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
-
+        
         fecha_modifica = date.today()
-
+        
         data = request.get_json()
-        # tracking.cod_po = data.get('cod_po', tracking.cod_po)
-        # tracking.tipo_comprobante = data.get('tipo_comprobante', tracking.tipo_comprobante)
-        # tracking.empresa = data.get('empresa', tracking.empresa)
+        #tracking.cod_po = data.get('cod_po', tracking.cod_po)
+        #tracking.tipo_comprobante = data.get('tipo_comprobante', tracking.tipo_comprobante)
+        #tracking.empresa = data.get('empresa', tracking.empresa)
         tracking.observaciones = data.get('observaciones', tracking.observaciones)
         tracking.fecha = datetime.strptime(data.get('fecha', str(tracking.fecha)), '%d/%m/%Y').date()
         tracking.cod_modelo = data.get('cod_modelo', tracking.cod_modelo)
@@ -1731,13 +1647,12 @@ def actualizar_orden_compra_trancking(cod_po, empresa, tipo_comprobante):
         db.session.commit()
 
         return jsonify({'mensaje': 'Tracking de Orden de compra actualizada exitosamente.'})
-
+    
     except Exception as e:
         logger.exception(f"Error al actualizar: {str(e)}")
-        # logging.error('Ocurrio un error: %s',e)
+        #logging.error('Ocurrio un error: %s',e)
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/orden_compra_packinglist/<cod_po>/<empresa>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
@@ -1746,15 +1661,14 @@ def actualizar_orden_compra_packinglist(cod_po, empresa):
         packinglist = db.session.query(StPackinglist).filter_by(cod_po=cod_po, empresa=empresa).first()
         if not packinglist:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
-
+        
         data = request.get_json()
         fecha_modifica = date.today()
         cod_producto_no_existe = []
         usuario_modifica = data['usuario_modifica'].upper()
         for order in data['orders']:
             nro_contenedor = order['nro_contenedor']
-            query = StPackinglist.query().filter_by(cod_po=cod_po, empresa=empresa, nro_contenedor=nro_contenedor,
-                                                    cod_producto=order['cod_producto']).first()
+            query = StPackinglist.query().filter_by(cod_po=cod_po, empresa=empresa, nro_contenedor=nro_contenedor, cod_producto=order['cod_producto']).first()
             if query:
                 query.nro_contenedor = nro_contenedor
                 query.tipo_comprobante = order.get('tipo_comprobante', query.tipo_comprobante)
@@ -1766,10 +1680,9 @@ def actualizar_orden_compra_packinglist(cod_po, empresa):
                 query.cod_tipo_liquidacion = order.get('cod_tipo_liquidacion', query.cod_tipo_liquidacion)
                 query.usuario_modifica = usuario_modifica
                 query.fecha_modifica = fecha_modifica
-
+                
                 # Actualizar campo saldo_pedido en StOrdenCompraDet
-                orden_det = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa,
-                                                                         cod_producto=order['cod_producto']).first()
+                orden_det = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa, cod_producto=order['cod_producto']).first()
                 if orden_det:
                     saldo_producto = orden_det.cantidad_pedido - query.cantidad
                     orden_det.saldo_producto = saldo_producto
@@ -1779,20 +1692,18 @@ def actualizar_orden_compra_packinglist(cod_po, empresa):
                     cod_producto_no_existe.append(order['cod_producto'])
             else:
                 cod_producto_no_existe.append(order['cod_producto'])
-
+        
         db.session.commit()
 
         if cod_producto_no_existe:
-            return jsonify({'mensaje': 'Productos no Actualizados. No existe el producto o codigo_bl_house erroneo.',
-                            'cod_producto_no_existe': cod_producto_no_existe})
+            return jsonify({'mensaje': 'Productos no Actualizados. No existe el producto o codigo_bl_house erroneo.', 'cod_producto_no_existe': cod_producto_no_existe})
         else:
             return jsonify({'mensaje': 'Packinglist de Orden de compra actualizada exitosamente.'})
-
+    
     except Exception as e:
         logger.exception(f"Error al actualizar: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/embarque/<codigo_bl_house>/<empresa>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
@@ -1806,7 +1717,7 @@ def actualizar_embarque(codigo_bl_house, empresa):
 
         if 'fecha_embarque' in data and data['fecha_embarque']:
             embarque.fecha_embarque = datetime.strptime(data['fecha_embarque'], '%d/%m/%Y').date()
-
+        
         if 'fecha_llegada' in data and data['fecha_llegada']:
             embarque.fecha_llegada = datetime.strptime(data['fecha_llegada'], '%d/%m/%Y').date()
 
@@ -1817,29 +1728,27 @@ def actualizar_embarque(codigo_bl_house, empresa):
         if 'cod_item' in data:
             if embarque.cod_item != data['cod_item']:
                 tracking = StTrackingBl(
-                    cod_bl_house=codigo_bl_house,
-                    empresa=empresa,
-                    observaciones="Tracking BackEnd",
-                    cod_modelo=data.get('cod_modelo'),
-                    usuario_crea=data.get('modificado_por'),
-                    fecha_crea=date.today(),
-                    fecha=date.today(),
-                    cod_item=data['cod_item'],
-                    secuencial=db.session.query(StTrackingBl).filter_by(cod_bl_house=codigo_bl_house,
-                                                                        empresa=empresa).order_by(
-                        desc(StTrackingBl.secuencial)).first().secuencial + 1
+                  cod_bl_house=codigo_bl_house,
+                  empresa=empresa,
+                  observaciones="Tracking BackEnd",
+                  cod_modelo=data.get('cod_modelo'),
+                  usuario_crea=data.get('modificado_por'),
+                  fecha_crea=date.today(),
+                  fecha=date.today(),
+                  cod_item=data['cod_item'],
+                  secuencial= db.session.query(StTrackingBl).filter_by(cod_bl_house=codigo_bl_house, empresa=empresa).order_by(desc(StTrackingBl.secuencial)).first().secuencial + 1
                 )
                 db.session.add(tracking)
 
             embarque.cod_item = data['cod_item']
+
 
         # Verificar si el campo 'estado' está presente en el JSON antes de asignarlo
         if 'estado' in data:
             embarque.estado = data['estado']
 
         embarque.cod_proveedor = data.get('cod_proveedor', embarque.cod_proveedor)
-        embarque.numero_tracking = data.get('codigo_bl_master')[-4:] if data.get(
-            'codigo_bl_master') else embarque.numero_tracking
+        embarque.numero_tracking = data.get('codigo_bl_master')[-4:] if data.get('codigo_bl_master') else embarque.numero_tracking
         embarque.naviera = data.get('naviera', embarque.naviera)
         embarque.agente = data.get('agente', embarque.agente)
         embarque.fecha_modificacion = date.today()
@@ -1864,7 +1773,7 @@ def actualizar_embarque(codigo_bl_house, empresa):
         # Obtener el valor del campo valor en la tabla StTipoAforo
         tipo_aforo = db.session.query(StTipoAforo).filter_by(cod_aforo=embarque.cod_aforo).first()
         if tipo_aforo:
-            valor_aforo = tipo_aforo.NUMERO
+            valor_aforo = tipo_aforo.valor
         else:
             valor_aforo = None
 
@@ -1881,22 +1790,21 @@ def actualizar_embarque(codigo_bl_house, empresa):
     except Exception as e:
         logger.exception(f"Error al actualizar Embarque: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/tipo_aforo/<empresa>/<cod_aforo>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
-def actualizar_tipo_aforo(empresa, cod_aforo):
+def actualizar_tipo_aforo(empresa,cod_aforo):
     try:
-        aforo = db.session.query(StTipoAforo).filter_by(empresa=empresa, cod_aforo=cod_aforo).first()
+        aforo = db.session.query(StTipoAforo).filter_by( empresa=empresa, cod_aforo = cod_aforo).first()
         if not aforo:
             return jsonify({'mensaje': 'El tipo de aforo no existe.'}), 404
-
+        
         fecha_modifica = date.today()
-
+        
         data = request.get_json()
         aforo.nombre = data.get('nombre', aforo.nombre).upper()
-        aforo.NUMERO = data.get('valor', aforo.NUMERO)
+        aforo.valor = data.get('valor', aforo.valor)
         aforo.observacion = data.get('observacion', aforo.observacion)
         aforo.usuario_modifica = data.get('usuario_modifica', aforo.usuario_modifica).upper()
         aforo.fecha_modifica = fecha_modifica
@@ -1904,21 +1812,19 @@ def actualizar_tipo_aforo(empresa, cod_aforo):
         db.session.commit()
 
         return jsonify({'mensaje': 'Tipo de Aforo actualizado exitosamente.'})
-
+    
     except Exception as e:
         logger.exception(f"Error al actualizar el Tipo de Aforo: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-
-# METODOS DELETE PARA ORDENES DE COMPRA
+    
+#METODOS DELETE PARA ORDENES DE COMPRA
 
 @bp.route('/orden_compra_cab/<cod_po>/<empresa>/<tipo_comprobante>', methods=['DELETE'])
 @jwt_required()
 @cross_origin()
-def eliminar_orden_compra_cab(cod_po, empresa, tipo_comprobante):
+def eliminar_orden_compra_cab(cod_po, empresa,tipo_comprobante):
     try:
-        orden = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po, empresa=empresa,
-                                                             tipo_comprobante=tipo_comprobante).first()
+        orden = db.session.query(StOrdenCompraCab).filter_by(cod_po=cod_po, empresa=empresa,tipo_comprobante=tipo_comprobante).first()
         if not orden:
             return jsonify({'mensaje': 'La orden de compra no existe.'}), 404
 
@@ -1930,15 +1836,13 @@ def eliminar_orden_compra_cab(cod_po, empresa, tipo_comprobante):
     except Exception as e:
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/orden_compra_det/<cod_po>/<empresa>/<secuencia>/<tipo_comprobante>', methods=['DELETE'])
 @jwt_required()
 @cross_origin()
-def eliminar_orden_compra_det(cod_po, empresa, secuencia, tipo_comprobante):
+def eliminar_orden_compra_det(cod_po, empresa, secuencia,tipo_comprobante):
     try:
-        detalle = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa, secuencia=secuencia,
-                                                               tipo_comprobante=tipo_comprobante).first()
+        detalle = db.session.query(StOrdenCompraDet).filter_by(cod_po=cod_po, empresa=empresa, secuencia = secuencia, tipo_comprobante = tipo_comprobante).first()
         if not detalle:
             return jsonify({'mensaje': 'Detalle de orden de compra no existe.'}), 404
 
@@ -1950,15 +1854,13 @@ def eliminar_orden_compra_det(cod_po, empresa, secuencia, tipo_comprobante):
     except Exception as e:
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/orden_compra_tracking/<cod_po>/<empresa>/<tipo_comprobante>', methods=['DELETE'])
 @jwt_required()
 @cross_origin()
 def eliminar_orden_compra_tracking(cod_po, empresa, tipo_comprobante):
     try:
-        tracking = db.session.query(StTracking).filter_by(cod_po=cod_po, empresa=empresa,
-                                                          tipo_comprobante=tipo_comprobante).first()
+        tracking = db.session.query(StTracking).filter_by(cod_po=cod_po, empresa=empresa, tipo_comprobante=tipo_comprobante).first()
         if not tracking:
             return jsonify({'mensaje': 'Tracking de orden de compra no existe.'}), 404
 
@@ -1970,8 +1872,7 @@ def eliminar_orden_compra_tracking(cod_po, empresa, tipo_comprobante):
     except Exception as e:
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/orden_compra_packinglist', methods=['DELETE'])
 @jwt_required()
 @cross_origin()
@@ -1997,14 +1898,13 @@ def eliminar_orden_compra_packinglist():
             packing_query = packing_query.filter_by(empresa=empresa)
 
         packing_entry = packing_query.first()
-        query = StOrdenCompraDet.query().filter_by(cod_producto=packing_entry.cod_producto, cod_po=cod_po,
-                                                   empresa=empresa).first()
+        query = StOrdenCompraDet.query().filter_by(cod_producto=packing_entry.cod_producto, cod_po=cod_po,empresa=empresa).first()
 
         packings_to_delete = packing_query.all()
 
         if not packings_to_delete:
             return jsonify({'mensaje': 'No se encontraron registros para eliminar.'}), 404
-
+        
         if query:
             query.saldo_producto = query.saldo_producto + Decimal(str(packing_entry.cantidad))
             query.fob = 0
@@ -2021,8 +1921,7 @@ def eliminar_orden_compra_packinglist():
     except Exception as e:
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/embarque/<codigo_bl_house>/<empresa>', methods=['DELETE'])
 @jwt_required()
 @cross_origin()
@@ -2031,8 +1930,7 @@ def eliminar_embarque(codigo_bl_house, empresa):
         # Verificar si existen registros en StPackinglist que dependen del código_bl_house
         existe_packing = db.session.query(StPackinglist).filter_by(codigo_bl_house=codigo_bl_house).first()
         if existe_packing:
-            return jsonify({
-                'error': 'Existen registros en StPackinglist que dependen de este embarque. No se puede eliminar.'}), 400
+            return jsonify({'error': 'Existen registros en StPackinglist que dependen de este embarque. No se puede eliminar.'}), 400
 
         embarque = db.session.query(StEmbarquesBl).filter_by(codigo_bl_house=codigo_bl_house, empresa=empresa).first()
         if not embarque:
@@ -2046,14 +1944,13 @@ def eliminar_embarque(codigo_bl_house, empresa):
     except Exception as e:
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-
+    
 @bp.route('/tipo_aforo/<empresa>/<cod_aforo>', methods=['DELETE'])
 @jwt_required()
 @cross_origin()
 def eliminar_tipo_aforo(empresa, cod_aforo):
     try:
-        aforo = db.session.query(StTipoAforo).filter_by(empresa=empresa, cod_aforo=cod_aforo).first()
+        aforo = db.session.query(StTipoAforo).filter_by(empresa=empresa, cod_aforo = cod_aforo).first()
         if not aforo:
             return jsonify({'mensaje': 'Tipo de aforo no existe.'}), 404
 
@@ -2065,10 +1962,9 @@ def eliminar_tipo_aforo(empresa, cod_aforo):
     except Exception as e:
         logger.exception(f"Error al eliminar: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-
-# METODO PARA INGRESAR CABECERA Y DETALLES DE UNA ORDEN DE IMPORTACION
-
+    
+#METODO PARA INGRESAR CABECERA Y DETALLES DE UNA ORDEN DE IMPORTACION
+    
 @bp.route('/orden_compra_total', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -2082,16 +1978,15 @@ def crear_orden_compra_total():
         ciudad = busq_ciudad.ciudad_matriz if busq_ciudad else ''
 
         # Obtener el nombre del estado
-        # estado = TgModeloItem.query().filter_by(cod_modelo=data['cabecera']['cod_modelo'], cod_item=data['cabecera']['cod_item']).first()
-        # estado_nombre = estado.nombre if estado else ''
+        #estado = TgModeloItem.query().filter_by(cod_modelo=data['cabecera']['cod_modelo'], cod_item=data['cabecera']['cod_item']).first()
+        #estado_nombre = estado.nombre if estado else ''
 
         # Generar el código de la cabecera
-        cod_po = asigna_cod_comprobante(data['cabecera']['empresa'], data['cabecera']['tipo_comprobante'],
-                                        data['cabecera']['cod_agencia'])
-
-        # fecha_estimada_produccion=datetime.strptime(data['cabecera']['fecha_estimada_produccion'], '%d/%m/%Y').date(),
-        # fecha_estimada_puerto=datetime.strptime(data['cabecera']['fecha_estimada_puerto'], '%d/%m/%Y').date(),
-        # fecha_estimada_llegada=datetime.strptime(data['cabecera']['fecha_estimada_llegada'], '%d/%m/%Y').date(),
+        cod_po = asigna_cod_comprobante(data['cabecera']['empresa'], data['cabecera']['tipo_comprobante'], data['cabecera']['cod_agencia'])
+        
+        #fecha_estimada_produccion=datetime.strptime(data['cabecera']['fecha_estimada_produccion'], '%d/%m/%Y').date(),
+        #fecha_estimada_puerto=datetime.strptime(data['cabecera']['fecha_estimada_puerto'], '%d/%m/%Y').date(),
+        #fecha_estimada_llegada=datetime.strptime(data['cabecera']['fecha_estimada_llegada'], '%d/%m/%Y').date(),
         # Crear la cabecera de la orden de compra
         cabecera = StOrdenCompraCab(
             empresa=data['cabecera']['empresa'],
@@ -2121,20 +2016,17 @@ def crear_orden_compra_total():
             cabecera.cod_opago = None
 
         try:
-            cabecera.fecha_estimada_produccion = datetime.strptime(data['cabecera']['fecha_estimada_produccion'],
-                                                                   '%d/%m/%Y').date()
+            cabecera.fecha_estimada_produccion = datetime.strptime(data['cabecera']['fecha_estimada_produccion'], '%d/%m/%Y').date()
         except KeyError:
             cabecera.fecha_estimada_produccion = None
 
         try:
-            cabecera.fecha_estimada_puerto = datetime.strptime(data['cabecera']['fecha_estimada_puerto'],
-                                                               '%d/%m/%Y').date()
+            cabecera.fecha_estimada_puerto = datetime.strptime(data['cabecera']['fecha_estimada_puerto'], '%d/%m/%Y').date()
         except KeyError:
             cabecera.fecha_estimada_puerto = None
 
         try:
-            cabecera.fecha_estimada_llegada = datetime.strptime(data['cabecera']['fecha_estimada_llegada'],
-                                                                '%d/%m/%Y').date()
+            cabecera.fecha_estimada_llegada = datetime.strptime(data['cabecera']['fecha_estimada_llegada'], '%d/%m/%Y').date()
         except KeyError:
             cabecera.fecha_estimada_llegada = None
         db.session.add(cabecera)
@@ -2157,18 +2049,16 @@ def crear_orden_compra_total():
             # Verificar si el producto y la unidad de medida existen
             query_producto = Producto.query().filter_by(cod_producto=cod_producto).first()
             query_unidad_medida = StUnidadImportacion.query().filter_by(cod_unidad=unidad_medida).first()
-            query_modelo = Producto.query().filter_by(cod_producto=cod_producto_modelo).first()
+            query_modelo = Producto.query().filter_by(cod_producto = cod_producto_modelo).first()
 
             if query_producto and query_unidad_medida and query_modelo:
                 secuencia = obtener_secuencia(cod_po)
                 costo_sistema = query_producto.costo
 
                 # Obtener los nombres correspondientes del despiece o el producto
-                despiece = StProductoDespiece.query().filter_by(cod_producto=cod_producto,
-                                                                empresa=data['cabecera']['empresa']).first()
+                despiece = StProductoDespiece.query().filter_by(cod_producto=cod_producto, empresa=data['cabecera']['empresa']).first()
                 if despiece:
-                    nombre_busq = StDespieceD.query().filter_by(cod_despiece=despiece.cod_despiece,
-                                                                secuencia=despiece.secuencia).first()
+                    nombre_busq = StDespieceD.query().filter_by(cod_despiece=despiece.cod_despiece, secuencia = despiece.secuencia).first()
                     nombre = nombre_busq.nombre_e
                     nombre_i = nombre_busq.nombre_i
                     nombre_c = nombre_busq.nombre_c
@@ -2179,7 +2069,7 @@ def crear_orden_compra_total():
                     nombre_c = nombre_busq.nombre
 
                 detalle_orden = StOrdenCompraDet(
-                    exportar=1 if detalle['agrupado'] else 0,
+                    exportar = 1 if detalle['agrupado'] else 0,
                     cod_po=cod_po,
                     tipo_comprobante='PO',
                     secuencia=secuencia,
@@ -2202,11 +2092,11 @@ def crear_orden_compra_total():
                 db.session.commit()
             else:
                 if not query_producto:
-                    cod_po_no_existe.append(cod_producto + '\n')
+                    cod_po_no_existe.append(cod_producto+'\n')
                 if not query_modelo:
-                    cod_modelo_no_existe.append(cod_producto_modelo + '\n')
+                    cod_modelo_no_existe.append(cod_producto_modelo+'\n')
                 else:
-                    unidad_medida_no_existe.append(cod_producto + ': ' + unidad_medida + '\n')
+                    unidad_medida_no_existe.append(cod_producto+': '+unidad_medida+'\n')
         return jsonify({'mensaje': 'Orden de compra creada exitosamente', 'cod_po': cod_po,
                         'cod_producto_no_existe': list(set(cod_po_no_existe)),
                         'unidad_medida_no_existe': list(set(unidad_medida_no_existe)),
@@ -2219,19 +2109,16 @@ def crear_orden_compra_total():
     except Exception as e:
         error_message = f"Se produjo un error: {str(e)}"
         return jsonify({'error': error_message}), 500
-
-
+    
 # Crear un diccionario para llevar un registro de la última combinación (cod_po, empresa, cod_item)
 ultimas_combinaciones_track_oc = {}
-
 
 # Función para crear o actualizar el registro en StTracking
 def crear_o_actualizar_registro_tracking_oc(session):
     for target in session.new.union(session.dirty):
         if isinstance(target, StOrdenCompraCab) and 'cod_item' in target.__dict__:
             # Verificar si el objeto tiene los atributos esperados
-            if hasattr(target, 'cod_po') and hasattr(target, 'empresa') and hasattr(target, 'usuario_crea') and hasattr(
-                    target, 'cod_modelo'):
+            if hasattr(target, 'cod_po') and hasattr(target, 'empresa') and hasattr(target, 'usuario_crea') and hasattr(target, 'cod_modelo'):
                 cod_po = target.cod_po
                 empresa = target.empresa
                 cod_item = target.cod_item
@@ -2258,30 +2145,25 @@ def crear_o_actualizar_registro_tracking_oc(session):
                     # Actualizar la última combinación registrada
                     ultimas_combinaciones_track_oc[(cod_po, empresa)] = {'cod_item': cod_item}
 
-
 # Registrar el evento before_commit en la sesión de SQLAlchemy para crear o actualizar registros en StTracking
-event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_oc)
-
-
+#event.listen(scoped_session, 'before_commit', crear_o_actualizar_registro_tracking_oc)
 def secuencia_track_oc(cod_po):
     existe_cod_po = db.session.query(StTracking).filter_by(cod_po=cod_po).first()
 
     if existe_cod_po is not None:
-        print('EXISTE2', existe_cod_po.cod_po)
+        print('EXISTE2',existe_cod_po.cod_po)
         # Si el cod_po existe en la tabla StTracking, obtener el último número de secuencia
         max_secuencia = db.session.query(func.max(StTracking.secuencia)).filter_by(cod_po=cod_po).distinct().scalar()
-        print('MAXIMO', max_secuencia)
+        print('MAXIMO',max_secuencia)
         nueva_secuencia = int(max_secuencia) + 1
-        print('PROXIMO', nueva_secuencia)
+        print('PROXIMO',nueva_secuencia)
         return nueva_secuencia
     else:
         # Si el cod_po no existe en la tabla StTracking, generar secuencia desde 1
         nueva_secuencia = 1
         print('Secuencia de inicio', nueva_secuencia)
         return nueva_secuencia
-
-
-# BOX FORMAS DE PAGO
+#BOX FORMAS DE PAGO
 @bp.route('/crear_anticipo_forma_de_pago_general', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -2324,20 +2206,18 @@ def crear_anticipo_forma_de_pago_general():
         error_message = f"Error al procesar la solicitud: {str(e)}"
         return jsonify({"error": error_message}), 500
 
-
 @bp.route('/actualizar_anticipo_forma_de_pago_general/<int:secuencia>/<string:cod_proforma>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
 def actualizar_anticipo_forma_de_pago_general(secuencia, cod_proforma):
     data = request.json
-    proforma_actualizada = db.session.query(stProformaImpFp).filter_by(secuencia=secuencia,
-                                                                       cod_proforma=cod_proforma).first()
+    proforma_actualizada = db.session.query(stProformaImpFp).filter_by(secuencia=secuencia, cod_proforma=cod_proforma).first()
 
     if proforma_actualizada:
         proforma_actualizada.empresa = data['empresa']
         proforma_actualizada.tipo_proforma = data['tipo_proforma']
         proforma_actualizada.fecha_vencimiento = datetime.strptime(data['fecha_vencimiento'], '%Y-%m-%d')
-        proforma_actualizada.NUMERO = float(data['valor'])
+        proforma_actualizada.valor = float(data['valor'])
         proforma_actualizada.saldo = data['saldo']
         proforma_actualizada.descripcion = data['descripcion']
         proforma_actualizada.cod_forma_pago = data['cod_forma_pago']
@@ -2349,12 +2229,10 @@ def actualizar_anticipo_forma_de_pago_general(secuencia, cod_proforma):
     else:
         return jsonify({"error": "No se encontró el registro para actualizar."}), 404
 
-
 @bp.route('/proformas_por_cod_proforma/<string:cod_proforma>', methods=['GET'])
 @jwt_required()
 def obtener_proformas_por_cod_proforma(cod_proforma):
-    proformas = db.session.query(stProformaImpFp).filter_by(cod_proforma=cod_proforma).order_by(
-        stProformaImpFp.secuencia).all()
+    proformas = db.session.query(stProformaImpFp).filter_by(cod_proforma=cod_proforma).order_by(stProformaImpFp.secuencia).all()
     if not proformas:
         return jsonify({'mensaje': 'No se encontraron proformas para el código proporcionado'}), 404
 
@@ -2366,39 +2244,36 @@ def obtener_proformas_por_cod_proforma(cod_proforma):
             'secuencia': proforma.secuencia,
             'tipo_proforma': proforma.tipo_proforma,
             'fecha_vencimiento': proforma.fecha_vencimiento.strftime('%Y-%m-%d'),
-            'valor': proforma.NUMERO,
+            'valor': proforma.valor,
             'saldo': proforma.saldo,
             'descripcion': proforma.descripcion,
             'cod_forma_pago': proforma.cod_forma_pago,
             'dias_vencimiento': proforma.dias_vencimiento,
             'pct_valor': proforma.pct_valor
         })
-    # print(proformas_data)
+    #print(proformas_data)
     return jsonify({'proformas': proformas_data})
-
 
 @bp.route('/proformas_delete_anticipo', methods=['DELETE'])
 @jwt_required()
 def delete_anticipo():
     data = request.json
-    secuenciaToDelete = data["secuencia"]
-    codProformaToDelete = data["cod_proforma"]
+    secuenciaToDelete=data["secuencia"]
+    codProformaToDelete=data["cod_proforma"]
     print(data)
     if stProformaImpFp.eliminar_registro(secuenciaToDelete, codProformaToDelete):
         return "Registro eliminado Correctamente"
     else:
         return "No se pudo eliminar Registro"
 
-    # proformas = db.session.query(stProformaImpFp).filter_by(cod_proforma=cod_proforma).all()
-    # print(proformas)
+    #proformas = db.session.query(stProformaImpFp).filter_by(cod_proforma=cod_proforma).all()
+    #print(proformas)
     return jsonify({'proformas': 'proformas_data'})
-
 
 @bp.route('/anticipos_por_cod_proforma/<string:cod_proforma>', methods=['GET'])
 @jwt_required()
 def obtener_anticipos_por_cod_proforma(cod_proforma):
-    proformas = db.session.query(stProformaImpFp).filter_by(cod_proforma=cod_proforma, cod_forma_pago='ANT').order_by(
-        stProformaImpFp.secuencia).all()
+    proformas = db.session.query(stProformaImpFp).filter_by(cod_proforma=cod_proforma, cod_forma_pago='ANT').order_by(stProformaImpFp.secuencia).all()
     if not proformas:
         return jsonify({'mensaje': 'No se encontraron proformas para el código proporcionado'}), 404
 
@@ -2410,16 +2285,15 @@ def obtener_anticipos_por_cod_proforma(cod_proforma):
             'secuencia': proforma.secuencia,
             'tipo_proforma': proforma.tipo_proforma,
             'fecha_vencimiento': proforma.fecha_vencimiento.strftime('%Y-%m-%d'),
-            'valor': proforma.NUMERO,
+            'valor': proforma.valor,
             'saldo': proforma.saldo,
             'descripcion': proforma.descripcion,
             'cod_forma_pago': proforma.cod_forma_pago,
             'dias_vencimiento': proforma.dias_vencimiento,
             'pct_valor': proforma.pct_valor
         })
-    # print(proformas_data)
+    #print(proformas_data)
     return jsonify({'proformas': proformas_data})
-
 
 @bp.route('/pagar_anticipo_forma_de_pago_general', methods=['POST'])
 @jwt_required()
@@ -2433,7 +2307,7 @@ def pagar_anticipo_forma_de_pago_general():
         p_cod_proforma = data["p_cod_proforma"]
         p_usuario = data["p_usuario"]
 
-        # Ejecutar el procedimiento PL/SQL
+        #Ejecutar el procedimiento PL/SQL
         query = """
                        DECLARE
                             tipo_pago VARCHAR(100);
@@ -2468,7 +2342,6 @@ def pagar_anticipo_forma_de_pago_general():
         error_message = f"Error al procesar la solicitud: {str(e)}"
         print(str(e))
         return jsonify({"error": error_message}), 500
-
 
 @bp.route('/packinglist_total')
 @jwt_required()
@@ -2530,7 +2403,6 @@ def obtener_packinglist_total():
 
     return jsonify(serialized_packings)
 
-
 @bp.route('/containers')
 @jwt_required()
 @cross_origin()
@@ -2549,12 +2421,12 @@ def obtener_containers():
         shipper_seal = contenedor.shipper_seal if contenedor.shipper_seal else ""
         es_carga_suelta = contenedor.es_carga_suelta if contenedor.es_carga_suelta else ""
         observaciones = contenedor.observaciones if contenedor.observaciones else ""
-        fecha_bodega = datetime.strftime(contenedor.fecha_bodega, "%d/%m/%Y") if contenedor.fecha_bodega else ""
+        fecha_bodega = datetime.strftime(contenedor.fecha_bodega,"%d/%m/%Y") if contenedor.fecha_bodega else ""
         cod_modelo = contenedor.cod_modelo if contenedor.cod_modelo else ""
         cod_item = contenedor.cod_item if contenedor.cod_item else ""
         es_repuestos = contenedor.es_repuestos if contenedor.es_repuestos else ""
         es_motos = contenedor.es_motos if contenedor.es_motos else ""
-        fecha_salida = datetime.strftime(contenedor.fecha_salida, "%d/%m/%Y") if contenedor.fecha_salida else ""
+        fecha_salida = datetime.strftime(contenedor.fecha_salida,"%d/%m/%Y") if contenedor.fecha_salida else ""
 
         serialized_contenedores.append({
             "empresa": empresa,
@@ -2575,8 +2447,6 @@ def obtener_containers():
             "fecha_salida": fecha_salida
         })
     return jsonify(serialized_contenedores)
-
-
 @bp.route('/packings_by_container')
 @jwt_required()
 @cross_origin()
@@ -2603,7 +2473,6 @@ def obtener_packings_por_contenedor():
         print('Error:', e)
         raise
 
-
 @bp.route('/tipo_contenedor')
 @jwt_required()
 @cross_origin()
@@ -2624,7 +2493,6 @@ def obtener_containers_tipo():
         })
     return jsonify(serialized_tipos)
 
-
 @bp.route('/contenedor/<nro_contenedor>/<empresa>', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -2635,11 +2503,12 @@ def crear_contenedor(nro_contenedor, empresa):
 
         data = request.get_json()
 
+
         contenedor = StEmbarqueContenedores(
             empresa=empresa,
             nro_contenedor=nro_contenedor,
             codigo_bl_house=data.get('codigo_bl_house'),
-            cod_tipo_contenedor=data.get('cod_tipo_contenedor'),
+            cod_tipo_contenedor = data.get('cod_tipo_contenedor'),
             peso=data.get('peso'),
             volumen=data.get('volumen'),
             line_seal=data.get('line_seal'),
@@ -2648,7 +2517,7 @@ def crear_contenedor(nro_contenedor, empresa):
             observaciones=data.get('observaciones'),
             fecha_crea=date.today(),
             usuario_crea=data.get('usuario_crea'),
-            cod_item=1,
+            cod_item= 1,
             cod_modelo='BL',
             fecha_bodega=parse_date(data.get('fecha_bodega')),
             es_repuestos=data.get('es_repuestos'),
@@ -2679,14 +2548,12 @@ def crear_contenedor(nro_contenedor, empresa):
         logger.exception(f"Error al crear Contenedor: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-
 @bp.route('/contenedor/<nro_contenedor>/<empresa>', methods=['PUT'])
 @jwt_required()
 @cross_origin()
 def actualizar_contenedor(nro_contenedor, empresa):
     try:
-        contenedor = db.session.query(StEmbarqueContenedores).filter_by(nro_contenedor=nro_contenedor,
-                                                                        empresa=empresa).first()
+        contenedor = db.session.query(StEmbarqueContenedores).filter_by(nro_contenedor=nro_contenedor, empresa=empresa).first()
         if not contenedor:
             return jsonify({'mensaje': 'El contenedor no existe.'}), 404
 
@@ -2695,20 +2562,16 @@ def actualizar_contenedor(nro_contenedor, empresa):
         if 'cod_item' in data:
             if contenedor.cod_item != data['cod_item']:
                 tracking = StTrackingContenedores(
-                    nro_contenedor=data.get('nro_contenedor', contenedor.nro_contenedor),
-                    empresa=empresa,
-                    secuencial=db.session.query(StTrackingContenedores).filter_by(nro_contenedor=nro_contenedor,
-                                                                                  empresa=empresa).order_by(
-                        desc(StTrackingContenedores.secuencial)).first().secuencial + 1 if db.session.query(
-                        StTrackingContenedores).filter_by(nro_contenedor=nro_contenedor, empresa=empresa).order_by(
-                        desc(StTrackingContenedores.secuencial)).first() else 1,
-                    observaciones="Tracking BackEnd",
-                    cod_modelo=data.get('cod_modelo'),
-                    usuario_crea=data.get('modificado_por'),
-                    fecha_crea=date.today(),
-                    fecha=date.today(),
-                    cod_item=data['cod_item'],
-                    codigo_bl_house=data.get('codigo_bl_house', contenedor.codigo_bl_house)
+                  nro_contenedor=data.get('nro_contenedor', contenedor.nro_contenedor),
+                  empresa=empresa,
+                  secuencial=db.session.query(StTrackingContenedores).filter_by(nro_contenedor=nro_contenedor,empresa=empresa).order_by(desc(StTrackingContenedores.secuencial)).first().secuencial + 1 if db.session.query(StTrackingContenedores).filter_by(nro_contenedor=nro_contenedor,empresa=empresa).order_by(desc(StTrackingContenedores.secuencial)).first() else 1,
+                  observaciones="Tracking BackEnd",
+                  cod_modelo=data.get('cod_modelo'),
+                  usuario_crea=data.get('modificado_por'),
+                  fecha_crea=date.today(),
+                  fecha=date.today(),
+                  cod_item=data['cod_item'],
+                  codigo_bl_house=data.get('codigo_bl_house', contenedor.codigo_bl_house)
                 )
                 db.session.add(tracking)
             contenedor.cod_item = data['cod_item']
@@ -2717,7 +2580,7 @@ def actualizar_contenedor(nro_contenedor, empresa):
         contenedor.nro_contenedor = data.get('nro_contenedor', contenedor.nro_contenedor)
         contenedor.cod_tipo_contenedor = data.get('cod_tipo_contenedor', contenedor.cod_tipo_contenedor)
         contenedor.peso = data.get('peso', contenedor.peso)
-        contenedor.volumen = data.get('volumen', contenedor.volumen)  # date.today()
+        contenedor.volumen = data.get('volumen', contenedor.volumen) #date.today()
         contenedor.line_seal = data.get('line_seal', contenedor.line_seal)
         contenedor.shipper_seal = data.get('shipper_seal', contenedor.shipper_seal)
         contenedor.es_carga_suelta = data.get('es_carga_suelta', contenedor.es_carga_suelta)
@@ -2728,8 +2591,7 @@ def actualizar_contenedor(nro_contenedor, empresa):
         contenedor.cod_modelo = data.get('cod_modelo', contenedor.cod_modelo)
         contenedor.es_repuestos = data.get('es_repuestos', contenedor.es_repuestos)
         contenedor.es_motos = data.get('es_motos', contenedor.es_motos)
-        contenedor.fecha_salida = datetime.strptime(data.get('fecha_salida'), '%d/%m/%Y').date() if data.get(
-            'fecha_salida') else contenedor.fecha_salida
+        contenedor.fecha_salida = datetime.strptime(data.get('fecha_salida'), '%d/%m/%Y').date() if data.get('fecha_salida') else contenedor.fecha_salida
 
         db.session.commit()
 
@@ -2739,8 +2601,7 @@ def actualizar_contenedor(nro_contenedor, empresa):
         logger.exception(f"Error al actualizar Embarque: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-
-# DOC-SRI-ELECTRONICS--------------------------------------------------------------
+#DOC-SRI-ELECTRONICS--------------------------------------------------------------
 @bp.route('/comprobante/electronico', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -2766,8 +2627,7 @@ def insertFortLote():
                     fecha_autorizacion = datetime.strptime(item['FECHA_AUTORIZACION'], '%d/%m/%Y %H:%M:%S')
                     importe_total = float(item.get('IMPORTE_TOTAL', '0')) if item.get('IMPORTE_TOTAL', '0') != '' else 0
                     iva = float(item.get('IVA', '0')) if item.get('IVA', '0') != '' else 0
-                    valor_sin_impuestos = float(item.get('VALOR_SIN_IMPUESTOS', '0')) if item.get('VALOR_SIN_IMPUESTOS',
-                                                                                                  '0') != '' else 0
+                    valor_sin_impuestos = float(item.get('VALOR_SIN_IMPUESTOS', '0')) if item.get('VALOR_SIN_IMPUESTOS', '0') != '' else 0
                     new_entry = tc_doc_elec_recibidos(
                         ruc_emisor=item.get('RUC_EMISOR'),
                         serie_comprobante=item['SERIE_COMPROBANTE'],
@@ -2775,7 +2635,7 @@ def insertFortLote():
                         razon_social_emisor=item['RAZON_SOCIAL_EMISOR'].upper(),
                         fecha_emision=fecha_emision,
                         fecha_autorizacion=fecha_autorizacion,
-                        tipo_emision=item.get('TIPO_EMISION', ''),
+                        tipo_emision=item.get('TIPO_EMISION',''),
                         numero_documento_modificado=item.get('NUMERO_DOCUMENTO_MODIFICADO', ''),
                         identificacion_receptor=item['IDENTIFICACION_RECEPTOR'],
                         clave_acceso=item['CLAVE_ACCESO'],
@@ -2792,9 +2652,9 @@ def insertFortLote():
             return jsonify({'error': 'No se recibió el JSON esperado'}), 400
         return jsonify({'message': 'success'})
     except Exception as e:
-        # En lugar de devolver un mensaje genérico, imprime el error para obtener más información
-        print(str(e))
-        return jsonify({'error': 'Server Error'}), 500
+            # En lugar de devolver un mensaje genérico, imprime el error para obtener más información
+            print(str(e))
+            return jsonify({'error': 'Server Error'}), 500
 
 
 @bp.route('/doc_elec_recibidos', methods=['GET'])
@@ -2802,9 +2662,10 @@ def insertFortLote():
 @cross_origin()
 def obtener_doc_elec_recibidos():
     try:
-        # query = tc_doc_elec_recibidos.query().slice(0, 100)  # Utiliza el método query de la clase tc_doc_elec_recibidos
+        #query = tc_doc_elec_recibidos.query().slice(0, 100)  # Utiliza el método query de la clase tc_doc_elec_recibidos
         start_date_str = request.args.get('start_date')
         end_date_str = request.args.get('end_date')
+
 
         if start_date_str and end_date_str:
             start_date = datetime.strptime(start_date_str, "%d/%m/%Y")
@@ -2812,8 +2673,8 @@ def obtener_doc_elec_recibidos():
 
             query = tc_doc_elec_recibidos.query()
             documentos = query.filter(and_(
-                tc_doc_elec_recibidos.fecha_emision >= start_date,
-                tc_doc_elec_recibidos.fecha_emision <= end_date
+            tc_doc_elec_recibidos.fecha_emision >= start_date,
+            tc_doc_elec_recibidos.fecha_emision <= end_date
             ))
 
             serialized_documentos = []
@@ -2834,13 +2695,12 @@ def obtener_doc_elec_recibidos():
                     'numero_autorizacion': documento.numero_autorizacion,
                     'importe_total': float(documento.importe_total) if documento.importe_total is not None else None,
                     'iva': float(documento.iva) if documento.iva is not None else None,
-                    'valor_sin_impuestos': float(
-                        documento.valor_sin_impuestos) if documento.valor_sin_impuestos is not None else None,
+                    'valor_sin_impuestos':float(documento.valor_sin_impuestos) if documento.valor_sin_impuestos is not None else None,
                 })
 
             return jsonify(serialized_documentos)
         else:
-            return jsonify('without date')
+                return jsonify('without date')
 
 
 
@@ -2848,8 +2708,7 @@ def obtener_doc_elec_recibidos():
         logger.exception(f"Error al actualizar Embarque: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-
-# WARRANTY MODULES------------------------------------------------------------
+#WARRANTY MODULES------------------------------------------------------------
 @bp.route('/checkInfoForCodeEngine/<code>', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -2862,8 +2721,6 @@ def chekInfoForCodeEngine(code):
     # Construir los datos a devolver en formato JSON
     data = [{"COD_MOTOR": registro.cod_motor, "COD_CHASIS": registro.cod_chasis} for registro in codeEngine]
     return jsonify(data)
-
-
 @bp.route('/getInfoForCodeEngine/<code>', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -2879,22 +2736,20 @@ def getInfoForCodeEngine(code):
     print(data)
     return jsonify(data)
 
-
 @bp.route('/getInfoCasosPostventas', methods=['GET'])
 @jwt_required()
 @cross_origin()
 def getInfoCasosPostventas():
     filtros_params = request.args.to_dict()
-    # Filter initial by enterprise
+    #Filter initial by enterprise
     query = st_casos_postventa.query().filter(
         st_casos_postventa.empresa == 20,
     )
-    # data processing date prior to consultation
+    #data processing date prior to consultation
 
     start_date = datetime.strptime(filtros_params['start_date'], '%d/%m/%Y') if filtros_params['start_date'] else None
-    finish_date = datetime.strptime(filtros_params['finish_date'], '%d/%m/%Y') if filtros_params[
-        'finish_date'] else None
-    # Aumentar un dia
+    finish_date = datetime.strptime(filtros_params['finish_date'], '%d/%m/%Y') if filtros_params['finish_date'] else None
+    #Aumentar un dia
     if finish_date:
         finish_date += timedelta(days=1)
     if start_date:
@@ -2904,32 +2759,32 @@ def getInfoCasosPostventas():
     warranty_status = filtros_params['warranty_status'] if filtros_params['warranty_status'] else None
     case_status = filtros_params['case_status'] if filtros_params['case_status'] else None
 
-    # Filter date range
+# Filter date range
     if start_date is not None and finish_date is not None:
         query = query.filter(
             st_casos_postventa.fecha.between(start_date, finish_date)
         )
-    # Filter by City (Cantón) and Province
+#Filter by City (Cantón) and Province
     if cod_provincia is not None:
         query = query.filter(
-            st_casos_postventa.codigo_provincia == cod_provincia
+              st_casos_postventa.codigo_provincia == cod_provincia
         )
     if cod_canton is not None:
         query = query.filter(
             st_casos_postventa.codigo_canton == cod_canton
         )
-    # Filter warranty status
+#Filter warranty status
     if warranty_status is not None:
         query = query.filter(
             st_casos_postventa.aplica_garantia == warranty_status
         )
-    # Filter by case status
+#Filter by case status
     if case_status is not None:
         query = query.filter(
-            st_casos_postventa.estado == case_status
+                st_casos_postventa.estado == case_status
         )
     casos_postventas = query.all()
-    # Construir los datos a devolver en formato JSON
+#Construir los datos a devolver en formato JSON
     casos_json = []
     for caso in casos_postventas:
         caso_dict = {
@@ -3010,9 +2865,8 @@ def getInfoCasosPostventas():
                 caso_dict["porcentaje"] = vt_casos.porcentaje_avance
             caso_dict["taller"] = vt_casos.taller
         casos_json.append(caso_dict)
-    # print(casos_json)
+    #print(casos_json)
     return jsonify(casos_json)
-
 
 @bp.route('/casosTipo/<cp_code>', methods=['GET'])
 @jwt_required()
@@ -3041,7 +2895,6 @@ def casosTipoFunction(cp_code):
         error_msg = "An error occurred while processing the request."
         return jsonify({"error": e}), 500
 
-
 @bp.route('/casosTipoImages/<code_cp>', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -3052,16 +2905,22 @@ def url_media(code_cp):
             st_casos_url.cod_comprobante == code_cp,
             st_casos_url.tipo_comprobante == 'CP'
         ).first()
+
+        # Verificamos que se haya encontrado el registro
+        if not url:
+            return jsonify({"error": "No se encontró ningún registro con ese código."}), 404
+
         images = url.url_photos
         videos = url.url_videos
-        dic = {
+
+        return jsonify({
             "images": images,
             "videos": videos
-        }
-        return jsonify(dic)
+        }), 200
 
     except Exception as e:
-        return jsonify(e)
+        # Se puede loguear el error para mayor trazabilidad (si está configurado logging).
+        return jsonify({"error": "Ocurrió un error al intentar obtener los datos."}), 500
 
 
 @bp.route('/view_casos/<code_cp>', methods=['GET'])
@@ -3135,25 +2994,28 @@ def get_info_casos_post_view_ventas(code_cp):
         error_msg = "Error inesperado: {}".format(str(e))
         return jsonify({"error": error_msg}), 500
 
-
 @bp.route('/update_status_tipo_problema', methods=['PUT'])
 @jwt_required()
 @cross_origin()
 def update_estado_casos():
     try:
         params = request.args.to_dict()
-        # Get the one record of the subcases by their cod_problema, in this case, cod_probelma refers to cod_duracion.
+            #Get the one record of the subcases by their cod_problema, in this case, cod_probelma refers to cod_duracion.
         update_status = st_casos_tipo_problema.query().filter(
             st_casos_tipo_problema.empresa == 20,
             st_casos_tipo_problema.cod_comprobante == params["cod_comprobante"],
             st_casos_tipo_problema.codigo_duracion == params["cod_duracion"],
         ).first()
-        # Get the records of the cases by their cod_comprobante
+            #Get the records of the cases by their cod_comprobante
         update_status_st_casos_postventa = st_casos_postventa.query().filter(
             st_casos_postventa.empresa == 20,
             st_casos_postventa.cod_comprobante == params["cod_comprobante"]
         ).first()
-        # Get all record of the subcases by their cod_comprobante except the case that contains the cod_duration, in this case, cod_probelma refers to cod_duracion.
+        flag_first_insertion=0
+        if int(update_status_st_casos_postventa.aplica_garantia) not in (1,0):
+            flag_first_insertion = 1
+
+            #Get all record of the subcases by their cod_comprobante except the case that contains the cod_duration, in this case, cod_probelma refers to cod_duracion.
         all_subcases_status = st_casos_tipo_problema.query().filter(
             st_casos_tipo_problema.empresa == 20,
             st_casos_tipo_problema.cod_comprobante == params["cod_comprobante"],
@@ -3178,9 +3040,17 @@ def update_estado_casos():
                 update_status_st_casos_postventa.estado = 'P'
 
             elif all_states_are_2 == True and params["status"] != '2':
-                update_status_st_casos_postventa.aplica_garantia = params["status"]
-                update_status_st_casos_postventa.estado = 'C'
+                 update_status_st_casos_postventa.aplica_garantia = params["status"]
+                 update_status_st_casos_postventa.estado = 'C'
             db.session.commit()
+            # alert sms 'aplica garantia'
+            if int(update_status_st_casos_postventa.aplica_garantia) == 1 and update_status_st_casos_postventa.cod_pedido in (
+            None, '') and flag_first_insertion ==1:
+                send_mail_postventa(update_status_st_casos_postventa.cod_comprobante, 'P')
+            if int(update_status_st_casos_postventa.aplica_garantia) == 0 and update_status_st_casos_postventa.cod_pedido in (
+            None, '') and flag_first_insertion ==1:
+                send_mail_postventa(update_status_st_casos_postventa.cod_comprobante, 'NP')
+
             return jsonify({"message": "Estado actualizado correctamente"}), 200
         else:
             return jsonify({"error": "No se encontro los resultados"}), 500
@@ -3193,7 +3063,6 @@ def update_estado_casos():
         error_msg = "Error inesperado: {}".format(str(e))
         print(error_msg)
         return jsonify({"error": error_msg}), 500
-
 
 @bp.route('/get_info_provinces', methods=['GET'])
 @jwt_required()
@@ -3241,23 +3110,22 @@ def get_info_cities(codigo_provincia):
         return jsonify({"error": "Error de base de datos al obtener información de ciudades por provincia"}), 500
     except Exception as e:
         # Otros errores que no sean de base de datos pueden ser manejados aquí
-        return jsonify({"error": "Se ha producido un error al procesar la solicitud" + e}), 500
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud"+e}), 500
 
-
-# UPDATE_YEAR_PARTS----------------------------------------------------------------------------
+#UPDATE_YEAR_PARTS----------------------------------------------------------------------------
 @bp.route('/get_info_despiece/motos', methods=['GET'])
 @jwt_required()
 @cross_origin()
-def get_info_despice():  # Retrieve a tree view of motorcycle brands, models and subsystem
-    empresa = request.args.get("empresa")
+def get_info_despice():# Retrieve a tree view of motorcycle brands, models and subsystem
+    empresa= request.args.get("empresa")
     try:
         marcas = st_despiece.query().filter(
-            st_despiece.nivel == 1,
-            st_despiece.cod_despiece != 'A',
-            st_despiece.cod_despiece != 'U',
-            st_despiece.cod_despiece != 'Q',
-            st_despiece.cod_despiece != 'L',
-            st_despiece.empresa == empresa,
+        st_despiece.nivel == 1,
+        st_despiece.cod_despiece != 'A',
+        st_despiece.cod_despiece != 'U',
+        st_despiece.cod_despiece != 'Q',
+        st_despiece.cod_despiece != 'L',
+        st_despiece.empresa      == empresa,
         ).all()
         dict_despiece = {}
 
@@ -3274,9 +3142,9 @@ def get_info_despice():  # Retrieve a tree view of motorcycle brands, models and
 
             for category in categorias:
                 modelos = st_despiece.query().filter(
-                    st_despiece.empresa == empresa,
-                    st_despiece.nivel == 3,
-                    st_despiece.cod_despiece_padre == category.cod_despiece
+                st_despiece.empresa == empresa,
+                st_despiece.nivel == 3,
+                st_despiece.cod_despiece_padre == category.cod_despiece
                 ).all()
                 dict_modelos = {}
 
@@ -3292,8 +3160,8 @@ def get_info_despice():  # Retrieve a tree view of motorcycle brands, models and
                     for subsistema in subsistemas:
                         dict_subsistema_new = {}
                         dict_subsistema_new[subsistema.nombre_e] = subsistema.cod_despiece
-                        dict_subsistema_new["id"] = subsistema.cod_despiece
-                        dict_subsistema_new["name"] = subsistema.nombre_e
+                        dict_subsistema_new["id"]                = subsistema.cod_despiece
+                        dict_subsistema_new["name"]              = subsistema.nombre_e
 
                         dict_subsistema[subsistema.nombre_e] = subsistema.cod_despiece
                         list_subsistemas.append(dict_subsistema_new)
@@ -3307,17 +3175,16 @@ def get_info_despice():  # Retrieve a tree view of motorcycle brands, models and
 
     return jsonify(dict_despiece)
 
-
 @bp.route('/get_info_despiece/parts', methods=['GET'])
 @jwt_required()
 @cross_origin()
-def get_info_despiece_parts():  # Retrieve a tree view of motorcycle parts
+def get_info_despiece_parts(): # Retrieve a tree view of motorcycle parts
     empresa = request.args.get("empresa")
     subsistema = request.args.get("subsistema")
     try:
         parts = st_producto_despiece.query().filter(
             st_producto_despiece.empresa == empresa,
-            st_producto_despiece.cod_despiece == subsistema
+            st_producto_despiece.cod_despiece==subsistema
         ).all()
 
         list_parts = []
@@ -3334,13 +3201,12 @@ def get_info_despiece_parts():  # Retrieve a tree view of motorcycle parts
         return jsonify(dict_parts), 200
 
     except Exception as e:
-        return jsonify({"error": "Se ha producido un error al procesar la solicitud: " + str(e)}), 500
-
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud: " +str(e)}), 500
 
 @bp.route('/update_year_parts', methods=['PUT'])
 @jwt_required()
 @cross_origin()
-def udpateYearParts():  # Function to update the year data fora model, a subsystem, and a single motorcycle part
+def udpateYearParts():#Function to update the year data fora model, a subsystem, and a single motorcycle part
     try:
         from_year = request.args.get('from_year')
         to_year = request.args.get('to_year')
@@ -3352,10 +3218,10 @@ def udpateYearParts():  # Function to update the year data fora model, a subsyst
         user_shineray = request.args.get('user_shineray')
 
         # Imprimir las variables
-        # print(f"from_year: {from_year}")
-        # print(f"to_year: {to_year}")
-        # print(f"flag_id_level: {flag_id_level}")
-        # print(f"data_subsystem: {data_subsystem}")
+        #print(f"from_year: {from_year}")
+        #print(f"to_year: {to_year}")
+        #print(f"flag_id_level: {flag_id_level}")
+        #print(f"data_subsystem: {data_subsystem}")
         if flag_id_level == 1:
             code_subsystem = data_subsystem['cod_subsystem']
             for code in code_subsystem:
@@ -3374,13 +3240,13 @@ def udpateYearParts():  # Function to update the year data fora model, a subsyst
                         existing_register.usuario_modifica = user_shineray
                         existing_register.fecha_modificacion = datetime.now()
                     else:
-                        new_register_anio = st_producto_rep_anio(
-                            empresa=empresa,
-                            anio_desde=from_year,
-                            anio_hasta=to_year,
-                            cod_producto=part.cod_producto,
-                            usuario_crea=user_shineray,
-                            fecha_crea=datetime.now()
+                        new_register_anio= st_producto_rep_anio(
+                            empresa         =   empresa,
+                            anio_desde      =   from_year,
+                            anio_hasta      =   to_year,
+                             cod_producto   =   part.cod_producto,
+                            usuario_crea    =   user_shineray,
+                            fecha_crea      =   datetime.now()
                         )
                         db.session.add(new_register_anio)
             db.session.commit()
@@ -3411,13 +3277,12 @@ def udpateYearParts():  # Function to update the year data fora model, a subsyst
             return jsonify({"succes": "Años actualizados correctamente"}), 200
 
     except Exception as e:
-        return jsonify({"error": "Error en el proceso: " + str(e)}), 500
+        return jsonify({"error":"Error en el proceso: "+str(e)}), 500
 
-
-@bp.route('/get_info_parts_year_by_cod_producto', methods=['GET'])
+@bp.route('/get_info_parts_year_by_cod_producto', methods = ['GET'])
 @jwt_required()
 @cross_origin()
-def get_info_year():  # function to get year about a specific  motorcycle part
+def get_info_year(): #function to get year about a specific  motorcycle part
     try:
         empresa = request.args.get("empresa")
         empresa = int(empresa)
@@ -3436,32 +3301,31 @@ def get_info_year():  # function to get year about a specific  motorcycle part
         return jsonify(dict), 200
 
     except Exception as e:
-        return jsonify({"error": "Se ha producido un error al procesar la solicitud: " + str(e)}), 500
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud: " +str(e)}), 500
 
+#ECOMMERCE INVOICE---------------------------------------------------------------------------------------
 
-# ECOMMERCE INVOICE---------------------------------------------------------------------------------------
-
-# -----------------EN DESARROLLO----------------------------------------------------------->
+#-----------------EN DESARROLLO----------------------------------------------------------->
 @bp.route('/post_invoice_ecommerce', methods=['POST'])
 @jwt_required()
 @cross_origin()
 def post_invoice_ecommerce():
     try:
-        # --------------------Parametros Iniciales----------------------
+        #--------------------Parametros Iniciales----------------------
         p_cod_empresa = 20
         p_cod_agencia = 18
         p_cod_tipo_comprobante_pr = 'PR'
         p_fecha = datetime.today()
 
-        # -------------------Conexion base de Datos-------------------
+        #-------------------Conexion base de Datos-------------------
         db = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
 
-        # -----------------COMPROBACION DE LIQUIDACION--------------------
+        #-----------------COMPROBACION DE LIQUIDACION--------------------
         cod_liquidacion = get_cod_liquidacion(p_cod_empresa, p_cod_agencia, p_fecha, db)
         if cod_liquidacion["success"] == False:
-            raise ValueError('Error en la liquidacion')
+             raise ValueError('Error en la liquidacion')
 
-        # -------------COMPROBACION DE COMPRAS ECOMMERCE-----------------------
+        #-------------COMPROBACION DE COMPRAS ECOMMERCE-----------------------
         query = """
                     SELECT * FROM ST_CAB_DATAFAST WHERE COD_COMPROBANTE IS NULL
                 """
@@ -3471,14 +3335,14 @@ def post_invoice_ecommerce():
         columns = [col[0] for col in cursor.description]
         cases = []
 
-        # ---------------------INGRESO DE CASOS QUE NO ESTEN FACTURADOS--------------------------------
+        #---------------------INGRESO DE CASOS QUE NO ESTEN FACTURADOS--------------------------------
         for row in records:
             cases.append(dict(zip(columns, row)))
         cursor.close()
         db.close()
         resultados = []
 
-        # ---------------------FACTURAR Y DESPACHAR------------------------------------------------------
+        #---------------------FACTURAR Y DESPACHAR------------------------------------------------------
         for i, case in enumerate(cases, start=1):
             resultado = post_invoice_ecommerce_one(case, cod_liquidacion)
             resultados.append({f"case{i}": resultado})
@@ -3486,65 +3350,60 @@ def post_invoice_ecommerce():
         return jsonify(resultados), 200
 
     except Exception as e:
-        return jsonify({"error": "Se ha producido un error al procesar la solicitud: " + str(e)}), 500
-
-
+        return jsonify({"error": "Se ha producido un error al procesar la solicitud: " +str(e)}), 500
 def post_invoice_ecommerce_one(datafast_case, cod_liquidacion):
     try:
-        # -----------------------------Parametros Iniciales------------------------------------------
+#-----------------------------Parametros Iniciales------------------------------------------
         p_cod_empresa = 20
         p_cod_agencia = 18
         p_cod_politica = 4
         p_fecha = datetime.today()
         p_cod_tipo_comprobante_pr = 'PR'
         cod_persona_age = '001076'
-        # p_cod_producto = 'R200-181610GRI'
+        #p_cod_producto = 'R200-181610GRI'
         monto_total = round(float(datafast_case["TOTAL"]), 2)
 
-        # ----------------------------Conexion Base de datos-------------------------------------------
+#----------------------------Conexion Base de datos-------------------------------------------
         db = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         id_transaction = datafast_case["ID_TRANSACTION"]
-        # -----------------------------------------------------------------------------------------
-        cod_productos_data_fast = get_details_by_id_transaction(id_transaction, db)
+#-----------------------------------------------------------------------------------------
+        cod_productos_data_fast = get_details_by_id_transaction(id_transaction,db)
 
-        # ----------------------------Comprobacion de stock y lotes----------------------------------------------
+
+#----------------------------Comprobacion de stock y lotes----------------------------------------------
         dict_lotes = {}
         for cod_producto_data_fast in cod_productos_data_fast:
             result_lote = get_lote_list(p_cod_empresa, p_cod_agencia, cod_producto_data_fast["code"], db)
-            if isinstance(result_lote, list) and len(result_lote) > 0 and cod_producto_data_fast["quantity"] <= \
-                    result_lote[0]['cantidad']:
+            if isinstance(result_lote, list) and len(result_lote) > 0 and cod_producto_data_fast["quantity"]<=result_lote[0]['cantidad'] :
                 dict_lotes[cod_producto_data_fast["code"]] = result_lote[0]['lote']
             else:
                 raise ValueError(f' No hay suficiente existencia Lote: {str(cod_producto_data_fast["code"])}')
 
         cod_comprobante = get_cod_comprobante(p_cod_empresa, p_cod_agencia, p_cod_tipo_comprobante_pr, db)
 
-        # --------------------------------COMPROBACION DE LOS PRECIOS-------------------------------------------------------
+#--------------------------------COMPROBACION DE LOS PRECIOS-------------------------------------------------------
         politica = get_politica_credito_ecommerce(db, p_cod_politica)
         prices_dict = {}
         for p_cod_producto in dict_lotes.keys():
             price = get_price_of_parts_ecommerce(p_cod_producto, db, p_cod_agencia)
-            prices_dict[p_cod_producto] = round(price * politica, 2)
+            prices_dict[p_cod_producto] = round(price*politica, 2)
         iva = get_iva_porcent(db)
         base_imponible = round(float(datafast_case["SUB_TOTAL"]), 2)
 
-        # print(cod_productos_data_fast)
-        # print(prices_dict)
-        # print(dict_lotes)
-        # ----------------------------------------INGRESO DE 1 CASO ST_PROFORMA---------------------------------------
-        insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, db, p_cod_politica, base_imponible,
-                                     iva, monto_total, p_cod_agencia, cod_liquidacion, p_fecha,
-                                     p_cod_tipo_comprobante_pr, cod_persona_age, politica)
+        #print(cod_productos_data_fast)
+        #print(prices_dict)
+        #print(dict_lotes)
+#----------------------------------------INGRESO DE 1 CASO ST_PROFORMA---------------------------------------
+        insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, db, p_cod_politica, base_imponible, iva, monto_total, p_cod_agencia, cod_liquidacion,p_fecha, p_cod_tipo_comprobante_pr, cod_persona_age, politica)
 
-        # ----------------------------------------INGRESO_CASOS_PRODUCTOS---------------------------------------------
+#----------------------------------------INGRESO_CASOS_PRODUCTOS---------------------------------------------
         secuencia = 1
         for cod_producto in cod_productos_data_fast:
-            insert_st_proforma_movimiento(db, cod_comprobante, p_cod_tipo_comprobante_pr, p_cod_empresa, cod_producto,
-                                          secuencia, iva, dict_lotes, p_fecha, politica)
+            insert_st_proforma_movimiento(db, cod_comprobante, p_cod_tipo_comprobante_pr, p_cod_empresa, cod_producto, secuencia, iva, dict_lotes, p_fecha, politica  )
             secuencia += 1
 
-        # print(insert_st_proforma_succes )
-        # raise ValueError("Se ha forzado una excepción debido a una condición específica")
+        #print(insert_st_proforma_succes )
+        #raise ValueError("Se ha forzado una excepción debido a una condición específica")
         db.commit()
         db.close()
         print(cod_comprobante)
@@ -3555,9 +3414,7 @@ def post_invoice_ecommerce_one(datafast_case, cod_liquidacion):
             db.rollback()
             error_message = f"error: se ha producido un error, details: {str(e)}"
         return error_message
-
-
-def get_cod_comprobante(p_cod_empresa, p_cod_agencia, p_cod_tipo_comprobante_pr, db):
+def get_cod_comprobante(p_cod_empresa, p_cod_agencia, p_cod_tipo_comprobante_pr,db):
     try:
         cursor = db.cursor()
         result = cursor.var(cx_Oracle.STRING)
@@ -3571,11 +3428,9 @@ def get_cod_comprobante(p_cod_empresa, p_cod_agencia, p_cod_tipo_comprobante_pr,
                        p_cod_agencia=p_cod_agencia)
         cod_comprobante = result.getvalue()
         cursor.close()
-        return {"success": True, "value": cod_comprobante}
+        return {"success":True, "value":cod_comprobante}
     except Exception as e:
         return f"Unexpected error: {str(e)}"
-
-
 def get_lote_list(p_cod_empresa, p_cod_agencia, p_cod_producto, db):
     try:
         cursor = db.cursor()
@@ -3609,8 +3464,6 @@ def get_lote_list(p_cod_empresa, p_cod_agencia, p_cod_producto, db):
         return lote_list
     except Exception as e:
         return None
-
-
 def get_cod_liquidacion(p_cod_empresa, p_cod_agencia, p_fecha, db):
     try:
         # Conexión a la base de datos
@@ -3636,8 +3489,6 @@ def get_cod_liquidacion(p_cod_empresa, p_cod_agencia, p_fecha, db):
         return {"success": True, "value": cod_liquidacion}
     except Exception as e:
         return {"success": False, "error": str(e)}
-
-
 def get_details_by_id_transaction(id_transaction, db):
     try:
         cursor = db.cursor()
@@ -3654,10 +3505,8 @@ def get_details_by_id_transaction(id_transaction, db):
 
         return results
     except Exception as e:
-        return str(e)
-
-
-def get_price_of_parts_ecommerce(p_cod_producto, db, p_cod_agencia):
+        return  str(e)
+def get_price_of_parts_ecommerce(p_cod_producto,db, p_cod_agencia):
     try:
         cursor = db.cursor()
         sql = """
@@ -3691,8 +3540,6 @@ def get_price_of_parts_ecommerce(p_cod_producto, db, p_cod_agencia):
         return precio
     except Exception as e:
         return str(e)
-
-
 def get_iva_porcent(db):
     try:
         cursor = db.cursor()
@@ -3707,11 +3554,7 @@ def get_iva_porcent(db):
         return iva
     except Exception as e:
         return str(e)
-
-
-def insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, db, p_cod_politica, base_imponible, iva,
-                                 monto_total, p_cod_agencia, cod_liquidacion, p_fecha, p_cod_tipo_comprobante_pr,
-                                 cod_persona_age, politica):
+def insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, db, p_cod_politica, base_imponible, iva, monto_total, p_cod_agencia, cod_liquidacion,p_fecha, p_cod_tipo_comprobante_pr, cod_persona_age, politica):
     try:
         # Definiendo las variables necesarias
         cod_politica = p_cod_politica
@@ -3734,7 +3577,7 @@ def insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, 
         entrada = 0
         otros = 0
         descuento = 0
-        iva_pedido = round((monto_total) * (iva / (100 + iva)), 2)
+        iva_pedido = round((monto_total)*(iva/(100+iva)), 2)
         financiamiento = 0
         valor = monto_total
         es_anulado = 0
@@ -3779,7 +3622,7 @@ def insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, 
 
         cursor.execute(sql, {
             'EMPRESA': p_cod_empresa, 'COD_COMPROBANTE': cod_comprobante, 'TIPO_COMPROBANTE': tipo_comprobante,
-            'COD_AGENCIA': p_cod_agencia, 'COD_FORMA_PAGO': cod_forma_pago, 'COMPROBANTE_MANUAL': comprobante_manual,
+             'COD_AGENCIA':p_cod_agencia, 'COD_FORMA_PAGO': cod_forma_pago, 'COMPROBANTE_MANUAL': comprobante_manual,
             'COD_DIVISA': cod_divisa, 'COD_TIPO_IDENTIFICACION': cod_tipo_identificacion,
             'COD_TIPO_PERSONA': cod_tipo_persona, 'COD_PERSONA': cod_persona,
             'COD_TIPO_PERSONA_AGE': cod_tipo_persona_age, 'COD_PERSONA_AGE': cod_persona_age,
@@ -3793,8 +3636,7 @@ def insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, 
             'CANTIDAD_MOV_COMPLETO': cantidad_mov_completo, 'POR_INTERES': por_intereses,
             'BASE_IMPONIBLE': base_imponible, 'BASE_EXCENTA': base_excenta,
             'COD_TIPO_COMPROBANTE_REF': cod_tipo_comprobante_ref, 'FECHA_SOL_VER_TELEFONICA': fecha_sol_ver_telefonica,
-            'ES_BANCO': es_banco, 'ICE': ice, 'COD_LIQUIDACION': cod_liquidacion['value'], 'COD_POLITICA': cod_politica,
-            'REBATE': rebate, 'TIPO_COMPROBANTE_FACTURA': tipo_comprobante_factura
+            'ES_BANCO': es_banco, 'ICE': ice, 'COD_LIQUIDACION': cod_liquidacion['value'], 'COD_POLITICA': cod_politica,'REBATE': rebate, 'TIPO_COMPROBANTE_FACTURA': tipo_comprobante_factura
         })
 
         db.commit()
@@ -3810,31 +3652,28 @@ def insert_st_proforma_ecommerce(p_cod_empresa, cod_comprobante, datafast_case, 
             db.rollback()
         success = 'false'
         return False
-
-
-def insert_st_proforma_movimiento(db, cod_comprobante, p_cod_tipo_comprobante_pr, p_cod_empresa, cod_producto,
-                                  secuencia, iva, dict_lotes, p_fecha, politica):
+def insert_st_proforma_movimiento(db, cod_comprobante, p_cod_tipo_comprobante_pr, p_cod_empresa, cod_producto, secuencia, iva, dict_lotes, p_fecha,  politica ):
     cod_unidad = 'U'
     es_serie = 0
     cod_estado_producto = 'A'
     cantidad = 1.00
     cantidad_serie = 0
     costo = 0.0
-    precio_lista = round(cod_producto['price'] / politica, 2)  # PRECIO SIN RECARGO DE TARJETA
+    precio_lista = round(cod_producto['price']/politica, 2)    #PRECIO SIN RECARGO DE TARJETA
     descuento = 0.0
     financiamiento = 0.0
-    valor = cod_producto['price']  # precio*1.0224 #PRECIO FINAL CON REGARGO TARJETA
-    iva = round(cod_producto['price'] * (iva / (100 + iva)), 2)
+    valor = cod_producto['price']     #precio*1.0224 #PRECIO FINAL CON REGARGO TARJETA
+    iva = round(cod_producto['price']*(iva/(100+iva)), 2)
     rebate = 0.0
     por_descuento = 0.0
     es_iva = 1
     aplica_promocion = 0
     ice = 0.0
-    tipo_comprobante_lote = 'LT'
+    tipo_comprobante_lote ='LT'
     cod_porcentaje_iva = 4
     cod_comprobante_lote = dict_lotes[cod_producto['code']]
     cod_comprobante = cod_comprobante['value']
-    cod_producto = cod_producto['code']
+    cod_producto    = cod_producto['code']
 
     try:
         cursor = db.cursor()
@@ -3893,8 +3732,6 @@ def insert_st_proforma_movimiento(db, cod_comprobante, p_cod_tipo_comprobante_pr
         if db:
             db.rollback()
         return False
-
-
 def get_politica_credito_ecommerce(db, p_cod_politica):
     try:
         # Establece la conexión
@@ -3938,7 +3775,6 @@ def post_change_price_ecommerce():
         p_cod_politica = 48
         politica = get_politica_credito_ecommerce(db1, p_cod_politica)
         price = round(float(price) / politica, 3)
-        print(price)
         if not price:
             return jsonify({"error": "Missing price"}), 400
 
@@ -3959,7 +3795,7 @@ def post_change_price_ecommerce():
                 secuencia = result["p_secuencia"]
 
                 # Insertar precios en el eCommerce
-                status_insert = insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod_producto)
+                status_insert = insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod_producto )
             else:
                 return jsonify({"error": f"Product not found: {cod_producto}"}), 404
 
@@ -3969,8 +3805,6 @@ def post_change_price_ecommerce():
         db.session.rollback()  # Revierte los cambios en caso de error
         error_msg = "An error occurred while processing the request."
         return jsonify({"error": error_msg, "details": str(e)}), 500
-
-
 def generar_listas_de_precio(p_cod_empresa, p_user, p_tipo_generacion, p_useridc, db1):
     try:
         # Conexión a la base de datos
@@ -3990,19 +3824,16 @@ def generar_listas_de_precio(p_cod_empresa, p_user, p_tipo_generacion, p_useridc
                                                                 p_observaciones => '',
                                                                 p_secuencia => :p_secuencia);
                         end;
-                """, p_cod_empresa=p_cod_empresa, p_user=p_user, p_tipo_generacion=p_tipo_generacion,
-                       p_useridc=p_useridc, p_secuencia=p_secuencia)
+                """, p_cod_empresa=p_cod_empresa, p_user=p_user, p_tipo_generacion=p_tipo_generacion, p_useridc=p_useridc, p_secuencia=p_secuencia)
 
-        # Obtener el valor del parámetro de salida
+        #Obtener el valor del parámetro de salida
         secuencia = p_secuencia.getvalue()
 
-        # Cerrar el cursor y la conexión
+        #Cerrar el cursor y la conexión
         cursor.close()
         return {"success": True, "p_secuencia": secuencia}
     except Exception as e:
         return {"success": False, "error": str(e)}
-
-
 def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod_producto):
     try:
         # Define the records with the current date and time
@@ -4011,18 +3842,10 @@ def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod
         current_datetime_without_hours = current_datetime.date()
 
         records = [
-            (p_cod_empresa, cod_producto_selected, 'CLI1', 'CF', 'REG1', 'COS', p_cod_agencia, 'U', 'EFE', 'DOLARES',
-             'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None,
-             current_datetime, 'JPALAGUACHI', 'TS1PROD'),
-            (p_cod_empresa, cod_producto_selected, 'CLI1', 'CF', 'REG1', 'COS', p_cod_agencia, 'U', 'TCR', 'DOLARES',
-             'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None,
-             current_datetime, 'JPALAGUACHI', 'TS1PROD'),
-            (p_cod_empresa, cod_producto_selected, 'CLI1', 'TA', 'REG1', 'COS', p_cod_agencia, 'U', 'EFE', 'DOLARES',
-             'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None,
-             current_datetime, 'JPALAGUACHI', 'TS1PROD'),
-            (p_cod_empresa, cod_producto_selected, 'CLI1', 'TA', 'REG1', 'COS', p_cod_agencia, 'U', 'TCR', 'DOLARES',
-             'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None,
-             current_datetime, 'JPALAGUACHI', 'TS1PROD')
+            (p_cod_empresa, cod_producto_selected, 'CLI1', 'CF', 'REG1', 'COS', p_cod_agencia, 'U', 'EFE', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD'),
+            (p_cod_empresa, cod_producto_selected, 'CLI1', 'CF', 'REG1', 'COS', p_cod_agencia, 'U', 'TCR', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD'),
+            (p_cod_empresa, cod_producto_selected, 'CLI1', 'TA', 'REG1', 'COS', p_cod_agencia, 'U', 'EFE', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD'),
+            (p_cod_empresa, cod_producto_selected, 'CLI1', 'TA', 'REG1', 'COS', p_cod_agencia, 'U', 'TCR', 'DOLARES', 'R', current_datetime_without_hours, None, price, None, 0, price, 0, 'JPJ', secuencia, 'N', None, None, current_datetime, 'JPALAGUACHI', 'TS1PROD')
         ]
 
         for record in records:
@@ -4035,9 +3858,9 @@ def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod
 
             if existing_entry:
                 # If the record exists, update its price and other necessary fields
-                existing_entry.NUMERO = record[13]
+                existing_entry.valor = record[13]
                 existing_entry.precio = record[16]
-                # existing_entry.secuencia_generacion = record[19]
+                #existing_entry.secuencia_generacion = record[19]
                 existing_entry.aud_fecha = record[23]
                 existing_entry.aud_usuario = record[24]
                 existing_entry.aud_terminal = record[25]
@@ -4046,8 +3869,7 @@ def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod
                 new_entry = st_lista_precio(
                     empresa=record[0], cod_producto=record[1], cod_modelo_cli=record[2], cod_item_cli=record[3],
                     cod_modelo_zona=record[4], cod_item_zona=record[5], cod_agencia=record[6], cod_unidad=record[7],
-                    cod_forma_pago=record[8], cod_divisa=record[9], estado_generacion=record[10],
-                    fecha_inicio=record[11],
+                    cod_forma_pago=record[8], cod_divisa=record[9], estado_generacion=record[10], fecha_inicio=record[11],
                     fecha_final=record[12], valor=record[13], iva=record[14], ice=record[15], precio=record[16],
                     cargos=record[17], useridc=record[18], secuencia_generacion=record[19], estado_vida=record[20],
                     valor_alterno=record[21], rebate=record[22], aud_fecha=record[23], aud_usuario=record[24],
@@ -4063,9 +3885,8 @@ def insert_precios_ecommerce(p_cod_empresa, p_cod_agencia, price, secuencia, cod
         session.rollback()
         return {"success": False, "error": str(e)}
 
-
-# --------------------------------------------------------------------------------------------------------------------
-@bp.route('/get_invoice_ecommerce', methods=['GET'])
+#--------------------------------------------------------------------------------------------------------------------
+@bp.route('/get_invoice_ecommerce', methods = ['GET'])
 @jwt_required()
 @cross_origin()
 def get_sell_ecommerce():
@@ -4087,22 +3908,22 @@ def get_sell_ecommerce():
 
         if option == 'DATAFAST' and invoiced == 1:
             results = st_cab_datafast.query().filter(st_cab_datafast.empresa == 20,
-                                                     st_cab_datafast.cod_comprobante.isnot(None))
+            st_cab_datafast.cod_comprobante.isnot(None))
             model_class = st_cab_datafast
 
         elif option == 'DEUNA' and invoiced == 1:
             results = st_cab_deuna.query().filter(st_cab_deuna.empresa == 20,
-                                                  st_cab_deuna.cod_comprobante.isnot(None))
+            st_cab_deuna.cod_comprobante.isnot(None))
             model_class = st_cab_deuna
 
         elif option == 'DATAFAST' and invoiced == 0:
             results = st_cab_datafast.query().filter(st_cab_datafast.empresa == 20,
-                                                     st_cab_datafast.cod_comprobante == None)
+            st_cab_datafast.cod_comprobante == None)
             model_class = st_cab_datafast
 
         elif option == 'DEUNA' and invoiced == 0:
             results = st_cab_deuna.query().filter(st_cab_deuna.empresa == 20,
-                                                  st_cab_deuna.cod_comprobante == None)
+            st_cab_deuna.cod_comprobante == None)
             model_class = st_cab_deuna
 
         else:
@@ -4156,8 +3977,8 @@ def get_sell_ecommerce():
                 })
             if option == 'DEUNA':
                 result_data.update({
-                    "cost_shiping": result.cost_shiping,
-                })
+                        "cost_shiping": result.cost_shiping,
+                    })
 
             results_list.append(result_data)
 
@@ -4165,7 +3986,6 @@ def get_sell_ecommerce():
     except Exception as e:
         print(e)
         return jsonify({"error": str(e)}), 500
-
 
 @bp.route('/buy_parts_ecommerce/<id_code>', methods=['GET'])
 @jwt_required()
@@ -4202,7 +4022,6 @@ def buy_parts_ecommerce(id_code):
         error_msg = "An error occurred while processing the request."
         return jsonify({"error": error_msg, "details": str(e)}), 500
 
-
 @bp.route('/get_methods_payment_ecommerce', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -4225,7 +4044,6 @@ def get_ecommerce_payment_method():
     except Exception as e:
         error_msg = "An error occurred while processing the request."
         return jsonify({"error": error_msg, "details": str(e)}), 500
-
 
 @bp.route('/post_cod_comprobante_ecommerce', methods=['POST'])
 @jwt_required()
@@ -4287,6 +4105,11 @@ def post_cod_comprobante_ecommerce_credito_directo():
         db.session.rollback()  # Revierte los cambios en caso de error
         error_msg = "An error occurred while processing the request."
         return jsonify({"error": error_msg, "details": str(e)}), 500
+
+
+
+
+
 
 
 @bp.route('/post_image_material_imagen_despiece', methods=['POST'])
@@ -4364,9 +4187,9 @@ def post_image_material_imagen_despiece():
         return jsonify({"error": error_msg, "details": str(e)}), 500
 
 
-# -----------------------------------UPDATE MODELOS_MOTOS MODELOS_DESPIECE------------------------------------------------------------
+#-----------------------------------UPDATE MODELOS_MOTOS MODELOS_DESPIECE------------------------------------------------------------
 
-@bp.route('/get_list_model_motorcycle', methods=['GET'])
+@bp.route('/get_list_model_motorcycle', methods = ['GET'])
 @jwt_required()
 @cross_origin()
 def get_list_model_motorcycle():
@@ -4504,11 +4327,11 @@ def post_modelo_crecimiento_bi():
         # Acceder a los datos directamente
         empresa = data['empresa']
         cod_modelo = data['cod_modelo']
-        # valor = data['valor']
+        #valor = data['valor']
         periodo = data['periodo']
         cod_despiece = data['cod_despiece']
         nivel = data.get('nivel', 3)  # Valor por defecto es 3 si no se proporciona
-        # anio = data['anio']
+        #anio = data['anio']
 
         # Verificar si el registro ya existe
         existing_record = st_modelo_crecimiento_bi.query().filter_by(
@@ -4519,20 +4342,20 @@ def post_modelo_crecimiento_bi():
 
         if existing_record:
             # Actualizar el registro existente
-            # existing_record.valor = valor
+            #existing_record.valor = valor
             existing_record.cod_despiece = cod_despiece
             existing_record.nivel = nivel
-            # existing_record.anio = anio
+            #existing_record.anio = anio
         else:
             # Crear un nuevo registro
             nuevo_modelo_crecimiento_bi = st_modelo_crecimiento_bi(
                 empresa=empresa,
                 cod_modelo=cod_modelo,
-                # valor=valor,
+                #valor=valor,
                 periodo=periodo,
                 cod_despiece=cod_despiece,
                 nivel=nivel,
-                # anio=anio
+                #anio=anio
             )
             db.session.add(nuevo_modelo_crecimiento_bi)
 
@@ -4563,7 +4386,7 @@ def get_modelo_crecimiento_bi():
             records_data.append({
                 "empresa": record.empresa,
                 "cod_modelo": record.cod_modelo,
-                "valor": record.NUMERO,
+                "valor": record.valor,
                 "periodo": record.periodo,
                 "cod_despiece": record.cod_despiece,
                 "nivel": record.nivel,
@@ -4608,7 +4431,7 @@ def update_modelo_crecimiento_bi():
         if anio is not None:
             record.anio = anio
         if valor is not None:
-            record.NUMERO = valor
+            record.valor = valor
 
         # Guardar los cambios en la base de datos
         db.session.commit()
@@ -4619,9 +4442,7 @@ def update_modelo_crecimiento_bi():
         error_msg = "An error occurred while processing the request."
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
-
-
-# ---------------------------------------TRANSPORT ECOMMERCE---------------------------------------------
+#---------------------------------------TRANSPORT ECOMMERCE---------------------------------------------
 @bp.route('/create_transportista_ecommerce', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -4643,6 +4464,7 @@ def create_transportista():
             print('error')
             return jsonify({"error": "Los campos cod_transportista, empresa, nombre y apellido1 son requeridos"}), 400
 
+
         new_transportista = st_transportistas(
             cod_transportista=cod_transportista,
             empresa=empresa,
@@ -4656,6 +4478,7 @@ def create_transportista():
             activo_ecommerce=activo_ecommerce
         )
 
+
         db.session.add(new_transportista)
         db.session.commit()
 
@@ -4665,7 +4488,6 @@ def create_transportista():
         error_msg = "An error occurred while creating the transportista."
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
-
 
 @bp.route('/update_transportista_ecommerce', methods=['PUT'])
 @jwt_required()
@@ -4693,8 +4515,7 @@ def update_transportista():
         transportista.telefono = data.get('telefono', transportista.telefono)
         transportista.es_activo = data.get('es_activo', transportista.es_activo)
         transportista.placa = data.get('placa', transportista.placa)
-        transportista.cod_tipo_identificacion = data.get('cod_tipo_identificacion',
-                                                         transportista.cod_tipo_identificacion)
+        transportista.cod_tipo_identificacion = data.get('cod_tipo_identificacion', transportista.cod_tipo_identificacion)
         transportista.activo_ecommerce = data.get('activo_ecommerce', transportista.activo_ecommerce)
 
         db.session.commit()
@@ -4705,7 +4526,6 @@ def update_transportista():
         error_msg = "An error occurred while updating the transportista."
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
-
 
 @bp.route('/delete_transportista_ecommerce', methods=['DELETE'])
 @jwt_required()
@@ -4736,7 +4556,6 @@ def delete_transportista():
         error_msg = "An error occurred while deleting the transportista."
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
-
 
 @bp.route('/get_transportistas_ecommerce', methods=['GET'])
 @jwt_required()
@@ -4779,9 +4598,7 @@ def get_transportistas():
         error_msg = "An error occurred while fetching transportistas."
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
-
-
-# ---------------------------------------TRANSPORT ECOMMERCE---------------------------------------------////
+#---------------------------------------TRANSPORT ECOMMERCE---------------------------------------------////
 @bp.route('/get_cab_credito_directo', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -4828,7 +4645,6 @@ def get_cab_credito_directo():
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
 
-
 @bp.route('/update_cab_credito_directo', methods=['PUT'])
 @jwt_required()
 @cross_origin()
@@ -4864,7 +4680,6 @@ def update_cab_credito_directo():
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
 
-
 @bp.route('/get_det_credito_directo', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -4873,7 +4688,7 @@ def get_det_credito_directo():
         # Obtener todos los registros del detalle
         id_transation = request.args.get('id_transaction')
         records = st_det_credito_directo.query().filter(
-            st_det_credito_directo.id_transaction == id_transation
+            st_det_credito_directo.id_transaction==id_transation
         ).all()
         # Convertir los registros a una lista de diccionarios
         records_data = []
@@ -4891,7 +4706,6 @@ def get_det_credito_directo():
         error_msg = "An error occurred while processing the request."
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
-
 
 @bp.route('/get_invoice_b2b', methods=['GET'])
 @jwt_required()
@@ -4993,7 +4807,6 @@ def get_invoice_b2b():
         print(e)
         return jsonify({"error": str(e)}), 500
 
-
 @bp.route('/buy_parts_b2b/<id_code>', methods=['GET'])
 @jwt_required()
 @cross_origin()
@@ -5029,7 +4842,6 @@ def buy_parts_b2b(id_code):
         error_msg = "An error occurred while processing the request."
         return jsonify({"error": error_msg, "details": str(e)}), 500
 
-
 @bp.route('/post_cod_comprobante_ecommerce_b2b', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -5059,7 +4871,6 @@ def post_cod_comprobante_ecommerce_b2b():
         db.session.rollback()  # Revierte los cambios en caso de error
         error_msg = "An error occurred while processing the request."
         return jsonify({"error": error_msg, "details": str(e)}), 500
-
 
 @bp.route('/get_balance_data_client_b2b', methods=['GET'])
 @jwt_required()
@@ -5092,8 +4903,6 @@ def get_balance_data():
     except Exception as e:
         logging.error(f"Error al obtener los datos de balance: {str(e)}")
         return jsonify({"error": "Ocurrió un error al procesar la solicitud"}), 500
-
-
 def get_balance_function(session, function_name, empresa, client_id):
     try:
         # Ejecuta la función desde DUAL para obtener el resultado
@@ -5183,4 +4992,32 @@ def get_product_details_without_images():
         logging.error(f"Error al obtener detalles del producto: {str(e)}")
         return jsonify({"error": "Ocurrió un error al procesar la solicitud"}), 500
 
-# -----------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#-----------------------------------------------------------------------------------------------

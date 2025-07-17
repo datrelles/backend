@@ -1,5 +1,5 @@
 # coding: utf-8
-from sqlalchemy import CHAR, Column, DateTime, Index, VARCHAR, text, Boolean, Index
+from sqlalchemy import CHAR,  VARCHAR,  Boolean, Column, String, Numeric, DateTime, Index, UniqueConstraint, ForeignKeyConstraint, text
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
@@ -283,3 +283,58 @@ class stProformaImpFp(Base):
             print(f"Error al eliminar el registro: {e}")
             db.session.rollback()
             return False
+
+class st_prod_packing_list(Base):
+    __tablename__ = 'st_prod_packing_list'
+    __table_args__ = (
+        # Unique constraints
+        UniqueConstraint('cod_chasis', name='UK_PROD_PACKING_LIST_CHASIS'),
+        UniqueConstraint('secuencia_impronta', name='UK_PROD_PACKING_LIST_IMPRONT'),
+        UniqueConstraint('cod_motor', name='UK_PROD_PACKING_LIST_MOTOR'),
+        # Indexes as defined in the DDL
+        Index('IND$_PROD_PACKI_LIST_MOTOR', 'cod_motor'),
+        Index('IND$_PROD_PACKI_LIST_MOTOR2', 'cod_motor', 'cod_producto', 'empresa'),
+        Index('IND$_PROD_PACKI_LIST_PRODUCTO', 'cod_producto', 'empresa'),
+        Index('NX_CAMV', 'camvcpn', 'empresa'),
+        # Composite foreign key constraint referencing the PRODUCTO table in the same schema
+        ForeignKeyConstraint(
+            ['empresa', 'cod_producto'],
+            ['stock.producto.empresa', 'stock.producto.cod_producto'],
+            name='FK_PROD_PACKING_LIST_PRODUCTO'
+        ),
+        {'schema': 'stock'}
+    )
+
+    # Primary key columns
+    cod_chasis = Column(String(30), primary_key=True, nullable=False)
+    cod_producto = Column(String(14), primary_key=True, nullable=False)
+    empresa = Column(Numeric(2, 0, asdecimal=False), primary_key=True, nullable=False)
+
+    # Other columns defined in the DDL
+    cod_motor = Column(String(30), nullable=False)
+    fecha = Column(DateTime, nullable=False)
+    es_disponible = Column(Numeric(1, 0, asdecimal=False))
+    es_anulado = Column(Numeric(1, 0, asdecimal=False))
+    adicionado_por = Column(String(30), nullable=False, server_default=text("USER"))
+    fecha_adicion = Column(DateTime, nullable=False, server_default=text("SYSDATE"))
+    modificado_por = Column(String(30))
+    fecha_modificacion = Column(DateTime)
+    eliminado_por = Column(String(30))
+    fecha_elimiacion = Column(DateTime)  # Note: DDL typo "fecha_elimiacion"; usually "fecha_eliminacion"
+    camvcpn = Column(String(20))
+    anio = Column(Numeric(4, 0, asdecimal=False))
+    cod_color = Column(String(3))
+    marca = Column(String(30))
+    cilindraje = Column(Numeric(8, 2, asdecimal=True))
+    tonelaje = Column(Numeric(14, 2, asdecimal=True), server_default=text("0.25"))
+    ocupantes = Column(Numeric(3, 0, asdecimal=False), server_default=text("2"))
+    modelo = Column(String(100))
+    clase = Column(String(100), server_default=text("'MOTOCICLETA'"))
+    subclase = Column(String(100))
+    pais_origen = Column(String(50), server_default=text("'CHINA'"))
+    secuencia_impronta = Column(Numeric(14, 0, asdecimal=False))
+    potencia = Column(String(10), comment='USADA PARA VEHICULOS ELECTRICOS')
+
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
