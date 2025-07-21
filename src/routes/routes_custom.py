@@ -2659,6 +2659,20 @@ def desintegrate_combo():
             cod_comprobante = result_var.getvalue()
             cur.close()
 
+            lote = StLote(
+                empresa=empresa,
+                tipo_comprobante='IC',
+                cod_comprobante=cod_comprobante,
+                fecha=date.today(),
+                descripcion='Lote para desarmado de combos',
+                tipo_lote='IN',
+                cod_agencia=cod_agencia,
+                usuario_aud=usuario,
+                fecha_aud=date.today()
+            )
+            db.session.add(lote)
+            db.session.commit()
+
             cursor = db1.cursor()
             cursor.execute("""
                                                 SELECT Tipo_Comprobante_Lote, Cod_Comprobante_Lote, Fecha_Ingreso
@@ -2992,8 +3006,8 @@ def desintegrate_combo():
                             cod_promocion=None,
                             ubicacion_bodega=None,
                             cantidad_promocion=None,
-                            tipo_comprobante_lote=tipo_comprobante_lote,
-                            cod_comprobante_lote=cod_comprobante_lote,
+                            tipo_comprobante_lote='IC',
+                            cod_comprobante_lote=cod_comprobante,
                             descuento_regalo=None,
                             precio_unitario_xml=None,
                             descuento_xml=None,
@@ -3049,8 +3063,8 @@ def desintegrate_combo():
                             cod_promocion=None,
                             ubicacion_bodega=None,
                             cantidad_promocion=None,
-                            tipo_comprobante_lote=tipo_comprobante_lote,
-                            cod_comprobante_lote=cod_comprobante_lote,
+                            tipo_comprobante_lote='IC',
+                            cod_comprobante_lote=cod_comprobante,
                             descuento_regalo=None,
                             precio_unitario_xml=None,
                             descuento_xml=None,
@@ -3094,7 +3108,7 @@ def obtener_lotes():
                                             S.Tipo_Comprobante_Lote,
                                             S.Cod_Comprobante_Lote,
                                             S.Cantidad,
-                                            L.Fecha_Ingreso
+                                            L.Fecha_ingreso
                                             FROM
                                                 st_inventario_lote S
                                             JOIN
@@ -3130,6 +3144,62 @@ def obtener_lotes():
 
         if not lotes:
             return jsonify({'error': 'Se creará un nuevo lote para el producto'}), 500
+
+        return jsonify({'lotes': lotes})
+
+    except Exception as e:
+        logger.exception(f"Error al obtener : {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@bpcustom.route('/lotes_by_prod_d', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def obtener_lotes_d():
+    try:
+        data = request.get_json()
+        cod_producto = data.get('cod_producto', None)
+        empresa = data.get('empresa', None)
+        cod_agencia = data.get('cod_agencia', None)
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cursor = db1.cursor()
+        cursor.execute("""
+                                            SELECT
+                                            S.Tipo_Comprobante_Lote,
+                                            S.Cod_Comprobante_Lote,
+                                            S.Cantidad,
+                                            L.Fecha_creacion
+                                            FROM
+                                                st_inventario_lote S
+                                            JOIN
+                                                ST_Producto_Lote L
+                                            ON
+                                                L.Cod_Producto = S.Cod_Producto
+                                                AND L.Cod_Comprobante_Lote = S.Cod_Comprobante_Lote
+                                                AND L.Tipo_Comprobante_Lote = S.Tipo_Comprobante_Lote
+                                                AND L.Cod_Tipo_Inventario = 1
+                                                AND L.COD_TIPO_INVENTARIO = S.COD_TIPO_INVENTARIO
+                                            WHERE
+                                                S.Cod_AAMM = 0
+                                                AND S.Cod_Bodega = :param1 
+                                                AND S.Empresa = :param2 
+                                                AND S.Cod_Producto = :param3 
+                                                AND S.Cantidad > 0 
+                                            ORDER BY 
+                                                L.Fecha_creacion DESC 
+                                                            """,
+                       param1=cod_agencia, param2=empresa, param3=cod_producto)
+
+        lotes_prod = cursor.fetchall()
+        lotes = []
+
+        for lote in lotes_prod:
+            lote_dict = {
+                'tipo_comprobante_lote': lote[0],
+                'cod_comprobante_lote': lote[1],
+                'cantidad': lote[2],
+                'fecha_ingreso': str(lote[3])
+            }
+            lotes.append(lote_dict)
 
         return jsonify({'lotes': lotes})
 
