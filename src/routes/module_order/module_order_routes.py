@@ -38,6 +38,7 @@ def get_credit_policies():
           AND b.cod_politica = a.cod_politica
           AND a.empresa = :empresa
           AND b.es_activo = 1
+          AND a.es_web    = 1
           AND EXISTS (
                 SELECT 'x'
                   FROM stock.tg_agencia age
@@ -773,9 +774,10 @@ def get_vendedores_agencia():
     Query Parameters:
         empresa (int): Company code (required)
         cod_agencia (str): Agency code (required)
+        user_shineray (str, optional): User Oracle code to search in TG_USUARIO_VEND
 
     Returns:
-        200: JSON list of salespersons [{"nombre": ..., "cod_persona": ...}, ...]
+        200: JSON list of salespersons [{"nombre": ..., "cod_persona_vendor": ...}, ...]
         400: If parameters are missing or invalid
         500: On internal/database error
     """
@@ -783,6 +785,7 @@ def get_vendedores_agencia():
     try:
         empresa_str = request.args.get('empresa')
         cod_agencia = request.args.get('cod_agencia')
+        user_shineray = request.args.get('user_shineray')
 
         if not all([empresa_str, cod_agencia]):
             return jsonify({"error": "Missing required parameters (empresa, cod_agencia)"}), 400
@@ -795,6 +798,30 @@ def get_vendedores_agencia():
         c = get_oracle_connection()
         cur = c.cursor()
 
+        # ----------- NUEVA LOGICA: Si viene user_shineray, buscar en TG_USUARIO_VEND -----------
+        if user_shineray:
+            sql_user_vend = """
+                SELECT p.cod_persona, p.nombre
+                FROM COMPUTO.tg_usuario_vend v
+                JOIN persona p
+                  ON p.cod_persona = v.cod_persona
+                 AND p.cod_tipo_persona = v.cod_tipo_persona
+                 AND p.empresa = v.empresa
+                WHERE v.usuario_oracle = :user_shineray
+                  AND v.cod_agencia = :cod_agencia
+                  AND v.empresa = :empresa
+            """
+            cur.execute(sql_user_vend, user_shineray=user_shineray, cod_agencia=cod_agencia, empresa=empresa)
+            row = cur.fetchone()
+            if row:
+                # Si encuentra, retorna ese registro (JSON single object, puedes cambiar a list si lo prefieres)
+                return jsonify({
+                    "cod_persona_vendor": row[0],
+                    "nombre": row[1]
+                }), 200
+            # Si no encuentra, sigue flujo normal
+
+        # ------------------- FLUJO ORIGINAL -------------------
         sql = """
         SELECT a.nombre, a.cod_persona
         FROM persona a,
