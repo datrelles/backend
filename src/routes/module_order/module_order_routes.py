@@ -2071,6 +2071,7 @@ def listar_pedidos_por_fecha():
                 AND P.EMPRESA = C.EMPRESA
             WHERE C.FECHA_PEDIDO BETWEEN :ini AND :fin
               AND C.EMPRESA = 20
+              AND C.COD_TIPO_PEDIDO like 'PE'
         """
         params = {"ini": fecha_ini_dt, "fin": fecha_fin_dt}
 
