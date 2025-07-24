@@ -23,6 +23,7 @@ bpcom = Blueprint('routes_com', __name__)
 
 logger = logging.getLogger(__name__)
 
+
 @bpcom.route('/asig', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -67,13 +68,13 @@ def obtener_asignacion():
             "cantidad_minima": result.cantidad_minima,
             "porcentaje_maximo": result.porcentaje_maximo,
             "producto": result.producto,
-            "cliente": result.cliente,
+            "cliente": result.st_cliente,
         }
         for result in asignaciones
     ]
 
-
     return jsonify(serialized_asignaciones)
+
 
 @bpcom.route('/asig_new', methods=['POST'])
 @jwt_required()
@@ -90,11 +91,13 @@ def crear_asignacion():
         return jsonify({'error': 'Faltan datos necesarios para crear la asignación'}), 400
 
     query = db.session.query().filter(
-        StAsignacionCupo.empresa == empresa, StAsignacionCupo.ruc_cliente == ruc_cliente, StAsignacionCupo.cod_producto == cod_producto
+        StAsignacionCupo.empresa == empresa, StAsignacionCupo.ruc_cliente == ruc_cliente,
+        StAsignacionCupo.cod_producto == cod_producto
     )
 
     if query:
-        return jsonify({'error': 'Asignación de Modelo ' + cod_producto + ' ya existe para el cliente: ' + ruc_cliente}), 500
+        return jsonify(
+            {'error': 'Asignación de Modelo ' + cod_producto + ' ya existe para el cliente: ' + ruc_cliente}), 500
 
     nueva_asignacion = StAsignacionCupo(
         empresa=empresa,
@@ -108,6 +111,7 @@ def crear_asignacion():
     db.session.commit()
 
     return jsonify({'message': 'Asignación creada exitosamente'}), 201
+
 
 @bpcom.route('/asig_edit', methods=['POST'])
 @jwt_required()
@@ -123,7 +127,8 @@ def editar_asignacion():
     if porcentaje_maximo is None or cantidad_minima is None:
         return jsonify({'error': 'Faltan datos necesarios para actualizar la asignación'}), 400
 
-    asignacion = db.session.query(StAsignacionCupo).filter_by(empresa=empresa, cod_producto=cod_producto, ruc_cliente=ruc_cliente).first()
+    asignacion = db.session.query(StAsignacionCupo).filter_by(empresa=empresa, cod_producto=cod_producto,
+                                                              ruc_cliente=ruc_cliente).first()
     print(asignacion)
     if not asignacion:
         return jsonify({'error': 'Asignación no encontrada'}), 404
@@ -134,6 +139,7 @@ def editar_asignacion():
     db.session.commit()
 
     return jsonify({'message': 'Asignación actualizada exitosamente'}), 200
+
 
 @bpcom.route('/modelos_by_cod', methods=['POST'])
 @jwt_required()
@@ -184,7 +190,7 @@ def obtener_productos_por_codigo():
             maximo = producto.maximo if producto.maximo else ""
             costo = producto.costo if producto.costo else ""
             dolar = producto.dolar if producto.dolar else ""
-            activo = producto.activo if producto.activo else ""
+            activo = producto.ACTIVO if producto.ACTIVO else ""
             alcohol = producto.alcohol if producto.alcohol else ""
             cod_unidad_r = producto.cod_unidad_r if producto.cod_unidad_r else ""
             cod_modelo = producto.cod_modelo if producto.cod_modelo else ""
@@ -284,6 +290,7 @@ def get_presupuesto():
     except cx_Oracle.DatabaseError as e:
         error, = e.args
         return jsonify({"error": error.message}), 500
+
 
 @bpcom.route('/update_value', methods=['POST'])
 @jwt_required()
