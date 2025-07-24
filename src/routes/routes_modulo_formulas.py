@@ -34,12 +34,12 @@ def get_proceso(empresa, cod_proceso):
     empresa = validar_number('empresa', empresa, 2)
     cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     proceso = db.session.get(st_proceso, (empresa, cod_proceso))
     if not proceso:
-        mensaje = f'Proceso {cod_proceso} inexistente'
+        mensaje = 'Proceso {} inexistente'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     return jsonify(proceso.to_dict())
@@ -52,7 +52,7 @@ def get_proceso(empresa, cod_proceso):
 def get_procesos(empresa):
     empresa = validar_number('empresa', empresa, 2)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_proceso.query()
@@ -70,16 +70,16 @@ def post_proceso(empresa, data):
     data = {'empresa': empresa, **data}
     proceso = st_proceso(**data)
     if not db.session.get(Empresa, data['empresa']):
-        mensaje = f'Empresa {data['empresa']} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(data['empresa'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if db.session.get(st_proceso, (data['empresa'], data['cod_proceso'])):
-        mensaje = f'Ya existe un proceso con el código {data['cod_proceso']}'
+        mensaje = 'Ya existe un proceso con el código {}'.format(data['cod_proceso'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     db.session.add(proceso)
     db.session.commit()
-    mensaje = f'Se registró el proceso {proceso.cod_proceso}'
+    mensaje = 'Se registró el proceso {}'.format(proceso.cod_proceso)
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
 
@@ -95,12 +95,12 @@ def put_proceso(empresa, cod_proceso, data):
     data = {'empresa': empresa, 'cod_proceso': cod_proceso, **data}
     st_proceso(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     proceso = db.session.get(st_proceso, (empresa, cod_proceso))
     if not proceso:
-        mensaje = f'No existe un proceso con el código {cod_proceso}'
+        mensaje = 'No existe un proceso con el código {}'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     proceso.nombre = data['nombre']
@@ -109,7 +109,7 @@ def put_proceso(empresa, cod_proceso, data):
     proceso.audit_usuario_mod = text('user')
     proceso.audit_fecha_mod = text('sysdate')
     db.session.commit()
-    mensaje = f'Se actualizó el proceso {cod_proceso}'
+    mensaje = 'Se actualizó el proceso {}'.format(cod_proceso)
     logger.info(mensaje)
     return '', 204
 
@@ -122,21 +122,21 @@ def delete_proceso(empresa, cod_proceso):
     empresa = validar_number('empresa', empresa, 2)
     cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     proceso = db.session.get(st_proceso, (empresa, cod_proceso))
     if not proceso:
-        mensaje = f'No existe un proceso con el código {cod_proceso}'
+        mensaje = 'No existe un proceso con el código {}'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if db.session.query(st_parametro_por_proceso).filter_by(empresa=empresa, cod_proceso=cod_proceso).first():
-        mensaje = f'Existen parámetros vinculados al proceso {cod_proceso}'
+        mensaje = 'Existen parámetros vinculados al proceso {}'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     db.session.delete(proceso)
     db.session.commit()
-    mensaje = f'Se eliminó el proceso {cod_proceso}'
+    mensaje = 'Se eliminó el proceso {}'.format(cod_proceso)
     logger.info(mensaje)
     return '', 204
 
@@ -149,12 +149,12 @@ def get_formula_proceso(empresa, cod_formula):
     empresa = validar_number('empresa', empresa, 2)
     cod_formula = validar_varchar('cod_formula', cod_formula, 8)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     formula = db.session.get(st_formula_proceso, (empresa, cod_formula))
     if not formula:
-        mensaje = f'Fórmula {cod_formula} inexistente'
+        mensaje = 'Fórmula {} inexistente'.format(cod_formula)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     return jsonify(formula.to_dict())
@@ -167,7 +167,7 @@ def get_formula_proceso(empresa, cod_formula):
 def get_formulas_proceso(empresa):
     empresa = validar_number('empresa', empresa, 2)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_formula_proceso.query()
@@ -185,16 +185,16 @@ def post_formula_proceso(empresa, data):
     data = {'empresa': empresa, **data}
     formula = st_formula_proceso(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if db.session.get(st_formula_proceso, (empresa, data['cod_formula'])):
-        mensaje = f'Ya existe una fórmula con el código {data['cod_formula']}'
+        mensaje = 'Ya existe una fórmula con el código {}'.format(data['cod_formula'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     db.session.add(formula)
     db.session.commit()
-    mensaje = f'Se registró la fórmula {formula.cod_formula}'
+    mensaje = 'Se registró la fórmula {}'.format(formula.cod_formula)
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
 
@@ -210,12 +210,12 @@ def put_formula_proceso(empresa, cod_formula, data):
     data = {'empresa': empresa, 'cod_formula': cod_formula, **data}
     st_formula_proceso(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     formula = db.session.get(st_formula_proceso, (empresa, cod_formula))
     if not formula:
-        mensaje = f'Fórmula {cod_formula} inexistente'
+        mensaje = 'Fórmula {} inexistente'.format(cod_formula)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     formula.nombre = data['nombre']
@@ -227,7 +227,7 @@ def put_formula_proceso(empresa, cod_formula, data):
     formula.audit_usuario_mod = text('user')
     formula.audit_fecha_mod = text('sysdate')
     db.session.commit()
-    mensaje = f'Se actualizó la fórmula {cod_formula}'
+    mensaje = 'Se actualizó la fórmula {}'.format(cod_formula)
     logger.info(mensaje)
     return '', 204
 
@@ -240,23 +240,25 @@ def delete_formula_proceso(empresa, cod_formula):
     empresa = validar_number('empresa', empresa, 2)
     cod_formula = validar_varchar('cod_formula', cod_formula, 8)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     formula = db.session.get(st_formula_proceso, (empresa, cod_formula))
     if not formula:
-        mensaje = f'No existe una fórmula con el código {cod_formula}'
+        mensaje = 'No existe una fórmula con el código {}'.format(cod_formula)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     parametro_x_proceso = db.session.query(st_parametro_por_proceso).filter_by(empresa=empresa,
                                                                                cod_formula=cod_formula).first()
     if parametro_x_proceso:
-        mensaje = f'La fórmula {cod_formula} está vinculada al parámetro {parametro_x_proceso.cod_parametro} del proceso {parametro_x_proceso.cod_proceso}'
+        mensaje = 'La fórmula {} está vinculada al parámetro {} del proceso {}'.format(cod_formula,
+                                                                                       parametro_x_proceso.cod_parametro,
+                                                                                       parametro_x_proceso.cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     db.session.delete(formula)
     db.session.commit()
-    mensaje = f'Se eliminó la fórmula {cod_formula}'
+    mensaje = 'Se eliminó la fórmula {}'.format(cod_formula)
     logger.info(mensaje)
     return '', 204
 
@@ -269,12 +271,12 @@ def get_parametro_proceso(empresa, cod_parametro):
     empresa = validar_number('empresa', empresa, 2)
     cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     parametro = db.session.get(st_parametro_proceso, (empresa, cod_parametro))
     if not parametro:
-        mensaje = f'Parámetro {cod_parametro} inexistente'
+        mensaje = 'Parámetro {} inexistente'.format(cod_parametro)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     return jsonify(parametro.to_dict())
@@ -287,7 +289,7 @@ def get_parametro_proceso(empresa, cod_parametro):
 def get_parametros_proceso(empresa):
     empresa = validar_number('empresa', empresa, 2)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_parametro_proceso.query()
@@ -306,16 +308,16 @@ def post_parametro_proceso(empresa, data):
     data = {'empresa': empresa, **data}
     parametro = st_parametro_proceso(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if db.session.get(st_parametro_proceso, (empresa, data['cod_parametro'])):
-        mensaje = f'Ya existe un parámetro con el código {data['cod_parametro']}'
+        mensaje = 'Ya existe un parámetro con el código {}'.format(data['cod_parametro'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     db.session.add(parametro)
     db.session.commit()
-    mensaje = f'Se registró el parámetro {parametro.cod_parametro}'
+    mensaje = 'Se registró el parámetro {}'.format(parametro.cod_parametro)
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
 
@@ -331,12 +333,12 @@ def put_parametro_proceso(empresa, cod_parametro, data):
     data = {'empresa': empresa, 'cod_parametro': cod_parametro, **data}
     st_parametro_proceso(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     parametro = db.session.get(st_parametro_proceso, (empresa, cod_parametro))
     if not parametro:
-        mensaje = f'No existe un parámetro con el código {cod_parametro}'
+        mensaje = 'No existe un parámetro con el código {}'.format(cod_parametro)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     parametro.nombre = data['nombre']
@@ -347,7 +349,7 @@ def put_parametro_proceso(empresa, cod_parametro, data):
     parametro.audit_usuario_mod = text('user')
     parametro.audit_fecha_mod = text('sysdate')
     db.session.commit()
-    mensaje = f'Se actualizó el parámetro {cod_parametro}'
+    mensaje = 'Se actualizó el parámetro {}'.format(cod_parametro)
     logger.info(mensaje)
     return '', 204
 
@@ -360,23 +362,23 @@ def delete_parametro_proceso(empresa, cod_parametro):
     empresa = validar_number('empresa', empresa, 2)
     cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     parametro = db.session.get(st_parametro_proceso, (empresa, cod_parametro))
     if not parametro:
-        mensaje = f'No existe un parámetro con el código {cod_parametro}'
+        mensaje = 'No existe un parámetro con el código {}'.format(cod_parametro)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     parametro_x_proceso = db.session.query(st_parametro_por_proceso).filter_by(empresa=empresa,
                                                                                cod_parametro=cod_parametro).first()
     if parametro_x_proceso:
-        mensaje = f'El parámetro {cod_parametro} está vinculado al proceso {parametro_x_proceso.cod_proceso}'
+        mensaje = 'El parámetro {} está vinculado al proceso {}'.format(cod_parametro, parametro_x_proceso.cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     db.session.delete(parametro)
     db.session.commit()
-    mensaje = f'Se eliminó el parámetro {cod_parametro}'
+    mensaje = 'Se eliminó el parámetro {}'.format(cod_parametro)
     logger.info(mensaje)
     return '', 204
 
@@ -389,11 +391,11 @@ def get_parametros_por_proceso(empresa, cod_proceso):
     empresa = validar_number('empresa', empresa, 2)
     cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
+        mensaje = 'Proceso {} inexistente'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_parametro_por_proceso.query()
@@ -415,24 +417,24 @@ def post_parametro_por_proceso(empresa, cod_proceso, cod_parametro, data):
     data = {'empresa': empresa, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro, **data}
     parametro_x_proceso = st_parametro_por_proceso(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
+        mensaje = 'Proceso {} inexistente'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_parametro_proceso, (empresa, cod_parametro)):
-        mensaje = f'Parámetro {cod_parametro} inexistente'
+        mensaje = 'Parámetro {} inexistente'.format(cod_parametro)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if db.session.get(st_parametro_por_proceso, (empresa, cod_proceso, cod_parametro)):
-        mensaje = f'El parámetro {cod_parametro} ya está vinculado al proceso {cod_proceso}'
+        mensaje = 'El parámetro {} ya está vinculado al proceso {}'.format(cod_parametro, cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     db.session.add(parametro_x_proceso)
     db.session.commit()
-    mensaje = f'Se vinculó el parámetro {cod_parametro} al proceso {cod_proceso}'
+    mensaje = 'Se vinculó el parámetro {} al proceso {}'.format(cod_parametro, cod_proceso)
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
 
@@ -449,21 +451,21 @@ def put_parametro_por_proceso(empresa, cod_proceso, cod_parametro, data):
     data = {'empresa': empresa, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro, **data}
     st_parametro_por_proceso(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
+        mensaje = 'Proceso {} inexistente'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_parametro_proceso, (empresa, cod_parametro)):
-        mensaje = f'Parámetro {cod_parametro} inexistente'
+        mensaje = 'Parámetro {} inexistente'.format(cod_parametro)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     parametro_x_proceso = db.session.get(st_parametro_por_proceso,
                                          (empresa, cod_proceso, cod_parametro))
     if not parametro_x_proceso:
-        mensaje = f'El parámetro {cod_parametro} no está vinculado al proceso {cod_proceso}'
+        mensaje = 'El parámetro {} no está vinculado al proceso {}'.format(cod_parametro, cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     parametro_x_proceso.orden_calculo = data.get('orden_calculo')
@@ -472,14 +474,14 @@ def put_parametro_por_proceso(empresa, cod_proceso, cod_parametro, data):
     cod_formula = validar_cod('cod_formula', data.get('cod_formula'), False)
     if cod_formula:
         if not db.session.get(st_formula_proceso, (empresa, cod_formula)):
-            mensaje = f'Fórmula {cod_formula} inexistente'
+            mensaje = 'Fórmula {} inexistente'.format(cod_formula)
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
         if data.get('fecha_calculo_inicio') and data.get('fecha_calculo_fin'):
             parametro_x_proceso.fecha_calculo_inicio = data.get('fecha_calculo_inicio')
             parametro_x_proceso.fecha_calculo_fin = data.get('fecha_calculo_fin')
         elif data.get('fecha_calculo_inicio') or data.get('fecha_calculo_fin'):
-            mensaje = f'Se deben proporcionar ambas fechas o ninguna'
+            mensaje = 'Se deben proporcionar ambas fechas o ninguna'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
         else:
@@ -495,7 +497,7 @@ def put_parametro_por_proceso(empresa, cod_proceso, cod_parametro, data):
     parametro_x_proceso.audit_usuario_mod = text('user')
     parametro_x_proceso.audit_fecha_mod = text('sysdate')
     db.session.commit()
-    mensaje = f'Se actualizó el parámetro {cod_parametro} vinculado al proceso {cod_proceso}'
+    mensaje = 'Se actualizó el parámetro {} vinculado al proceso {}'.format(cod_parametro, cod_proceso)
     logger.info(mensaje)
     return '', 204
 
@@ -509,29 +511,30 @@ def delete_parametro_por_proceso(empresa, cod_proceso, cod_parametro):
     cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
     cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
+        mensaje = 'Proceso {} inexistente'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_parametro_proceso, (empresa, cod_parametro)):
-        mensaje = f'Parámetro {cod_parametro} inexistente'
+        mensaje = 'Parámetro {} inexistente'.format(cod_parametro)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     parametro_x_proceso = db.session.get(st_parametro_por_proceso, (empresa, cod_proceso, cod_parametro))
     if not parametro_x_proceso:
-        mensaje = f'El parámetro {cod_parametro} no está vinculado al proceso {cod_proceso}'
+        mensaje = 'El parámetro {} no está vinculado al proceso {}'.format(cod_parametro, cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if parametro_x_proceso.factores_calculo:
-        mensaje = f'Existen factores de cálculo vinculados al proceso {cod_proceso} y parámetro {cod_parametro}'
+        mensaje = 'Existen factores de cálculo vinculados al proceso {} y parámetro {}'.format(cod_proceso,
+                                                                                               cod_parametro)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     db.session.delete(parametro_x_proceso)
     db.session.commit()
-    mensaje = f'Se desvinculó el parámetro {cod_parametro} del proceso {cod_proceso}'
+    mensaje = 'Se desvinculó el parámetro {} del proceso {}'.format(cod_parametro, cod_proceso)
     logger.info(mensaje)
     return '', 204
 
@@ -545,19 +548,19 @@ def get_factores_calculo_parametro(empresa, cod_proceso, cod_parametro):
     cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
     cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
+        mensaje = 'Proceso {} inexistente'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_parametro_proceso, (empresa, cod_parametro)):
-        mensaje = f'Parámetro {cod_parametro} inexistente'
+        mensaje = 'Parámetro {} inexistente'.format(cod_parametro)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_parametro_por_proceso, (empresa, cod_proceso, cod_parametro)):
-        mensaje = f'Parámetro por proceso inexistente: proceso ({cod_proceso}), parámetro ({cod_parametro})'
+        mensaje = 'Parámetro por proceso inexistente: proceso ({}), parámetro ({})'.format(cod_proceso, cod_parametro)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_factor_calculo_parametro.query()
@@ -580,24 +583,26 @@ def post_factor_calculo_parametro(empresa, cod_proceso, cod_parametro, data):
     data = {'empresa': empresa, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro, **data}
     st_factor_calculo_parametro(**data)
     if not db.session.get(Empresa, data['empresa']):
-        mensaje = f'Empresa {data['empresa']} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(data['empresa'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_proceso, (data['empresa'], data['cod_proceso'])):
-        mensaje = f'Proceso {data['cod_proceso']} inexistente'
+        mensaje = 'Proceso {} inexistente'.format(data['cod_proceso'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_parametro_proceso, (data['empresa'], data['cod_parametro'])):
-        mensaje = f'Parámetro {data['cod_parametro']} inexistente'
+        mensaje = 'Parámetro {} inexistente'.format(data['cod_parametro'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_parametro_por_proceso, (data['empresa'], data['cod_proceso'], data['cod_parametro'])):
-        mensaje = f'El parámetro {data['cod_parametro']} no está vinculado al proceso {data['cod_proceso']}'
+        mensaje = 'El parámetro {} no está vinculado al proceso {}'.format(data['cod_parametro'], data['cod_proceso'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if db.session.get(st_factor_calculo_parametro,
                       (data['empresa'], data['cod_proceso'], data['cod_parametro'], data['orden'])):
-        mensaje = f'El factor de cálculo (proceso: {data['cod_proceso']}, parámetro: {data['cod_parametro']}, orden: {data['orden']}) ya existe'
+        mensaje = 'El factor de cálculo (proceso: {}, parámetro: {}, orden: {}) ya existe'.format(data['cod_proceso'],
+                                                                                                  data['cod_parametro'],
+                                                                                                  data['orden'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     ultimo_factor = (db.session.query(st_factor_calculo_parametro)
@@ -619,7 +624,7 @@ def post_factor_calculo_parametro(empresa, cod_proceso, cod_parametro, data):
             return jsonify({'mensaje': mensaje}), 409
         nuevo_orden = ultimo_factor.orden + 1
         if data['orden'] != nuevo_orden:
-            mensaje = f'El orden del factor de cálculo debe ser {nuevo_orden}'
+            mensaje = 'El orden del factor de cálculo debe ser {}'.format(nuevo_orden)
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
     else:
@@ -656,18 +661,20 @@ def post_factor_calculo_parametro(empresa, cod_proceso, cod_parametro, data):
                 logger.error(mensaje)
                 return jsonify({'mensaje': mensaje}), 400
             if data['operador'] not in operador.values():
-                mensaje = f'Operador inválido, solo se aceptan: {', '.join(operador.values())}'
+                mensaje = 'Operador inválido, solo se aceptan: {}'.format(', '.join(operador.values()))
                 logger.error(mensaje)
                 return jsonify({'mensaje': mensaje}), 400
             data['numero'] = None
             data['cod_parametro_tipo'] = None
         case _:
-            mensaje = f'Tipo de factor inválido, solo se aceptan: {', '.join(tipo_factor.values())}'
+            mensaje = 'Tipo de factor inválido, solo se aceptan: {}'.format(', '.join(tipo_factor.values()))
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
     db.session.add(st_factor_calculo_parametro(**data))
     db.session.commit()
-    mensaje = f'Se registró el factor de cálculo (proceso: {data['cod_proceso']}, parámetro: {data['cod_parametro']}, orden: {data['orden']})'
+    mensaje = 'Se registró el factor de cálculo (proceso: {}, parámetro: {}, orden: {})'.format(data['cod_proceso'],
+                                                                                                data['cod_parametro'],
+                                                                                                data['orden'])
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
 
@@ -683,24 +690,25 @@ def delete_factor_calculo_parametro(empresa, cod_proceso, cod_parametro, orden):
     cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
     orden = validar_number('orden', orden, 3)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
+        mensaje = 'Proceso {} inexistente'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_parametro_proceso, (empresa, cod_parametro)):
-        mensaje = f'Parámetro {cod_parametro} inexistente'
+        mensaje = 'Parámetro {} inexistente'.format(cod_parametro)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_parametro_por_proceso, (empresa, cod_proceso, cod_parametro)):
-        mensaje = f'El parámetro {cod_parametro} no está vinculado al proceso {cod_proceso}'
+        mensaje = 'El parámetro {} no está vinculado al proceso {}'.format(cod_parametro, cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     factor_calculo = db.session.get(st_factor_calculo_parametro, (empresa, cod_proceso, cod_parametro, orden))
     if not factor_calculo:
-        mensaje = f'Factor de cálculo (proceso: {cod_proceso}, parámetro: {cod_parametro}, orden: {orden}) inexistente'
+        mensaje = 'Factor de cálculo (proceso: {}, parámetro: {}, orden: {}) inexistente'.format(cod_proceso,
+                                                                                                 cod_parametro, orden)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     ultimo_factor = (db.session.query(st_factor_calculo_parametro)
@@ -715,7 +723,8 @@ def delete_factor_calculo_parametro(empresa, cod_proceso, cod_parametro, orden):
         return jsonify({'mensaje': mensaje}), 409
     db.session.delete(factor_calculo)
     db.session.commit()
-    mensaje = f'Se eliminó el factor de cálculo (proceso: {cod_proceso}, parámetro: {cod_parametro}, orden: {orden})'
+    mensaje = 'Se eliminó el factor de cálculo (proceso: {}, parámetro: {}, orden: {})'.format(cod_proceso,
+                                                                                               cod_parametro, orden)
     logger.info(mensaje)
     return '', 204
 
@@ -739,12 +748,12 @@ def get_funcion(empresa, cod_funcion):
     empresa = validar_number('empresa', empresa, 2)
     cod_funcion = validar_cod('cod_funcion', cod_funcion)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     funcion = db.session.get(st_funcion, (empresa, cod_funcion))
     if not funcion:
-        mensaje = f'Función {cod_funcion} inexistente'
+        mensaje = 'Función {} inexistente'.format(cod_funcion)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     return jsonify(funcion.to_dict())
@@ -757,7 +766,7 @@ def get_funcion(empresa, cod_funcion):
 def get_funciones(empresa):
     empresa = validar_number('empresa', empresa, 2)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_funcion.query()
@@ -773,11 +782,11 @@ def get_funciones_por_modulo(empresa, cod_modulo):
     empresa = validar_number('empresa', empresa, 2)
     cod_modulo = validar_varchar('cod_modulo', cod_modulo, 3)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(tg_sistema, cod_modulo):
-        mensaje = f'Módulo {cod_modulo} inexistente'
+        mensaje = 'Módulo {} inexistente'.format(cod_modulo)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_funcion.query()
@@ -796,20 +805,20 @@ def post_funcion(empresa, data):
     data = {'empresa': empresa, **data}
     funcion = st_funcion(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(tg_sistema, data['cod_modulo']):
-        mensaje = f'Módulo {data['cod_modulo']} inexistente'
+        mensaje = 'Módulo {} inexistente'.format(data['cod_modulo'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if db.session.get(st_funcion, (empresa, data['cod_funcion'])):
-        mensaje = f'Ya existe una función con el código {data['cod_funcion']}'
+        mensaje = 'Ya existe una función con el código {}'.format(data['cod_funcion'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     db.session.add(funcion)
     db.session.commit()
-    mensaje = f'Se registró la función {funcion.cod_funcion}'
+    mensaje = 'Se registró la función {}'.format(funcion.cod_funcion)
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
 
@@ -825,19 +834,19 @@ def put_funcion(empresa, cod_funcion, data):
     data = {'empresa': empresa, 'cod_funcion': cod_funcion, **data}
     st_funcion(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     funcion = db.session.get(st_funcion, (empresa, cod_funcion))
     if not funcion:
-        mensaje = f'Función {cod_funcion} inexistente'
+        mensaje = 'Función {} inexistente'.format(cod_funcion)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     if data.get('cod_modulo'):
         if db.session.get(tg_sistema, data['cod_modulo']):
             funcion.cod_modulo = data['cod_modulo']
         else:
-            mensaje = f'Módulo {data['cod_modulo']} inexistente'
+            mensaje = 'Módulo {} inexistente'.format(data['cod_modulo'])
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
     funcion.nombre = data['nombre']
@@ -849,7 +858,7 @@ def put_funcion(empresa, cod_funcion, data):
     funcion.audit_usuario_mod = text('user')
     funcion.audit_fecha_mod = text('sysdate')
     db.session.commit()
-    mensaje = f'Se actualizó la función {data['cod_funcion']}'
+    mensaje = 'Se actualizó la función {}'.format(data['cod_funcion'])
     logger.info(mensaje)
     return '', 204
 
@@ -863,12 +872,12 @@ def delete_funcion(empresa, cod_funcion):
     empresa = validar_number('empresa', empresa, 2)
     cod_funcion = validar_cod('cod_funcion', cod_funcion)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     funcion = db.session.get(st_funcion, (empresa, cod_funcion))
     if not funcion:
-        mensaje = f'Función {cod_funcion} inexistente'
+        mensaje = 'Función {} inexistente'.format(cod_funcion)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if db.session.query(st_parametro_funcion).filter(st_parametro_funcion.cod_funcion == cod_funcion).first():
@@ -877,7 +886,7 @@ def delete_funcion(empresa, cod_funcion):
         return jsonify({'mensaje': mensaje}), 409
     db.session.delete(funcion)
     db.session.commit()
-    mensaje = f'Se eliminó la función {cod_funcion}'
+    mensaje = 'Se eliminó la función {}'.format(cod_funcion)
     logger.info(mensaje)
     return '', 204
 
@@ -891,16 +900,16 @@ def get_parametro_funcion(empresa, cod_funcion, secuencia):
     cod_funcion = validar_cod('cod_funcion', cod_funcion)
     secuencia = validar_number('secuencia', secuencia, 3)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_funcion, (empresa, cod_funcion)):
-        mensaje = f'Función {cod_funcion} inexistente'
+        mensaje = 'Función {} inexistente'.format(cod_funcion)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     parametro = db.session.get(st_parametro_funcion, (empresa, cod_funcion, secuencia))
     if not parametro:
-        mensaje = f'Parámetro {secuencia} inexistente'
+        mensaje = 'Parámetro {} inexistente'.format(secuencia)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     return jsonify(parametro.to_dict())
@@ -914,11 +923,11 @@ def get_parametros_funcion(empresa, cod_funcion):
     empresa = validar_number('empresa', empresa, 2)
     cod_funcion = validar_cod('cod_funcion', cod_funcion)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_funcion, (empresa, cod_funcion)):
-        mensaje = f'Función {cod_funcion} inexistente'
+        mensaje = 'Función {} inexistente'.format(cod_funcion)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_parametro_funcion.query()
@@ -939,15 +948,15 @@ def post_parametro_funcion(empresa, cod_funcion, data):
     data = {'empresa': empresa, 'cod_funcion': cod_funcion, **data}
     st_parametro_funcion(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_funcion, (empresa, cod_funcion)):
-        mensaje = f'Función {cod_funcion} inexistente'
+        mensaje = 'Función {} inexistente'.format(cod_funcion)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if db.session.get(st_parametro_funcion, (empresa, cod_funcion, data['secuencia'])):
-        mensaje = f'Ya existe un parámetro con la secuencia {data['secuencia']}'
+        mensaje = 'Ya existe un parámetro con la secuencia {}'.format(data['secuencia'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     match (data['tipo_parametro']):
@@ -980,13 +989,13 @@ def post_parametro_funcion(empresa, cod_funcion, data):
     if ultimo_parametro:
         secuencia_actual = ultimo_parametro.secuencia + 1
     if data['secuencia'] != secuencia_actual:
-        mensaje = f'El parámetro debe tener secuencia {secuencia_actual}'
+        mensaje = 'El parámetro debe tener secuencia {}'.format(secuencia_actual)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     parametro = st_parametro_funcion(**data)
     db.session.add(parametro)
     db.session.commit()
-    mensaje = f'Se registró el parámetro {data['secuencia']}'
+    mensaje = 'Se registró el parámetro {}'.format(data['secuencia'])
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
 
@@ -1003,16 +1012,16 @@ def put_parametro_funcion(empresa, cod_funcion, secuencia, data):
     data = {'empresa': empresa, 'cod_funcion': cod_funcion, 'secuencia': secuencia, **data}
     st_parametro_funcion(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_funcion, (empresa, cod_funcion)):
-        mensaje = f'Función {cod_funcion} inexistente'
+        mensaje = 'Función {} inexistente'.format(cod_funcion)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     parametro = db.session.get(st_parametro_funcion, (empresa, cod_funcion, secuencia))
     if not parametro:
-        mensaje = f'Parámetro {secuencia} inexistente'
+        mensaje = 'Parámetro {} inexistente'.format(secuencia)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     parametro.tipo_parametro = data['tipo_parametro']
@@ -1044,7 +1053,7 @@ def put_parametro_funcion(empresa, cod_funcion, secuencia, data):
     parametro.audit_usuario_mod = text('user')
     parametro.audit_fecha_mod = text('sysdate')
     db.session.commit()
-    mensaje = f'Se actualizó el parámetro {secuencia}'
+    mensaje = 'Se actualizó el parámetro {}'.format(secuencia)
     logger.info(mensaje)
     return '', 204
 
@@ -1059,16 +1068,16 @@ def delete_parametro_funcion(empresa, cod_funcion, secuencia):
     cod_funcion = validar_cod('cod_funcion', cod_funcion)
     secuencia = validar_number('secuencia', secuencia, 3)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_funcion, (empresa, cod_funcion)):
-        mensaje = f'Función {cod_funcion} inexistente'
+        mensaje = 'Función {} inexistente'.format(cod_funcion)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     parametro = db.session.get(st_parametro_funcion, (empresa, cod_funcion, secuencia))
     if not parametro:
-        mensaje = f'El parámetro {secuencia} no existe'
+        mensaje = 'El parámetro {} no existe'.format(secuencia)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     ultimo_parametro = (db.session.query(st_parametro_funcion)
@@ -1081,7 +1090,7 @@ def delete_parametro_funcion(empresa, cod_funcion, secuencia):
         return jsonify({'mensaje': mensaje}), 409
     db.session.delete(parametro)
     db.session.commit()
-    mensaje = f'Se eliminó el parámetro {secuencia} de la función'
+    mensaje = 'Se eliminó el parámetro {} de la función'.format(secuencia)
     logger.info(mensaje)
     return '', 204
 
@@ -1094,23 +1103,23 @@ def execute_funcion_bd(empresa, cod_funcion):
     empresa = validar_number('empresa', empresa, 2)
     cod_funcion = validar_cod('cod_funcion', cod_funcion)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     funcion = db.session.get(st_funcion, (empresa, cod_funcion))
     if not funcion:
-        mensaje = f'Función {cod_funcion} inexistente'
+        mensaje = 'Función {} inexistente'.format(cod_funcion)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"{paquete_funcion_bd.PROCESOS.value}.EJECUTAR_FUNCION({empresa},'','','{cod_funcion}')"
+    sql = "{}.EJECUTAR_FUNCION({},'','','{}')".format(paquete_funcion_bd.PROCESOS.value, empresa, cod_funcion)
     match (funcion.tipo_retorno):
         case tipo_retorno.NUMERO.value:
-            sql = f"{sql}.numero"
+            sql = "{}.numero".format(sql)
         case tipo_retorno.TEXTO.value:
-            sql = f"{sql}.texto"
+            sql = "{}.texto".format(sql)
         case tipo_retorno.FECHA.value:
-            sql = f"{sql}.fecha"
-    sql = f"SELECT {sql} FROM DUAL"
+            sql = "{}.fecha".format(sql)
+    sql = "SELECT {} FROM DUAL".format(sql)
     result = custom_base.execute_sql(sql)
     return jsonify({"mensaje": result})
 
@@ -1123,23 +1132,23 @@ def execute_formula_bd(empresa, cod_formula):
     empresa = validar_number('empresa', empresa, 2)
     cod_formula = validar_cod('cod_formula', cod_formula)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     formula = db.session.get(st_formula_proceso, (empresa, cod_formula))
     if not formula:
-        mensaje = f'Fórmula {cod_formula} inexistente'
+        mensaje = 'Fórmula {} inexistente'.format(cod_formula)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"{paquete_funcion_bd.PROCESOS.value}.EJECUTAR_FORMULA({empresa}, '', '', '{cod_formula}')"
+    sql = "{}.EJECUTAR_FORMULA({}, '', '', '{}')".format(paquete_funcion_bd.PROCESOS.value, empresa, cod_formula)
     match (formula.tipo_retorno):
         case tipo_retorno.NUMERO.value:
-            sql = f"{sql}.numero"
+            sql = "{}.numero".format(sql)
         case tipo_retorno.TEXTO.value:
-            sql = f"{sql}.texto"
+            sql = "{}.texto".format(sql)
         case tipo_retorno.FECHA.value:
-            sql = f"{sql}.fecha"
-    sql = f"SELECT {sql} FROM DUAL"
+            sql = "{}.fecha".format(sql)
+    sql = "SELECT {} FROM DUAL".format(sql)
     result = custom_base.execute_sql(sql)
     return jsonify({"mensaje": result})
 
@@ -1153,10 +1162,11 @@ def execute_factores_bd(empresa, cod_proceso, cod_parametro):
     cod_proceso = validar_cod('cod_proceso', cod_proceso)
     cod_parametro = validar_cod('cod_parametro', cod_parametro)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"SELECT {paquete_funcion_bd.PROCESOS.value}.EJECUTAR_FACTORES({empresa}, '{cod_proceso}', '{cod_parametro}') FROM DUAL"
+    sql = "SELECT {}.EJECUTAR_FACTORES({}, '{}', '{}') FROM DUAL".format(paquete_funcion_bd.PROCESOS.value, empresa,
+                                                                         cod_proceso, cod_parametro)
     result = custom_base.execute_sql(sql)
     return jsonify({"mensaje": result})
 
@@ -1169,10 +1179,11 @@ def get_nuevo_cliente(empresa, cod_cliente):
     empresa = validar_number('empresa', empresa, 2)
     cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"SELECT {paquete_funcion_bd.PROCESOS.value}.OBTENER_NOMBRE_NUEVO_CLIENTE({empresa}, '{cod_cliente}') FROM DUAL"
+    sql = "SELECT {}.OBTENER_NOMBRE_NUEVO_CLIENTE({}, '{}') FROM DUAL".format(paquete_funcion_bd.PROCESOS.value,
+                                                                              empresa, cod_cliente)
     result = custom_base.execute_sql(sql)
     return jsonify({"mensaje": result})
 
@@ -1185,12 +1196,12 @@ def get_cliente(empresa, cod_cliente):
     empresa = validar_number('empresa', empresa, 2)
     cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     cliente = db.session.get(st_cliente_procesos, (empresa, cod_cliente))
     if not cliente:
-        mensaje = f'Cliente {cod_cliente} inexistente'
+        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     return jsonify(cliente.to_dict())
@@ -1203,7 +1214,7 @@ def get_cliente(empresa, cod_cliente):
 def get_clientes(empresa):
     empresa = validar_number('empresa', empresa, 2)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_cliente_procesos.query()
@@ -1221,11 +1232,11 @@ def post_cliente(empresa, data):
     data = {'empresa': empresa, **data}
     cliente = st_cliente_procesos(**data)
     if not db.session.get(Empresa, data['empresa']):
-        mensaje = f'Empresa {data['empresa']} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(data['empresa'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if db.session.get(st_cliente_procesos, (data['empresa'], data['cod_cliente'])):
-        mensaje = f'Ya existe un cliente con el código {data['cod_cliente']}'
+        mensaje = 'Ya existe un cliente con el código {}'.format(data['cod_cliente'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     if data['agrupa_cliente']:
@@ -1238,7 +1249,7 @@ def post_cliente(empresa, data):
         data['nombre_agrupacion'] = None
     db.session.add(cliente)
     db.session.commit()
-    mensaje = f'Se registró el cliente {cliente.cod_cliente}'
+    mensaje = 'Se registró el cliente {}'.format(cliente.cod_cliente)
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
 
@@ -1254,12 +1265,12 @@ def put_cliente(empresa, cod_cliente, data):
     data = {'empresa': empresa, 'cod_cliente': cod_cliente, **data}
     st_cliente_procesos(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     cliente = db.session.get(st_cliente_procesos, (empresa, cod_cliente))
     if not cliente:
-        mensaje = f'No existe un cliente con el código {cod_cliente}'
+        mensaje = 'No existe un cliente con el código {}'.format(cod_cliente)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     cliente.cod_modelo = data['cod_modelo']
@@ -1278,7 +1289,7 @@ def put_cliente(empresa, cod_cliente, data):
     cliente.audit_usuario_mod = text('user')
     cliente.audit_fecha_mod = text('sysdate')
     db.session.commit()
-    mensaje = f'Se actualizó el cliente {cod_cliente}'
+    mensaje = 'Se actualizó el cliente {}'.format(cod_cliente)
     logger.info(mensaje)
     return '', 204
 
@@ -1291,17 +1302,17 @@ def delete_cliente(empresa, cod_cliente):
     empresa = validar_number('empresa', empresa, 2)
     cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     cliente = db.session.get(st_cliente_procesos, (empresa, cod_cliente))
     if not cliente:
-        mensaje = f'No existe un cliente con el código {cod_cliente}'
+        mensaje = 'No existe un cliente con el código {}'.format(cod_cliente)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     db.session.delete(cliente)
     db.session.commit()
-    mensaje = f'Se eliminó el cliente {cod_cliente}'
+    mensaje = 'Se eliminó el cliente {}'.format(cod_cliente)
     logger.info(mensaje)
     return '', 204
 
@@ -1313,7 +1324,7 @@ def delete_cliente(empresa, cod_cliente):
 def get_clientes_proyecciones(empresa):
     empresa = validar_number('empresa', empresa, 2)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     subquery = (
@@ -1346,7 +1357,7 @@ def get_clientes_proyecciones(empresa):
 def get_modelos_motos_proyecciones(empresa):
     empresa = validar_number('empresa', empresa, 2)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     codigos_marcas = '(' + ','.join(map(str, CODIGOS_MARCAS_PROPIAS)) + ')'
@@ -1354,8 +1365,9 @@ def get_modelos_motos_proyecciones(empresa):
            "FROM ST_MARCA ma "
            "INNER JOIN ST_MODELO_COMERCIAL mo "
            "ON mo.codigo_marca = ma.codigo_marca "
-           f"WHERE ma.codigo_marca IN {codigos_marcas} "
-           "GROUP BY mo.codigo_modelo_comercial, ma.codigo_marca, ma.nombre_marca, mo.nombre_modelo")
+           "WHERE ma.codigo_marca IN {} "
+           "GROUP BY mo.codigo_modelo_comercial, ma.codigo_marca, ma.nombre_marca, mo.nombre_modelo").format(
+        codigos_marcas)
     result = st_modelo_comercial.execute_sql(sql, False)
     modelos = [st_modelo_comercial(row.codigo_modelo_comercial, row.codigo_marca, row.nombre_marca,
                                    row.nombre_modelo).to_dict() for row
@@ -1371,12 +1383,12 @@ def get_version_proyeccion(empresa, cod_version):
     empresa = validar_number('empresa', empresa, 2)
     cod_version = validar_number('cod_version', cod_version, 22)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     version = db.session.get(st_version_proyeccion, (empresa, cod_version))
     if not version:
-        mensaje = f'Versión {cod_version} inexistente'
+        mensaje = 'Versión {} inexistente'.format(cod_version)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     return jsonify(st_version_proyeccion.to_dict(version))
@@ -1389,7 +1401,7 @@ def get_version_proyeccion(empresa, cod_version):
 def get_versiones_proyecciones(empresa):
     empresa = validar_number('empresa', empresa, 2)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_version_proyeccion.query()
@@ -1408,19 +1420,19 @@ def post_version_proyeccion(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
     data = {'empresa': empresa, **data}
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     nombre = data.get("nombre")
     if st_version_proyeccion.query().filter(st_version_proyeccion.empresa == empresa,
                                             st_version_proyeccion.nombre == nombre).first():
-        mensaje = f'Ya existe una versión con el nombre {nombre}'
+        mensaje = 'Ya existe una versión con el nombre {}'.format(nombre)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     version = st_version_proyeccion(**data)
     db.session.add(version)
     db.session.commit()
-    mensaje = f'Se registró la versión {version.cod_version}'
+    mensaje = 'Se registró la versión {}'.format(version.cod_version)
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
 
@@ -1433,22 +1445,22 @@ def delete_version_proyeccion(empresa, cod_version):
     empresa = validar_number('empresa', empresa, 2)
     cod_version = validar_number('cod_version', cod_version, 22)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     version = db.session.get(st_version_proyeccion, (empresa, cod_version))
     if not version:
-        mensaje = f'Versión {cod_version} inexistente'
+        mensaje = 'Versión {} inexistente'.format(cod_version)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if st_proyeccion_ppp.query().filter(st_proyeccion_ppp.empresa == empresa,
                                         st_proyeccion_ppp.cod_version == cod_version).first():
-        mensaje = f'La versión {version.nombre} tiene una proyección vinculada'
+        mensaje = 'La versión {} tiene una proyección vinculada'.format(version.nombre)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     db.session.delete(version)
     db.session.commit()
-    mensaje = f'Se eliminó la versión'
+    mensaje = 'Se eliminó la versión'
     logger.info(mensaje)
     return '', 204
 
@@ -1462,15 +1474,15 @@ def get_proyeccion(empresa, cod_version, cod_proceso):
     cod_version = validar_number('cod_version', cod_version, 22)
     cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
-        mensaje = f'Versión {cod_version} inexistente'
+        mensaje = 'Versión {} inexistente'.format(cod_version)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
+        mensaje = 'Proceso {} inexistente'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     inicio = (
@@ -1526,19 +1538,19 @@ def get_proyeccion_parcial(empresa, cod_version, cod_proceso, cod_modelo_comerci
     cod_marca = validar_number('cod_marca', cod_marca, 14)
     cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
-        mensaje = f'Versión {cod_version} inexistente'
+        mensaje = 'Versión {} inexistente'.format(cod_version)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
+        mensaje = 'Proceso {} inexistente'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_cliente_procesos, (empresa, cod_cliente)):
-        mensaje = f'Cliente {cod_cliente} inexistente'
+        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_proyeccion_ppp.query().filter(st_proyeccion_ppp.empresa == empresa,
@@ -1568,15 +1580,15 @@ def post_proyeccion(empresa, cod_version, cod_proceso, data):
     cod_version = validar_number('cod_version', cod_version, 22)
     cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
-        mensaje = f'Versión {cod_version} inexistente'
+        mensaje = 'Versión {} inexistente'.format(cod_version)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
+        mensaje = 'Proceso {} inexistente'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     anio_inicio, mes_inicio, anio_fin, mes_fin = data.get('anio_inicio'), data.get('mes_inicio'), data.get(
@@ -1585,9 +1597,11 @@ def post_proyeccion(empresa, cod_version, cod_proceso, data):
         mensaje = "Se requieren el año y mes de inicio y el año y mes de fin"
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"CALL {paquete_funcion_bd.PROCESOS.value}.CREAR_PROYECCION({empresa}, {cod_version}, '{cod_proceso}', {anio_inicio}, {mes_inicio}, {anio_fin}, {mes_fin})"
+    sql = "CALL {}.CREAR_PROYECCION({}, {}, '{}', {}, {}, {}, {})".format(paquete_funcion_bd.PROCESOS.value, empresa,
+                                                                          cod_version, cod_proceso, anio_inicio,
+                                                                          mes_inicio, anio_fin, mes_fin)
     custom_base.execute_sql(sql, es_escalar=False)
-    mensaje = f'Se ejecutó la proyección'
+    mensaje = 'Se ejecutó la proyección'
     logger.info(mensaje)
     return '', 204
 
@@ -1617,23 +1631,23 @@ def put_proyeccion(empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_
             **data}
     st_proyeccion_ppp(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
-        mensaje = f'Versión {cod_version} inexistente'
+        mensaje = 'Versión {} inexistente'.format(cod_version)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
+        mensaje = 'Proceso {} inexistente'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_parametro_proceso, (empresa, cod_parametro)):
-        mensaje = f'Parámetro {cod_parametro} inexistente'
+        mensaje = 'Parámetro {} inexistente'.format(cod_parametro)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_cliente_procesos, (empresa, cod_cliente)):
-        mensaje = f'Cliente {cod_cliente} inexistente'
+        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     proyeccion = db.session.get(st_proyeccion_ppp,
@@ -1641,7 +1655,10 @@ def put_proyeccion(empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_
                                  cod_cliente,
                                  anio, mes))
     if not proyeccion:
-        mensaje = f'No existe la proyección especificada ({empresa}, {cod_parametro}, {cod_modelo_comercial}, {cod_marca}, {cod_cliente}, {anio}, {mes})'
+        mensaje = 'No existe la proyección especificada ({}, {}, {}, {}, {}, {}, {})'.format(empresa, cod_parametro,
+                                                                                             cod_modelo_comercial,
+                                                                                             cod_marca, cod_cliente,
+                                                                                             anio, mes)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if data.get('numero') is None and data.get('texto') is None and data.get('fecha') is None:
@@ -1655,9 +1672,11 @@ def put_proyeccion(empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_
         valor = validar_varchar('texto', data['texto'], 1000)
     else:
         valor = validar_fecha('fecha', data['fecha'])
-    sql = f"CALL {paquete_funcion_bd.PROCESOS.value}.ACTUALIZAR_REGISTRO_PROYECCION({empresa}, {cod_version}, '{cod_proceso}', '{cod_parametro}', {cod_modelo_comercial}, {cod_marca}, '{cod_cliente}', {anio}, {mes}, '{valor}')"
+    sql = "CALL {}.ACTUALIZAR_REGISTRO_PROYECCION({}, {}, '{}', '{}', {}, {}, '{}', {}, {}, '{}')".format(
+        paquete_funcion_bd.PROCESOS.value, empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_comercial,
+        cod_marca, cod_cliente, anio, mes, valor)
     custom_base.execute_sql(sql, es_escalar=False)
-    mensaje = f'Se actualizó la proyección con el valor {valor}'
+    mensaje = 'Se actualizó la proyección con el valor {}'.format(valor)
     logger.info(mensaje)
     return '', 204
 
@@ -1671,20 +1690,21 @@ def delete_proyeccion(empresa, cod_version, cod_proceso):
     cod_version = validar_number('cod_version', cod_version, 22)
     cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_version_proyeccion, (empresa, cod_version)):
-        mensaje = f'Versión {cod_version} inexistente'
+        mensaje = 'Versión {} inexistente'.format(cod_version)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_proceso, (empresa, cod_proceso)):
-        mensaje = f'Proceso {cod_proceso} inexistente'
+        mensaje = 'Proceso {} inexistente'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    sql = f"CALL {paquete_funcion_bd.PROCESOS.value}.ELIMINAR_PROYECCION({empresa}, {cod_version}, '{cod_proceso}')"
+    sql = "CALL {}.ELIMINAR_PROYECCION({}, {}, '{}')".format(paquete_funcion_bd.PROCESOS.value, empresa, cod_version,
+                                                             cod_proceso)
     custom_base.execute_sql(sql, es_escalar=False)
-    mensaje = f'Se eliminó la proyección'
+    mensaje = 'Se eliminó la proyección'
     logger.info(mensaje)
     return '', 204
 
@@ -1696,7 +1716,7 @@ def delete_proyeccion(empresa, cod_version, cod_proceso):
 def get_presupuestos(empresa):
     empresa = validar_number('empresa', empresa, 2)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_presupuesto_motos_pro.query()
@@ -1722,24 +1742,25 @@ def post_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes, data):
     data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_modelo': cod_modelo, 'anio': anio, 'mes': mes, **data}
     presupuesto = st_presupuesto_motos_pro(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_cliente_procesos, (empresa, cod_cliente)):
-        mensaje = f'Cliente {cod_cliente} inexistente'
+        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if db.session.get(st_presupuesto_motos_pro, (empresa, cod_cliente, cod_modelo, anio, mes)):
-        mensaje = f'El presupuesto del cliente {cod_cliente}, modelo {cod_modelo}, año {anio} y mes {mes} ya existe'
+        mensaje = 'El presupuesto del cliente {}, modelo {}, año {} y mes {} ya existe'.format(cod_cliente, cod_modelo,
+                                                                                               anio, mes)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     cod_linea, cod_tipo_linea = data.get('cod_linea'), data.get('cod_tipo_linea')
     if (cod_linea is not None and cod_linea != "") and (cod_tipo_linea is None or cod_tipo_linea == ""):
-        mensaje = "Se requiere el tipo de línea"
+        mensaje = 'Se requiere el tipo de línea'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if (cod_tipo_linea is not None and cod_tipo_linea != "") and (cod_linea is None or cod_linea == ""):
-        mensaje = "Se requiere el código de línea"
+        mensaje = 'Se requiere el código de línea'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     presupuesto.cod_linea = None if cod_linea == "" else cod_linea
@@ -1767,16 +1788,17 @@ def put_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes, data):
     data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_modelo': cod_modelo, 'anio': anio, 'mes': mes, **data}
     st_presupuesto_motos_pro(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_cliente_procesos, (empresa, cod_cliente)):
-        mensaje = f'Cliente {cod_cliente} inexistente'
+        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     presupuesto = db.session.get(st_presupuesto_motos_pro, (empresa, cod_cliente, cod_modelo, anio, mes))
     if not presupuesto:
-        mensaje = f'No existe el presupuesto del cliente {cod_cliente}, modelo {cod_modelo}, año {anio} y mes {mes}'
+        mensaje = 'No existe el presupuesto del cliente {}, modelo {}, año {} y mes {}'.format(cod_cliente, cod_modelo,
+                                                                                               anio, mes)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     presupuesto.unidades = data['unidades']
@@ -1813,16 +1835,17 @@ def delete_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes):
     anio = validar_number('anio', anio, 4)
     mes = validar_mes('mes', mes)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_cliente_procesos, (empresa, cod_cliente)):
-        mensaje = f'Cliente {cod_cliente} inexistente'
+        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     presupuesto = db.session.get(st_presupuesto_motos_pro, (empresa, cod_cliente, cod_modelo, anio, mes))
     if not presupuesto:
-        mensaje = f'No existe el presupuesto del cliente {cod_cliente}, modelo {cod_modelo}, año {anio} y mes {mes}'
+        mensaje = 'No existe el presupuesto del cliente {}, modelo {}, año {} y mes {}'.format(cod_cliente, cod_modelo,
+                                                                                               anio, mes)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     db.session.delete(presupuesto)
@@ -1839,7 +1862,7 @@ def delete_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes):
 def get_presupuestos_tipo_cli(empresa):
     empresa = validar_number('empresa', empresa, 2)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_presupuesto_motos_tipo_cli_pro.query()
@@ -1866,11 +1889,13 @@ def post_presupuesto_tipo_cli(empresa, cod_tipo_cliente, cod_modelo, anio, mes, 
             'mes': mes, **data}
     presupuesto = st_presupuesto_motos_tipo_cli_pro(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if db.session.get(st_presupuesto_motos_tipo_cli_pro, (empresa, cod_tipo_cliente, cod_modelo, anio, mes)):
-        mensaje = f'El presupuesto del tipo cliente {cod_tipo_cliente}, modelo {cod_modelo}, año {anio} y mes {mes} ya existe'
+        mensaje = 'El presupuesto del tipo cliente {}, modelo {}, año {} y mes {mes} ya existe'.format(cod_tipo_cliente,
+                                                                                                       cod_modelo, anio,
+                                                                                                       mes)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     db.session.add(presupuesto)
@@ -1897,12 +1922,14 @@ def put_presupuesto_tipo_cli(empresa, cod_tipo_cliente, cod_modelo, anio, mes, d
             'mes': mes, **data}
     st_presupuesto_motos_tipo_cli_pro(**data)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     presupuesto = db.session.get(st_presupuesto_motos_tipo_cli_pro, (empresa, cod_tipo_cliente, cod_modelo, anio, mes))
     if not presupuesto:
-        mensaje = f'No existe el presupuesto del tipo cliente {cod_tipo_cliente}, modelo {cod_modelo}, año {anio} y mes {mes}'
+        mensaje = 'No existe el presupuesto del tipo cliente {}, modelo {}, año {} y mes {}'.format(cod_tipo_cliente,
+                                                                                                    cod_modelo, anio,
+                                                                                                    mes)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     presupuesto.unidades = data['unidades']
@@ -1928,12 +1955,14 @@ def delete_presupuesto_tipo_cli(empresa, cod_tipo_cliente, cod_modelo, anio, mes
     anio = validar_number('anio', anio, 4)
     mes = validar_mes('mes', mes)
     if not db.session.get(Empresa, empresa):
-        mensaje = f'Empresa {empresa} inexistente'
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     presupuesto = db.session.get(st_presupuesto_motos_tipo_cli_pro, (empresa, cod_tipo_cliente, cod_modelo, anio, mes))
     if not presupuesto:
-        mensaje = f'No existe el presupuesto del tipo cliente {cod_tipo_cliente}, modelo {cod_modelo}, año {anio} y mes {mes}'
+        mensaje = 'No existe el presupuesto del tipo cliente {}, modelo {}, año {} y mes {}'.format(cod_tipo_cliente,
+                                                                                                    cod_modelo, anio,
+                                                                                                    mes)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     db.session.delete(presupuesto)
