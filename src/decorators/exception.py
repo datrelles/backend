@@ -25,7 +25,7 @@ def handle_exceptions(action):
             except SQLAlchemyError as e:
                 db.session.rollback()
                 status_code = 500
-                mensaje = f'Ocurrió un error con la base de datos al {action}'
+                mensaje = 'Ocurrió un error con la base de datos al {}'.format(action)
                 orig = getattr(e, 'orig', None)
                 if isinstance(orig, DatabaseError):
                     error_obj, = orig.args
@@ -39,13 +39,13 @@ def handle_exceptions(action):
                                 break
                     elif error_code == 0:
                         mensaje = "Se perdió conexión con la base de datos"
-                logger.exception(f'Ocurrió una excepción con la base de datos al {action}: {e}')
+                logger.exception('Ocurrió una excepción con la base de datos al {}: {}'.format(action, e))
                 return jsonify({'mensaje': mensaje}), status_code
             except Exception as e:
                 db.session.rollback()
-                logger.exception(f'Ocurrió una excepción al {action}: {e}')
+                logger.exception('Ocurrió una excepción al {}: {}'.format(action, e))
                 return jsonify(
-                    {'mensaje': f'Ocurrió un error al {action}'}), 500
+                    {'mensaje': 'Ocurrió un error al {}'.format(action)}), 500
 
         return wrapper
 
