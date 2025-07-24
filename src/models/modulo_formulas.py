@@ -153,12 +153,12 @@ class st_parametro_por_proceso(custom_base):
     )
 
     empresa = Column(NUMBER(precision=2))
-    cod_proceso = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_proceso.cod_proceso'), nullable=False)
+    cod_proceso = Column(VARCHAR(8), ForeignKey('{}.st_proceso.cod_proceso'.format(schema_name)), nullable=False)
     proceso = relationship('st_proceso')
-    cod_parametro = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_parametro_proceso.cod_parametro'),
+    cod_parametro = Column(VARCHAR(8), ForeignKey('{}.st_parametro_proceso.cod_parametro'.format(schema_name)),
                            nullable=False)
     parametro = relationship('st_parametro_proceso')
-    cod_formula = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_formula_proceso.cod_formula'))
+    cod_formula = Column(VARCHAR(8), ForeignKey('{}.st_formula_proceso.cod_formula'.format(schema_name)))
     formula = relationship('st_formula_proceso')
     factores_calculo = relationship('st_factor_calculo_parametro',
                                     primaryjoin="and_(st_parametro_por_proceso.empresa == st_factor_calculo_parametro.empresa, "
@@ -219,9 +219,11 @@ class st_factor_calculo_parametro(custom_base):
         {'schema': schema_name}
     )
 
-    empresa = Column(NUMBER(precision=2), ForeignKey(f'{schema_name}.st_parametro_por_proceso.empresa'), nullable=False)
-    cod_proceso = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_parametro_por_proceso.cod_proceso'), nullable=False)
-    cod_parametro = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_parametro_por_proceso.cod_parametro'),
+    empresa = Column(NUMBER(precision=2), ForeignKey('{}.st_parametro_por_proceso.empresa'.format(schema_name)),
+                     nullable=False)
+    cod_proceso = Column(VARCHAR(8), ForeignKey('{}.st_parametro_por_proceso.cod_proceso'.format(schema_name)),
+                         nullable=False)
+    cod_parametro = Column(VARCHAR(8), ForeignKey('{}.st_parametro_por_proceso.cod_parametro'.format(schema_name)),
                            nullable=False)
     orden = Column(NUMBER(precision=3))
     cod_parametro_tipo = Column(VARCHAR(8))
@@ -280,7 +282,7 @@ class st_funcion(custom_base):
 
     empresa = Column(NUMBER(precision=2))
     cod_funcion = Column(VARCHAR(8))
-    cod_modulo = Column(VARCHAR(3), ForeignKey(f'computo.tg_sistema.cod_sistema'), nullable=False)
+    cod_modulo = Column(VARCHAR(3), ForeignKey('computo.tg_sistema.cod_sistema'), nullable=False)
     paquete = Column(VARCHAR(30), nullable=False)
     nombre = Column(VARCHAR(60), nullable=False)
     nombre_base_datos = Column(VARCHAR(30), nullable=False)
@@ -341,8 +343,8 @@ class st_parametro_funcion(custom_base):
         {'schema': schema_name}
     )
 
-    empresa = Column(NUMBER(precision=2), ForeignKey(f'{schema_name}.st_funcion.empresa'))
-    cod_funcion = Column(VARCHAR(8), ForeignKey(f'{schema_name}.st_funcion.cod_funcion'))
+    empresa = Column(NUMBER(precision=2), ForeignKey('{}.st_funcion.empresa'.format(schema_name)))
+    cod_funcion = Column(VARCHAR(8), ForeignKey('{}.st_funcion.cod_funcion'.format(schema_name)))
     secuencia = Column(NUMBER(precision=10))
     tipo_parametro = Column(VARCHAR(30), nullable=False)
     numero = Column(NUMBER(precision=22, scale=8))

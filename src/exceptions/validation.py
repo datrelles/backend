@@ -25,27 +25,28 @@ class validation_error(Exception):
     def __generar_mensaje(self):
         mensaje = 'Los atributos provistos son inválidos'
         if hasattr(self, 'campo') and hasattr(self, 'categoria'):
-            mensaje = f'El campo {self.campo}'
+            mensaje = 'El campo {}'.format(self.campo)
             match self.categoria:
                 case categoria_excepcion.FALTANTE.value:
-                    mensaje = f'{mensaje} no fue provisto'
+                    mensaje = '{} no fue provisto'.format(mensaje)
                 case categoria_excepcion.VACIO.value:
-                    mensaje = f'{mensaje} está vacío'
+                    mensaje = '{} está vacío'.format(mensaje)
                 case categoria_excepcion.TIPO.value:
-                    mensaje = f'{mensaje} no es del tipo requerido'
+                    mensaje = '{} no es del tipo requerido'.format(mensaje)
                 case categoria_excepcion.VALOR_POSITIVO.value:
-                    mensaje = f'{mensaje} solo admite valores positivos'
+                    mensaje = '{} solo admite valores positivos'.format(mensaje)
                 case categoria_excepcion.LONGITUD.value:
-                    mensaje = f'{mensaje} permite hasta {self.longitud} caracteres'
+                    mensaje = '{} permite hasta {} caracteres'.format(mensaje, self.longitud)
                 case categoria_excepcion.DIGITOS.value:
-                    aviso_decimales = f'y {self.decimales} decimales' if self.decimales else 'sin decimales'
-                    mensaje = f'{mensaje} permite hasta {self.enteros} dígitos enteros {aviso_decimales}'
+                    aviso_decimales = 'y {} decimales'.format(self.decimales) if self.decimales else 'sin decimales'
+                    mensaje = '{} permite hasta {} dígitos enteros {}'.format(mensaje, self.enteros, aviso_decimales)
                 case categoria_excepcion.VALORES_PERMITIDOS.value:
-                    mensaje = f'{mensaje} no coincide con ninguno de los valores permitidos: {', '.join([str(v) for v in self.valores_permitidos])}'
+                    mensaje = '{} no coincide con ninguno de los valores permitidos: {}'.format(mensaje, ', '.join(
+                        [str(v) for v in self.valores_permitidos]))
                 case _:
-                    mensaje = f'{mensaje} es inválido'
+                    mensaje = '{} es inválido'.format(mensaje)
         elif hasattr(self, 'faltantes'):
-            mensaje = f'Faltan los siguientes campos: {', '.join(self.faltantes)}'
+            mensaje = 'Faltan los siguientes campos: {}'.format(', '.join(self.faltantes))
         elif hasattr(self, 'no_requeridos'):
-            mensaje = f'Los siguientes campos no son requeridos: {', '.join(self.no_requeridos)}'
+            mensaje = 'Los siguientes campos no son requeridos: {}'.format(', '.join(self.no_requeridos))
         return mensaje

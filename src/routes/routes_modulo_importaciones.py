@@ -26,26 +26,26 @@ def get_cabecera_consignacion(empresa, cod_cliente):
         cabecera = query.filter(st_cabecera_consignacion.empresa == empresa,
                                 st_cabecera_consignacion.cod_cliente == cod_cliente).first()
         if not db.session.get(Empresa, empresa):
-            mensaje = f'Empresa {empresa} inexistente'
+            mensaje = 'Empresa {} inexistente'.format(empresa)
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
         if not db.session.get(Cliente, (empresa, cod_cliente)):
-            mensaje = f'Cliente {cod_cliente} inexistente'
+            mensaje = 'Cliente {} inexistente'.format(cod_cliente)
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
         if cabecera:
             return jsonify(cabecera.to_dict())
         else:
-            mensaje = f'No existe cabecera de consignación para el cliente {cod_cliente}'
+            mensaje = 'No existe cabecera de consignación para el cliente {}'.format(cod_cliente)
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
     except validation_error as e:
         logger.exception(e)
         return jsonify({'mensaje': str(e)}), 400
     except Exception as e:
-        logger.exception(f'Ocurrió una excepción al consultar la cabecera de la consignación: {e}')
+        logger.exception('Ocurrió una excepción al consultar la cabecera de la consignación: {}'.format(e))
         return jsonify(
-            {'mensaje': f'Ocurrió un error al consultar la cabecera de la consignación'}), 500
+            {'mensaje': 'Ocurrió un error al consultar la cabecera de la consignación'}), 500
 
 
 @importaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/cabecera-consignacion", methods=["POST"])
@@ -58,20 +58,20 @@ def post_cabecera_consignacion(empresa, cod_cliente):
         data = {'empresa': empresa, 'cod_cliente': cod_cliente, **request.get_json()}
         cabecera = st_cabecera_consignacion(**data)
         if db.session.get(st_cabecera_consignacion, (empresa, cod_cliente)):
-            mensaje = f'Ya existe una cabecera de consignación para el cliente {cod_cliente}'
+            mensaje = 'Ya existe una cabecera de consignación para el cliente {}'.format(cod_cliente)
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
         if not db.session.get(Empresa, empresa):
-            mensaje = f'Empresa {empresa} inexistente'
+            mensaje = 'Empresa {} inexistente'.format(empresa)
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
         if not db.session.get(Cliente, (empresa, cod_cliente)):
-            mensaje = f'Cliente {cod_cliente} inexistente'
+            mensaje = 'Cliente {} inexistente'.format(cod_cliente)
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
         db.session.add(cabecera)
         db.session.commit()
-        mensaje = f'Se registró la cabecera de consignación para el cliente {cod_cliente}'
+        mensaje = 'Se registró la cabecera de consignación para el cliente {}'.format(cod_cliente)
         logger.info(mensaje)
         return jsonify({'mensaje': mensaje}), 201
     except BadRequest as e:
@@ -84,11 +84,11 @@ def post_cabecera_consignacion(empresa, cod_cliente):
         return jsonify({'mensaje': str(e)}), 400
     except SQLAlchemyError as e:
         db.session.rollback()
-        logger.exception(f'Ocurrió una excepción con la base de datos: {e}')
+        logger.exception('Ocurrió una excepción con la base de datos: {}'.format(e))
         return jsonify(
-            {'mensaje': f'Ocurrió un error con la base de datos'}), 500
+            {'mensaje': 'Ocurrió un error con la base de datos'}), 500
     except Exception as e:
         db.session.rollback()
-        logger.exception(f'Ocurrió una excepción al registrar la cabecera de consignación: {e}')
+        logger.exception('Ocurrió una excepción al registrar la cabecera de consignación: {}'.format(e))
         return jsonify(
-            {'mensaje': f'Ocurrió un error al registrar la cabecera de consignación'}), 500
+            {'mensaje': 'Ocurrió un error al registrar la cabecera de consignación'}), 500

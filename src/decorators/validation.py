@@ -16,9 +16,9 @@ def validate_json():
                 data = request.get_json()
                 if isinstance(data, dict):
                     return func(*args, data=data, **kwargs)
-                mensaje = f'{mensaje} está incompleta'
+                mensaje = '{} está incompleta'.format(mensaje)
             except BadRequest:
-                mensaje = f'{mensaje} tiene un formato inválido'
+                mensaje = '{} tiene un formato inválido'.format(mensaje)
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
 
