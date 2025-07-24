@@ -44,8 +44,6 @@ from src.routes.module_order.module_order_routes import rmor
 from src.routes.email_alert import aem, execute_send_alert_emails_for_role
 from src.routes.benchmarking.catalog_benchmarking import bench
 from src.routes.images.s3_upload import s3
-from src.routes.warranty_module import rmwa
-from src.routes.email_alert import aem, execute_send_alert_emails, execute_send_alert_emails_for_role
 from src.routes.routes_modulo_formulas import formulas_b
 from src.routes.routes_modulo_importaciones import importaciones_b
 
