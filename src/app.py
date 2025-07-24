@@ -1,7 +1,7 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, request, jsonify
 from numpy.core.defchararray import upper
-from flask_mail import Mail
+from flask_mail import Mail, Message
 import requests
 
 import oracle
@@ -19,6 +19,8 @@ from logging_config import configure_logging
 import os
 from datetime import datetime, timedelta
 import jwt
+from flask_jwt_extended import create_access_token, get_jwt_identity, unset_jwt_cookies, jwt_required, \
+    JWTManager
 from flask_jwt_extended import create_access_token, unset_jwt_cookies, jwt_required, JWTManager, get_jwt_identity
 import urllib3
 
@@ -42,6 +44,8 @@ from src.routes.module_order.module_order_routes import rmor
 from src.routes.email_alert import aem, execute_send_alert_emails_for_role
 from src.routes.benchmarking.catalog_benchmarking import bench
 from src.routes.images.s3_upload import s3
+from src.routes.routes_modulo_formulas import formulas_b
+from src.routes.routes_modulo_importaciones import importaciones_b
 
 ###################################################
 
@@ -96,8 +100,8 @@ app.register_blueprint(bench, url_prefix="/bench")
 app.register_blueprint(s3, url_prefix="/s3")
 app.register_blueprint(bench_model, url_prefix="/bench_model")
 app.register_blueprint(bench_rep, url_prefix="/bench_rep")
-
-
+app.register_blueprint(formulas_b, url_prefix="/modulo-formulas")
+app.register_blueprint(importaciones_b, url_prefix="/modulo-importaciones")
 #############################################################################
 
 jwt_manager = JWTManager(app)
@@ -113,7 +117,6 @@ login_manager = LoginManager(app)
 
 app.register_blueprint(auth, url_prefix="/")
 app.register_blueprint(web_services, url_prefix="/api")
-
 
 CLIENT_ID = getenv("CLIENT_ID")
 KID = getenv("KID")
@@ -152,6 +155,7 @@ def create_token():
             return {"msg": "Wrong username"}, 401
     except Exception as ex:
         raise Exception(ex)
+
 
 @app.route('/enterprise/<id>')
 @jwt_required()
@@ -205,7 +209,7 @@ def enterprise_default(id):
 @app.route('/branch/<id>/<en>')
 @jwt_required()
 @cross_origin()
-def branch(id,en):
+def branch(id, en):
     try:
         c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur_01 = c.cursor()
@@ -227,31 +231,33 @@ def branch(id,en):
     except Exception as ex:
         raise Exception(ex)
     return jsonify(response_body)
+
+
 @app.route('/modules/<user>/<enterprise>')
 @jwt_required()
 @cross_origin()
-def module(user,enterprise):
+def module(user, enterprise):
     try:
         c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur_01 = c.cursor()
         user = str(upper(user))
         sql = ('SELECT DISTINCT F.COD_SISTEMA, F.SISTEMA, F.PATH_IMAGEN, F.RUTA '
-                'FROM computo.usuario  a, computo.TG_ROL_USUARIO B, computo.TG_ROL C, computo.TG_MENU_SISTEMA_ROL D, computo.TG_MENU_SISTEMA E, computo.TG_SISTEMA F '
-                'WHERE a.usuario_oracle        =         :id '
-                'AND   A.EMPRESA_ACTUAL        =         :en '
-                'AND   B.EMPRESA               =         A.EMPRESA_ACTUAL '
-                'AND   B.USUARIO               =         A.USUARIO_ORACLE '
-                'AND   B.ACTIVO                =         1 '
-                'AND   C.EMPRESA               =         B.EMPRESA '
-                'AND   C.COD_ROL               =         B.COD_ROL '
-                'AND   C.ACTIVO                =         1 '
-                'AND   D.COD_ROL               =         B.COD_ROL '
-                'AND   D.COD_SISTEMA           =         E.COD_SISTEMA '
-                'AND   D.COD_MENU              =         E.COD_MENU_PADRE '
-                'AND   D.EMPRESA               =         B.EMPRESA '
-                'AND   D.EMPRESA               =         E.EMPRESA '
-                'AND   D.ACTIVO                =         1 '
-                'AND   F.COD_SISTEMA           =         E.COD_SISTEMA')
+               'FROM computo.usuario  a, computo.TG_ROL_USUARIO B, computo.TG_ROL C, computo.TG_MENU_SISTEMA_ROL D, computo.TG_MENU_SISTEMA E, computo.TG_SISTEMA F '
+               'WHERE a.usuario_oracle        =         :id '
+               'AND   A.EMPRESA_ACTUAL        =         :en '
+               'AND   B.EMPRESA               =         A.EMPRESA_ACTUAL '
+               'AND   B.USUARIO               =         A.USUARIO_ORACLE '
+               'AND   B.ACTIVO                =         1 '
+               'AND   C.EMPRESA               =         B.EMPRESA '
+               'AND   C.COD_ROL               =         B.COD_ROL '
+               'AND   C.ACTIVO                =         1 '
+               'AND   D.COD_ROL               =         B.COD_ROL '
+               'AND   D.COD_SISTEMA           =         E.COD_SISTEMA '
+               'AND   D.COD_MENU              =         E.COD_MENU_PADRE '
+               'AND   D.EMPRESA               =         B.EMPRESA '
+               'AND   D.EMPRESA               =         E.EMPRESA '
+               'AND   D.ACTIVO                =         1 '
+               'AND   F.COD_SISTEMA           =         E.COD_SISTEMA')
         cursor = cur_01.execute(sql, id=user, en=enterprise)
         c.close
         row_headers = [x[0] for x in cursor.description]
@@ -265,33 +271,34 @@ def module(user,enterprise):
         raise Exception(ex)
     return jsonify(response_body)
 
+
 @app.route('/menus/<user>/<enterprise>/<system>')
 @jwt_required()
 @cross_origin()
-def menu(user,enterprise, system):
+def menu(user, enterprise, system):
     try:
         c = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur_01 = c.cursor()
         user = str(upper(user))
         sql = ('SELECT E.COD_MENU, E.COD_MENU_PADRE, E.NOMBRE, E.RUTA '
-                    'FROM computo.usuario  a, computo.TG_ROL_USUARIO B,  computo.TG_ROL C, ' 
-                    'computo.TG_MENU_SISTEMA_ROL D, computo.TG_MENU_SISTEMA E, computo.TG_SISTEMA F '
-                    'WHERE a.usuario_oracle        =         :id '
-                    'AND   A.EMPRESA_ACTUAL        =         :en '
-                    'AND   B.EMPRESA               =         A.EMPRESA_ACTUAL '
-                    'AND   B.USUARIO               =         A.USUARIO_ORACLE '
-                    'AND   B.ACTIVO                =         1 '
-                    'AND   C.EMPRESA               =         B.EMPRESA '
-                    'AND   C.COD_ROL               =         B.COD_ROL '
-                    'AND   C.ACTIVO                =         1 '
-                    'AND   D.COD_ROL               =         B.COD_ROL '
-                    'AND   D.COD_SISTEMA           =         E.COD_SISTEMA '
-                    'AND   D.EMPRESA               =         B.EMPRESA '
-                    'AND   D.EMPRESA               =         E.EMPRESA '
-                    'AND   D.COD_MENU              =         E.COD_MENU '
-                    'AND   D.ACTIVO                =         1 '
-                    'AND   F.COD_SISTEMA           =         E.COD_SISTEMA '
-                    'AND   F.COD_SISTEMA           =         :sys')
+               'FROM computo.usuario  a, computo.TG_ROL_USUARIO B,  computo.TG_ROL C, '
+               'computo.TG_MENU_SISTEMA_ROL D, computo.TG_MENU_SISTEMA E, computo.TG_SISTEMA F '
+               'WHERE a.usuario_oracle        =         :id '
+               'AND   A.EMPRESA_ACTUAL        =         :en '
+               'AND   B.EMPRESA               =         A.EMPRESA_ACTUAL '
+               'AND   B.USUARIO               =         A.USUARIO_ORACLE '
+               'AND   B.ACTIVO                =         1 '
+               'AND   C.EMPRESA               =         B.EMPRESA '
+               'AND   C.COD_ROL               =         B.COD_ROL '
+               'AND   C.ACTIVO                =         1 '
+               'AND   D.COD_ROL               =         B.COD_ROL '
+               'AND   D.COD_SISTEMA           =         E.COD_SISTEMA '
+               'AND   D.EMPRESA               =         B.EMPRESA '
+               'AND   D.EMPRESA               =         E.EMPRESA '
+               'AND   D.COD_MENU              =         E.COD_MENU '
+               'AND   D.ACTIVO                =         1 '
+               'AND   F.COD_SISTEMA           =         E.COD_SISTEMA '
+               'AND   F.COD_SISTEMA           =         :sys')
         cursor = cur_01.execute(sql, id=user, en=enterprise, sys=system)
         c.close
         row_headers = [x[0] for x in cursor.description]
@@ -320,16 +327,19 @@ def menu(user,enterprise, system):
         raise Exception(ex)
     return jsonify(response_body)
 
-@app.route("/logout",methods=["POST"])
+
+@app.route("/logout", methods=["POST"])
 @cross_origin()
 def logout():
     response = jsonify({"msg": "logout succesfull"})
     unset_jwt_cookies(response)
     return response
 
+
 @app.route("/health")
 def health_check():
     return "OK", 200
+
 
 @app.route("/gen_jwt", methods=["POST"])
 @cross_origin()
@@ -363,6 +373,7 @@ def gen_jwt():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 @app.route("/generate_netsuite_token", methods=["GET"])
 @cross_origin()
 @jwt_required()
@@ -386,7 +397,6 @@ def generate_netsuite_token():
         if last_token:
             empresa, token, fecha_inicio, fecha_final = last_token
             if fecha_final > now:
-
                 return jsonify({
                     "access_token": token,
                     "empresa": empresa,
@@ -394,7 +404,6 @@ def generate_netsuite_token():
                     "fecha_final": fecha_final.strftime("%Y-%m-%d %H:%M:%S"),
                     "message": "Token aún válido, no se generó uno nuevo."
                 })
-
 
         jwt_response = gen_jwt()
         jwt_token = jwt_response.json.get("token")
@@ -442,6 +451,7 @@ def generate_netsuite_token():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/gen_api_token", methods=["POST"])
 @cross_origin()
@@ -505,18 +515,15 @@ def gen_api_token():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 def scheduled_task():
     with app.app_context():
         execute_send_alert_emails_for_role()
 
+
 scheduler.add_job(scheduled_task, 'interval', minutes=30)
 scheduler.start()
 
-
-
-
-
-
 if __name__ == '__main__':
     load_dotenv(find_dotenv())
-    app.run(host='0.0.0.0', port=5000, debug = True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
