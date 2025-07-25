@@ -9,11 +9,13 @@ from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import aliased
 from unidecode import unidecode
+from unidecode import unidecode
 
 from src.config.database import db
 from src.models.catalogos_bench import Chasis, DimensionPeso, ElectronicaOtros, Transmision, Imagenes, TipoMotor, Motor, \
     Color, Canal, MarcaRepuesto, ProductoExterno, Linea, Marca, ModeloSRI, ModeloHomologado, MatriculacionMarca, \
-    ModeloComercial, Segmento, Version, ModeloVersionRepuesto, ClienteCanal, ModeloVersion, Benchmarking, StCliente
+    ModeloComercial, Segmento, Version, ModeloVersionRepuesto, ClienteCanal, ModeloVersion, Benchmarking, StCliente, \
+    ClienteCanalModelo
 from src.models.productos import Producto
 from src.models.proveedores import TgModeloItem
 from src.models.users import Empresa
@@ -1703,10 +1705,6 @@ def insert_modelo_version():
             "codigo_modelo_comercial",
             "codigo_marca",
             "codigo_version",
-            "codigo_cliente_canal",
-            "empresa",
-            "cod_producto",
-            "codigo_mod_vers_repuesto",
             "nombre_modelo_version",
             "anio_modelo_version",
             "precio_producto_modelo",
@@ -1718,7 +1716,7 @@ def insert_modelo_version():
             return jsonify({
                 "error": "No se insertó ningún registro",
                 "detalles": [{
-                    "error": "Faltan campos obligatorios",
+                    "error": f"Faltan campos obligatorios: {', '.join(faltantes)}",
                     "repuestos": data
                 }]
             }), 400
@@ -1757,12 +1755,6 @@ def insert_modelo_version():
             (ElectronicaOtros, {"codigo_electronica": data["codigo_electronica"]}),
             (Transmision, {"codigo_transmision": data["codigo_transmision"]}),
             (Chasis, {"codigo_chasis": data["codigo_chasis"]}),
-            (ClienteCanal, {
-                "codigo_cliente_canal": data["codigo_cliente_canal"],
-                "codigo_mod_vers_repuesto": data["codigo_mod_vers_repuesto"],
-                "empresa": data["empresa"],
-                "cod_producto": data["cod_producto"]
-            }),
             (ModeloComercial, {
                 "codigo_modelo_comercial": data["codigo_modelo_comercial"],
                 "codigo_marca": data["codigo_marca"]
@@ -1790,10 +1782,6 @@ def insert_modelo_version():
             codigo_chasis=data["codigo_chasis"],
             codigo_modelo_comercial=data["codigo_modelo_comercial"],
             codigo_marca=data["codigo_marca"],
-            codigo_cliente_canal=data["codigo_cliente_canal"],
-            codigo_mod_vers_repuesto=data["codigo_mod_vers_repuesto"],
-            empresa=data["empresa"],
-            cod_producto=data["cod_producto"],
             codigo_version=data["codigo_version"],
             nombre_modelo_version=data["nombre_modelo_version"],
             anio_modelo_version=data["anio_modelo_version"],
@@ -1834,7 +1822,7 @@ def insert_modelo_version_masivo():
                 campos_obligatorios = [
                     "codigo_dim_peso", "descripcion_imagen", "codigo_electronica",
                     "codigo_motor", "caja_cambios", "nombre_color", "codigo_chasis",
-                    "nombre_modelo", "nombre_version", "codigo_cliente_canal",
+                    "nombre_modelo", "nombre_version",
                     "nombre_modelo_version", "anio_modelo_version",
                     "precio_producto_modelo", "precio_venta_distribuidor"
                 ]
@@ -1864,7 +1852,7 @@ def insert_modelo_version_masivo():
                 codigo_tipo_motor = motor.codigo_tipo_motor
 
                 imagen = db.session.query(Imagenes).filter(
-                    db.func.upper(db.func.trim(Imagenes.descripcion_imagen)) == normalize_string(
+                    func.upper(func.trim(Imagenes.descripcion_imagen)) == normalize_string(
                         row_data["descripcion_imagen"])
                 ).first()
                 if not imagen:
@@ -1876,7 +1864,7 @@ def insert_modelo_version_masivo():
                     continue
 
                 transmision = db.session.query(Transmision).filter(
-                    db.func.upper(db.func.trim(Transmision.caja_cambios)) == normalize_string(row_data["caja_cambios"])
+                    func.upper(func.trim(Transmision.caja_cambios)) == normalize_string(row_data["caja_cambios"])
                 ).first()
                 if not transmision:
                     errores.append({
@@ -1887,7 +1875,7 @@ def insert_modelo_version_masivo():
                     continue
 
                 color = db.session.query(Color).filter(
-                    db.func.upper(db.func.trim(Color.nombre_color)) == normalize_string(row_data["nombre_color"])
+                    func.upper(func.trim(Color.nombre_color)) == normalize_string(row_data["nombre_color"])
                 ).first()
                 if not color:
                     errores.append({
@@ -1898,7 +1886,7 @@ def insert_modelo_version_masivo():
                     continue
 
                 modelo = db.session.query(ModeloComercial).filter(
-                    db.func.upper(db.func.trim(ModeloComercial.nombre_modelo)) == normalize_string(
+                    func.upper(func.trim(ModeloComercial.nombre_modelo)) == normalize_string(
                         row_data["nombre_modelo"])
                 ).first()
                 if not modelo:
@@ -1913,7 +1901,7 @@ def insert_modelo_version_masivo():
 
                 nombre_version = str(row_data["nombre_version"]).strip().upper()
                 version = db.session.query(Version).filter(
-                    db.func.upper(db.func.trim(Version.nombre_version)) == nombre_version
+                    func.upper(func.trim(Version.nombre_version)) == nombre_version
                 ).first()
 
                 if not version:
@@ -1922,12 +1910,6 @@ def insert_modelo_version_masivo():
                         "error": f"Versión '{row_data['nombre_version']}' no encontrada",
                         "datos": row_data
                     })
-                    continue
-
-                cliente = db.session.query(ClienteCanal).filter_by(
-                    codigo_cliente_canal=row_data["codigo_cliente_canal"]).first()
-                if not cliente:
-                    errores.append({"fila": idx + 1, "error": "Cliente canal no encontrado"})
                     continue
 
                 nuevo = ModeloVersion(
@@ -1941,10 +1923,6 @@ def insert_modelo_version_masivo():
                     codigo_chasis=row_data["codigo_chasis"],
                     codigo_modelo_comercial=codigo_modelo_comercial,
                     codigo_marca=codigo_marca,
-                    codigo_cliente_canal=row_data["codigo_cliente_canal"],
-                    codigo_mod_vers_repuesto=cliente.codigo_mod_vers_repuesto,
-                    empresa=cliente.empresa,
-                    cod_producto=cliente.cod_producto,
                     codigo_version=version.codigo_version,
                     nombre_modelo_version=row_data["nombre_modelo_version"],
                     anio_modelo_version=anio,
@@ -2446,8 +2424,8 @@ def get_modelos_version_repuesto():
             .join(Version, ModeloVersionRepuesto.codigo_version == Version.codigo_version) \
             .join(Empresa, ModeloVersionRepuesto.empresa == Empresa.empresa) \
             .join(modelo_item_alias, (Producto.empresa == modelo_item_alias.empresa) & (
-                    Producto.cod_modelo == modelo_item_alias.cod_modelo) & (
-                              Producto.cod_item == modelo_item_alias.cod_item)) \
+                    Producto.cod_modelo_cat1 == modelo_item_alias.cod_modelo) & (
+                              Producto.cod_item_cat1 == modelo_item_alias.cod_item)) \
             .all()
 
         return jsonify([{
@@ -2545,6 +2523,8 @@ def get_productos():
             Producto.cod_producto,
             Producto.cod_modelo,
             Producto.cod_item,
+            Producto.cod_item_cat1,
+            Producto.cod_modelo_cat1,
             modelo_item_alias.nombre.label("nombre_item"),
             Producto.nombre.label("nombre_producto"),
             Producto.empresa,
@@ -2554,10 +2534,11 @@ def get_productos():
         ).join(
             modelo_item_alias,
             (Producto.empresa == modelo_item_alias.empresa) &
-            (Producto.cod_modelo == modelo_item_alias.cod_modelo) &
-            (Producto.cod_item == modelo_item_alias.cod_item)
+            (Producto.cod_modelo_cat1 == modelo_item_alias.cod_modelo) &
+            (Producto.cod_item_cat1 == modelo_item_alias.cod_item)
         ).filter(
-            Producto.activo == 'S'
+            Producto.activo == 'S',
+            Producto.cod_modelo_cat1 == 'PRO3'
         ).all()
 
         resultado = [
@@ -2565,6 +2546,8 @@ def get_productos():
                 "cod_producto": p.cod_producto,
                 "cod_modelo": p.cod_modelo,
                 "cod_item": p.cod_item,
+                "cod_item_cat1": p.cod_item_cat1,
+                "cod_modelo_cat1": p.cod_modelo_cat1,
                 "nombre_item": p.nombre_item.strip().upper(),
                 "nombre_producto": p.nombre_producto.strip(),
                 "empresa": int(p.empresa),
@@ -2639,8 +2622,6 @@ def get_modelo_version():
             Motor.nombre_motor,
             Motor.codigo_motor,
             Motor.codigo_tipo_motor,
-            ModeloVersionRepuesto.codigo_prod_externo,
-            ProductoExterno.nombre_producto.label("nombre_producto_externo"),
             TipoMotor.nombre_tipo.label("nombre_tipo"),
             Transmision.codigo_transmision,
             Transmision.caja_cambios,
@@ -2648,42 +2629,33 @@ def get_modelo_version():
             Color.codigo_color_bench,
             Chasis.codigo_chasis,
             ModeloComercial.nombre_modelo.label("nombre_modelo_comercial"),
+            ModeloComercial.anio_modelo.label("anio_modelo_comercial"),
             Marca.nombre_marca,
-            ClienteCanal.codigo_cliente_canal,
-            Canal.nombre_canal,
-            ClienteCanal.cod_producto,
-            Producto.nombre.label("nombre_producto"),
-            ClienteCanal.empresa,
-            Empresa.nombre.label("nombre_empresa"),
             Version.nombre_version
-        ).join(ClienteCanal, ModeloVersion.codigo_cliente_canal == ClienteCanal.codigo_cliente_canal) \
-            .join(ModeloComercial, (ModeloVersion.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
-                  (ModeloVersion.codigo_marca == ModeloComercial.codigo_marca)) \
-            .join(Marca, ModeloVersion.codigo_marca == Marca.codigo_marca) \
-            .join(Empresa, ClienteCanal.empresa == Empresa.empresa) \
-            .outerjoin(DimensionPeso, ModeloVersion.codigo_dim_peso == DimensionPeso.codigo_dim_peso) \
-            .outerjoin(Imagenes, ModeloVersion.codigo_imagen == Imagenes.codigo_imagen) \
-            .outerjoin(ElectronicaOtros, ModeloVersion.codigo_electronica == ElectronicaOtros.codigo_electronica) \
-            .outerjoin(Motor, (ModeloVersion.codigo_motor == Motor.codigo_motor) &
-                       (ModeloVersion.codigo_tipo_motor == Motor.codigo_tipo_motor)) \
-            .outerjoin(TipoMotor, Motor.codigo_tipo_motor == TipoMotor.codigo_tipo_motor) \
-            .outerjoin(Transmision, ModeloVersion.codigo_transmision == Transmision.codigo_transmision) \
-            .outerjoin(Color, ModeloVersion.codigo_color_bench == Color.codigo_color_bench) \
-            .outerjoin(Chasis, ModeloVersion.codigo_chasis == Chasis.codigo_chasis) \
-            .outerjoin(Canal, ClienteCanal.codigo_canal == Canal.codigo_canal) \
-            .outerjoin(Producto, (ClienteCanal.cod_producto == Producto.cod_producto) &
-                       (ClienteCanal.empresa == Producto.empresa)) \
-            .outerjoin(ModeloVersionRepuesto,
-                       ClienteCanal.codigo_mod_vers_repuesto == ModeloVersionRepuesto.codigo_mod_vers_repuesto) \
-            .outerjoin(ProductoExterno,
-                       ModeloVersionRepuesto.codigo_prod_externo == ProductoExterno.codigo_prod_externo) \
-            .outerjoin(Version, ModeloVersion.codigo_version == Version.codigo_version) \
-            .all()
+        ).join(ModeloComercial,
+               (ModeloVersion.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
+               (ModeloVersion.codigo_marca == ModeloComercial.codigo_marca)) \
+         .join(Marca, ModeloVersion.codigo_marca == Marca.codigo_marca) \
+         .outerjoin(DimensionPeso, ModeloVersion.codigo_dim_peso == DimensionPeso.codigo_dim_peso) \
+         .outerjoin(Imagenes, ModeloVersion.codigo_imagen == Imagenes.codigo_imagen) \
+         .outerjoin(ElectronicaOtros, ModeloVersion.codigo_electronica == ElectronicaOtros.codigo_electronica) \
+         .outerjoin(Motor, (ModeloVersion.codigo_motor == Motor.codigo_motor) &
+                           (ModeloVersion.codigo_tipo_motor == Motor.codigo_tipo_motor)) \
+         .outerjoin(TipoMotor, Motor.codigo_tipo_motor == TipoMotor.codigo_tipo_motor) \
+         .outerjoin(Transmision, ModeloVersion.codigo_transmision == Transmision.codigo_transmision) \
+         .outerjoin(Color, ModeloVersion.codigo_color_bench == Color.codigo_color_bench) \
+         .outerjoin(Chasis, ModeloVersion.codigo_chasis == Chasis.codigo_chasis) \
+         .outerjoin(Version, ModeloVersion.codigo_version == Version.codigo_version) \
+         .all()
 
         return jsonify([{
             "codigo_modelo_version": r.codigo_modelo_version,
             "nombre_modelo_version": r.nombre_modelo_version,
             "anio_modelo_version": r.anio_modelo_version,
+            "nombre_modelo_comercial": r.nombre_modelo_comercial,
+            "anio_modelo_comercial": r.anio_modelo_comercial,
+            "nombre_marca": r.nombre_marca,
+            "nombre_version": r.nombre_version,
             "precio_producto_modelo": r.precio_producto_modelo,
             "precio_venta_distribuidor": r.precio_venta_distribuidor,
             "codigo_dim_peso": r.codigo_dim_peso,
@@ -2699,18 +2671,7 @@ def get_modelo_version():
             "codigo_color_bench": r.codigo_color_bench,
             "caja_cambios": r.caja_cambios,
             "nombre_color": r.nombre_color.upper() if r.nombre_color else None,
-            "codigo_chasis": r.codigo_chasis,
-            "nombre_modelo_comercial": r.nombre_modelo_comercial,
-            "nombre_marca": r.nombre_marca,
-            "codigo_cliente_canal": r.codigo_cliente_canal,
-            "nombre_canal": r.nombre_canal,
-            "cod_producto": r.cod_producto,
-            "nombre_producto": r.nombre_producto,
-            "empresa": r.empresa,
-            "nombre_empresa": r.nombre_empresa,
-            "nombre_version": r.nombre_version,
-            "nombre_producto_externo": r.nombre_producto_externo,
-            "codigo_prod_externo": r.codigo_prod_externo
+            "codigo_chasis": r.codigo_chasis
         } for r in resultados]), 200
 
     except Exception as e:
@@ -3477,8 +3438,7 @@ def update_modelo_version(codigo_modelo_version):
         campos_requeridos = [
             "codigo_imagen", "codigo_dim_peso", "codigo_electronica", "codigo_motor", "codigo_tipo_motor",
             "codigo_transmision", "codigo_color_bench", "codigo_chasis", "codigo_modelo_comercial",
-            "codigo_marca", "codigo_version", "codigo_cliente_canal", "codigo_mod_vers_repuesto",
-            "empresa", "cod_producto", "nombre_modelo_version", "anio_modelo_version",
+            "codigo_marca", "codigo_version", "nombre_modelo_version", "anio_modelo_version",
             "precio_producto_modelo", "precio_venta_distribuidor"
         ]
         faltantes = [campo for campo in campos_requeridos if data.get(campo) in [None, ""]]
@@ -3509,10 +3469,6 @@ def update_modelo_version(codigo_modelo_version):
         modelo_version.codigo_chasis = data["codigo_chasis"]
         modelo_version.codigo_modelo_comercial = data["codigo_modelo_comercial"]
         modelo_version.codigo_marca = data["codigo_marca"]
-        modelo_version.codigo_cliente_canal = data["codigo_cliente_canal"]
-        modelo_version.codigo_mod_vers_repuesto = data["codigo_mod_vers_repuesto"]
-        modelo_version.empresa = data["empresa"]
-        modelo_version.cod_producto = data["cod_producto"]
         modelo_version.codigo_version = data["codigo_version"]
         modelo_version.nombre_modelo_version = data["nombre_modelo_version"]
         modelo_version.anio_modelo_version = data["anio_modelo_version"]
@@ -4049,35 +4005,27 @@ def update_modelo_version_masivo():
                 continue
 
             try:
-                imagen = db.session.query(Imagenes).filter(Imagenes.descripcion_imagen == data["descripcion_imagen"]).first()
+                imagen = db.session.query(Imagenes).filter(
+                    Imagenes.descripcion_imagen == data["descripcion_imagen"]
+                ).first()
                 if not imagen:
                     raise Exception("descripcion_imagen no encontrada")
                 codigo_imagen = imagen.codigo_imagen
 
                 color = db.session.query(Color).filter(
-                    func.upper(Color.nombre_color) == data["nombre_color"].strip().upper()).first()
+                    func.upper(Color.nombre_color) == data["nombre_color"].strip().upper()
+                ).first()
                 if not color:
                     raise Exception("Color no encontrado")
                 codigo_color_bench = color.codigo_color_bench
 
                 modelo_com = db.session.query(ModeloComercial).filter(
                     ModeloComercial.nombre_modelo == data["nombre_modelo_comercial"]
-
                 ).first()
                 if not modelo_com:
                     raise Exception("Modelo comercial no encontrado")
                 codigo_modelo_comercial = modelo_com.codigo_modelo_comercial
                 codigo_marca = modelo_com.codigo_marca
-
-                cliente = db.session.query(ClienteCanal).filter(
-                    ClienteCanal.codigo_cliente_canal == data["codigo_cliente_canal"]).first()
-                if not cliente:
-                    raise Exception("Cliente canal no encontrado")
-                codigo_cliente_canal = cliente.codigo_cliente_canal
-                codigo_canal = cliente.codigo_canal
-                codigo_mod_vers_repuesto = cliente.codigo_mod_vers_repuesto
-                empresa= cliente.empresa
-                cod_producto = cliente.cod_producto
 
                 version = db.session.query(Version).filter(
                     Version.nombre_version == str(data["nombre_version"])
@@ -4086,7 +4034,9 @@ def update_modelo_version_masivo():
                     raise Exception("Versión no encontrada")
                 codigo_version = version.codigo_version
 
-                motor = db.session.query(Motor).filter(Motor.codigo_motor == data["codigo_motor"]).first()
+                motor = db.session.query(Motor).filter(
+                    Motor.codigo_motor == data["codigo_motor"]
+                ).first()
                 if not motor:
                     raise Exception("Motor no encontrado")
                 codigo_tipo_motor = motor.codigo_tipo_motor
@@ -4108,11 +4058,6 @@ def update_modelo_version_masivo():
                 modelo.codigo_chasis = data["codigo_chasis"]
                 modelo.codigo_modelo_comercial = codigo_modelo_comercial
                 modelo.codigo_marca = codigo_marca
-                modelo.codigo_cliente_canal = codigo_cliente_canal
-                modelo.codigo_canal = codigo_canal
-                modelo.codigo_mod_vers_repuesto = codigo_mod_vers_repuesto
-                modelo.empresa = empresa
-                modelo.cod_producto = cod_producto
                 modelo.codigo_version = codigo_version
                 modelo.nombre_modelo_version = data["nombre_modelo_version"]
                 modelo.anio_modelo_version = data["anio_modelo_version"]
@@ -4381,4 +4326,118 @@ def update_matriculacion_marca_masiva():
 
     except Exception as e:
         db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@bench.route('/insert_cliente_canal_modelo', methods=["POST"])
+@jwt_required()
+def insert_cliente_canal_modelo():
+    try:
+        data = request.get_json()
+
+        campos_requeridos = [
+            "codigo_modelo_version",
+            "codigo_mod_vers_repuesto",
+            "codigo_cliente_canal",
+            "empresa",
+            "cod_producto",
+            "estado",
+            "fecha_asignacion"
+        ]
+        faltantes = [campo for campo in campos_requeridos if not data.get(campo)]
+        if faltantes:
+            return jsonify({"error": f"Faltan campos requeridos: {', '.join(faltantes)}"}), 400
+
+        codigo_modelo_version = data["codigo_modelo_version"]
+        codigo_cliente_canal = data["codigo_cliente_canal"]
+        empresa = data["empresa"]
+        cod_producto = data["cod_producto"]
+        codigo_mod_vers_repuesto = data["codigo_mod_vers_repuesto"]
+        fecha_asignacion_str = data.get("fecha_asignacion")
+
+        estado = data.get("estado")
+        estado_c = (
+            1 if str(estado).strip().lower() == "activo" else
+            0 if str(estado).strip().lower() == "inactivo" else
+            int(estado) if str(estado).isdigit() else None
+        )
+        if not db.session.query(ModeloVersion).filter_by(codigo_modelo_version=codigo_modelo_version).first():
+            return jsonify({"error": "Modelo versión no encontrado"}), 404
+
+        if not db.session.query(ClienteCanal).filter_by(codigo_cliente_canal=codigo_cliente_canal).first():
+            return jsonify({"error": "Cliente canal no encontrado"}), 404
+
+        if not db.session.query(Producto).filter_by(empresa=empresa, cod_producto=cod_producto).first():
+            return jsonify({"error": "Producto no encontrado"}), 404
+
+        try:
+            fecha_asignacion = datetime.strptime(fecha_asignacion_str, '%Y-%m-%d') if fecha_asignacion_str else None
+        except ValueError:
+            return jsonify({"error": "Formato de fecha inválido, se espera YYYY-MM-DD"}), 400
+
+        existente = db.session.query(ClienteCanalModelo).filter_by(
+            codigo_modelo_version=codigo_modelo_version,
+            codigo_cliente_canal=codigo_cliente_canal,
+            empresa=empresa,
+            cod_producto=cod_producto
+        ).first()
+
+        if existente:
+            return jsonify({"error": "Ya existe un registro con esos valores"}), 409
+
+        nuevo = ClienteCanalModelo(
+            codigo_modelo_version=codigo_modelo_version,
+            codigo_mod_vers_repuesto=codigo_mod_vers_repuesto,
+            codigo_cliente_canal=codigo_cliente_canal,
+            empresa=empresa,
+            cod_producto=cod_producto,
+            estado=estado_c,
+            fecha_asignacion=fecha_asignacion
+        )
+
+        db.session.add(nuevo)
+        db.session.flush()
+        db.session.commit()
+
+        return jsonify({"message": "Registro insertado correctamente"}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@bench.route('/get_cliente_canal_modelo', methods=["GET"])
+@jwt_required()
+def get_cliente_canal_modelo():
+    try:
+        registros = db.session.query(ClienteCanalModelo).all()
+        resultado = []
+
+        for reg in registros:
+            cliente_canal = db.session.query(ClienteCanal).filter_by(codigo_cliente_canal=reg.codigo_cliente_canal).first()
+            cliente = db.session.query(StCliente).filter_by(codigo_cliente=cliente_canal.codigo_cliente).first() if cliente_canal else None
+            canal = db.session.query(Canal).filter_by(codigo_canal=cliente_canal.codigo_canal).first() if cliente_canal else None
+
+            modelo_repuesto = db.session.query(ModeloVersionRepuesto).filter_by(codigo_mod_vers_repuesto=reg.codigo_mod_vers_repuesto).first()
+            producto = db.session.query(Producto).filter_by(cod_producto=reg.cod_producto).first() if modelo_repuesto else None
+            producto_ext = db.session.query(ProductoExterno).filter_by(codigo_prod_externo=modelo_repuesto.codigo_prod_externo).first() if modelo_repuesto and modelo_repuesto.codigo_prod_externo else None
+            empresa = db.session.query(Empresa).filter_by(empresa=reg.empresa).first()
+            modelo_version = db.session.query(ModeloVersion).filter_by(codigo_modelo_version=reg.codigo_modelo_version).first()
+            modelo_comercial = db.session.query(ModeloComercial).filter_by(codigo_modelo_comercial=modelo_version.codigo_modelo_comercial).first() if modelo_version else None
+
+            resultado.append({
+                "nombre_cliente": cliente.nombre_cliente if cliente else None,
+                "nombre_canal": canal.nombre_canal if canal else None,
+                "nombre_producto": producto.nombre if producto else None,
+                "nombre_producto_externo": producto_ext.nombre_producto if producto_ext else None,
+                "nombre_empresa": empresa.nombre if empresa else None,
+                "nombre_modelo_comercial": modelo_comercial.nombre_modelo if modelo_comercial else None,
+                "nombre_modelo_version": modelo_version.nombre_modelo_version if modelo_version else None,
+                "fecha_asignacion": reg.fecha_asignacion.isoformat() if reg.fecha_asignacion else None,
+                "estado": reg.estado,
+            })
+
+        return jsonify(resultado), 200
+
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
