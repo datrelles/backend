@@ -44,6 +44,7 @@ from src.routes.module_order.module_order_routes import rmor
 from src.routes.email_alert import aem, execute_send_alert_emails_for_role
 from src.routes.benchmarking.catalog_benchmarking import bench
 from src.routes.images.s3_upload import s3
+from src.routes.module_order.pdf_upload import pdf_s3
 from src.routes.routes_modulo_formulas import formulas_b
 from src.routes.routes_modulo_importaciones import importaciones_b
 
@@ -98,6 +99,7 @@ app.register_blueprint(rmor, url_prefix="/order_mot")
 app.register_blueprint(net, url_prefix="/net")
 app.register_blueprint(bench, url_prefix="/bench")
 app.register_blueprint(s3, url_prefix="/s3")
+app.register_blueprint(pdf_s3, url_prefix='/module_order_mayoreo/pdf')
 app.register_blueprint(bench_model, url_prefix="/bench_model")
 app.register_blueprint(bench_rep, url_prefix="/bench_rep")
 app.register_blueprint(formulas_b, url_prefix="/modulo-formulas")
