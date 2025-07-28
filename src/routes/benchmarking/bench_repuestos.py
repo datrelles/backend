@@ -697,171 +697,159 @@ def excel_date_to_str(value):
     if isinstance(value, int) or isinstance(value, float):
         date = datetime(1899, 12, 30) + timedelta(days=int(value))
         return date.strftime("%Y/%m/%d")
-    return value  # ya es string
+    return value
+
 @bench_rep.route('/insert_repuesto_compatibilidad_masivo', methods=['POST'])
 @jwt_required()
 def insert_repuesto_compatibilidad_masivo():
     try:
         data = request.get_json().get('repuestos')
-
         if not isinstance(data, list) or not data:
             return jsonify({"error": "El campo 'repuestos' debe contener una lista de registros"}), 400
-        empresa_id = 20
 
+        empresa_id = 20
         registros_repuesto = []
         registros_cliente_canal_modelo = []
+        errores = []
+        duplicados = []
 
         for i, row in enumerate(data):
             fila = f"Fila {i+1}"
-
-            # Validar campos obligatorios
-            campos_obligatorios = [
-                'nombre_modelo_comercial', 'nombre_cliente', 'nombre_canal', 'nombre_producto',
-                'estado', 'fecha_asignacion',
-                'es_compatible', 'validado_por', 'fecha_validacion',
-                'nivel_confianza', 'origen_validacion'
-            ]
-            for campo in campos_obligatorios:
-                if campo not in row or row[campo] in [None, ""]:
-                    raise ValueError(f"{fila}: Falta campo obligatorio: {campo}")
-
-            # Buscar entidades
-            modelo_version = db.session.query(ModeloVersion).join(ModeloComercial).filter(
-                ModeloComercial.nombre_modelo == row['nombre_modelo_comercial'].strip()
-            ).first()
-
-
-            cliente = db.session.query(StCliente).filter_by(nombre_cliente=row['nombre_cliente']).first()
-
-            canal = db.session.query(Canal).filter_by(nombre_canal=row['nombre_canal']).first()
-
-            print("Producto recibido desde frontend:", row['nombre_producto'])
-            producto = db.session.query(Producto).filter(
-                func.upper(func.trim(Producto.nombre)) == row['nombre_producto'].strip().upper()
-            ).first()
-
-            if not producto:
-                posibles = db.session.query(Producto.nombre).filter(
-                    Producto.nombre.ilike(f"%{row['nombre_producto'].strip()}%")
-                ).all()
-                sugerencias = [p[0] for p in posibles]
-                raise ValueError(
-                    f"{fila}: Producto '{row['nombre_producto']}' no encontrado. ¿Quisiste decir?: {sugerencias}")
-
-            cliente_canal = db.session.query(ClienteCanal).filter_by(
-                codigo_cliente=cliente.codigo_cliente,
-                codigo_canal=canal.codigo_canal,
-                cod_producto=producto.cod_producto,
-                empresa=empresa_id
-            ).first()
-
-            if not cliente_canal:
-                raise ValueError(f"{fila}: No se encontró ClienteCanal con cliente, canal, producto y empresa")
-
-            if not all([modelo_version, cliente, canal, producto]):
-                raise ValueError(f"{fila}: No se encontraron todas las entidades requeridas")
-
-            # Buscar cliente_canal
-            cliente_canal = db.session.query(ClienteCanal).filter_by(
-                codigo_cliente=cliente.codigo_cliente,
-                codigo_canal=canal.codigo_canal,
-                cod_producto=producto.cod_producto
-            ).first()
-
-            if not cliente_canal:
-                raise ValueError(f"{fila}: No se encontró ClienteCanal con cliente, canal y producto")
-
-            # Validar estado
-            estado_map = {"ACTIVO": 1, "INACTIVO": 0}
-            estado = estado_map.get(str(row['estado']).strip().upper(), row['estado'])
-            if str(estado) not in ["1", "0"]:
-                raise ValueError(f"{fila}: Estado inválido (debe ser 1, 0, ACTIVO o INACTIVO)")
-
-            # Validar es_compatible
-            compatible_map = {"SI": 1, "NO": 0}
-            es_compatible = compatible_map.get(str(row['es_compatible']).strip().upper(), row['es_compatible'])
-            if str(es_compatible) not in ["1", "0"]:
-                raise ValueError(f"{fila}: es_compatible inválido (debe ser 1, 0, SI o NO)")
-
-            # Validar nivel_confianza
-            nivel_confianza = int(row['nivel_confianza'])
-            if not (0 <= nivel_confianza <= 100):
-                raise ValueError(f"{fila}: nivel_confianza fuera de rango (0–100)")
-
-            # Validar origen_validacion
-            origen = row['origen_validacion'].strip().upper()
-            if origen not in ["INTERNO", "PROVEEDOR", "FABRICANTE"]:
-                raise ValueError(f"{fila}: origen_validacion inválido (INTERNO, PROVEEDOR o FABRICANTE)")
-
-
             try:
-                fecha_validacion = datetime.strptime(
-                    excel_date_to_str(row['fecha_validacion']), "%Y/%m/%d"
-                )
-                fecha_asignacion = datetime.strptime(
-                    excel_date_to_str(row['fecha_asignacion']), "%Y/%m/%d"
-                )
-            except ValueError:
-                raise ValueError(f"{fila}: Formato de fecha inválido (usar yyyy/mm/dd)")
+                campos_obligatorios = [
+                    'nombre_modelo_comercial', 'nombre_cliente', 'nombre_canal', 'nombre_producto',
+                    'estado', 'fecha_asignacion',
+                    'es_compatible', 'validado_por', 'fecha_validacion',
+                    'nivel_confianza', 'origen_validacion'
+                ]
+                for campo in campos_obligatorios:
+                    if campo not in row or row[campo] in [None, ""]:
+                        raise ValueError(f"{fila}: Falta campo obligatorio: {campo}")
 
-            # Validar duplicado en ST_REPUESTO_COMPATIBILIDAD
-            existe_compat = db.session.query(StRepuestoCompatibilidad).filter_by(
-                cod_producto=producto.cod_producto,
-                codigo_cliente_canal=cliente_canal.codigo_cliente_canal,
-                codigo_modelo_version=modelo_version.codigo_modelo_version,
-            ).first()
+                modelo_version = db.session.query(ModeloVersion).join(ModeloComercial).filter(
+                    ModeloComercial.nombre_modelo == row['nombre_modelo_comercial'].strip()
+                ).first()
 
-            if existe_compat:
-                raise ValueError(f"{fila}: Registro ya existe en ST_REPUESTO_COMPATIBILIDAD")
+                cliente = db.session.query(StCliente).filter_by(nombre_cliente=row['nombre_cliente']).first()
+                canal = db.session.query(Canal).filter_by(nombre_canal=row['nombre_canal']).first()
 
-            # Validar existencia en ST_CLIENTE_CANAL_MODELO
-            existe_ccm = db.session.query(ClienteCanalModelo).filter_by(
-                cod_producto=producto.cod_producto,
-                codigo_cliente_canal=cliente_canal.codigo_cliente_canal,
-                codigo_modelo_version=modelo_version.codigo_modelo_version
-            ).first()
+                producto = db.session.query(Producto).filter(
+                    func.upper(func.trim(Producto.nombre)) == row['nombre_producto'].strip().upper()
+                ).first()
 
-            if not existe_ccm:
-                nuevo_ccm = ClienteCanalModelo(
+                if not producto:
+                    raise ValueError(f"{fila}: Producto '{row['nombre_producto']}' no encontrado.")
+
+                cliente_canal = db.session.query(ClienteCanal).filter_by(
+                    codigo_cliente=cliente.codigo_cliente,
+                    codigo_canal=canal.codigo_canal,
                     cod_producto=producto.cod_producto,
-                    empresa=empresa_id,
+                    empresa=empresa_id
+                ).first()
+
+                if not cliente_canal:
+                    raise ValueError(f"{fila}: No se encontró ClienteCanal con cliente, canal, producto y empresa")
+
+                if not all([modelo_version, cliente, canal, producto]):
+                    raise ValueError(f"{fila}: No se encontraron todas las entidades requeridas")
+
+                estado_map = {"ACTIVO": 1, "INACTIVO": 0}
+                estado = estado_map.get(str(row['estado']).strip().upper(), row['estado'])
+                if str(estado) not in ["1", "0"]:
+                    raise ValueError(f"{fila}: Estado inválido (debe ser 1, 0, ACTIVO o INACTIVO)")
+
+                compatible_map = {"SI": 1, "NO": 0}
+                es_compatible = compatible_map.get(str(row['es_compatible']).strip().upper(), row['es_compatible'])
+                if str(es_compatible) not in ["1", "0"]:
+                    raise ValueError(f"{fila}: es_compatible inválido (debe ser 1, 0, SI o NO)")
+
+                nivel_confianza = int(row['nivel_confianza'])
+                if not (0 <= nivel_confianza <= 100):
+                    raise ValueError(f"{fila}: nivel_confianza fuera de rango (0–100)")
+
+                origen = row['origen_validacion'].strip().upper()
+                if origen not in ["INTERNO", "PROVEEDOR", "FABRICANTE"]:
+                    raise ValueError(f"{fila}: origen_validacion inválido (INTERNO, PROVEEDOR o FABRICANTE)")
+
+                try:
+                    fecha_validacion = datetime.strptime(
+                        excel_date_to_str(row['fecha_validacion']), "%Y/%m/%d"
+                    )
+                    fecha_asignacion = datetime.strptime(
+                        excel_date_to_str(row['fecha_asignacion']), "%Y/%m/%d"
+                    )
+                except ValueError:
+                    raise ValueError(f"{fila}: Formato de fecha inválido (usar yyyy/mm/dd)")
+
+                existe_compat = db.session.query(StRepuestoCompatibilidad).filter_by(
+                    cod_producto=producto.cod_producto,
                     codigo_cliente_canal=cliente_canal.codigo_cliente_canal,
                     codigo_modelo_version=modelo_version.codigo_modelo_version,
-                    codigo_mod_vers_repuesto=cliente_canal.codigo_mod_vers_repuesto,
-                    fecha_asignacion=fecha_asignacion,
-                    estado=int(estado)
+                ).first()
+
+                if existe_compat:
+                    duplicados.append(fila)
+                    continue
+                duplicados.append({
+                    "fila": i + 1,
+                    "error": f"{fila}: Registro DUPLICADO"
+                })
+
+                existe_ccm = db.session.query(ClienteCanalModelo).filter_by(
+                    cod_producto=producto.cod_producto,
+                    codigo_cliente_canal=cliente_canal.codigo_cliente_canal,
+                    codigo_modelo_version=modelo_version.codigo_modelo_version
+                ).first()
+
+                if not existe_ccm:
+                    nuevo_ccm = ClienteCanalModelo(
+                        cod_producto=producto.cod_producto,
+                        empresa=empresa_id,
+                        codigo_cliente_canal=cliente_canal.codigo_cliente_canal,
+                        codigo_modelo_version=modelo_version.codigo_modelo_version,
+                        codigo_mod_vers_repuesto=cliente_canal.codigo_mod_vers_repuesto,
+                        fecha_asignacion=fecha_asignacion,
+                        estado=int(estado)
+                    )
+                    registros_cliente_canal_modelo.append(nuevo_ccm)
+
+                nuevo_compat = StRepuestoCompatibilidad(
+                    es_compatible=int(es_compatible),
+                    validado_por=row['validado_por'],
+                    fecha_validacion=fecha_validacion,
+                    nivel_confianza=nivel_confianza,
+                    origen_validacion=origen,
+                    comentarios_tecnicos=row.get('comentarios_tecnicos'),
+                    cod_producto=producto.cod_producto,
+                    codigo_modelo_version=modelo_version.codigo_modelo_version,
+                    empresa=empresa_id,
+                    codigo_cliente_canal=cliente_canal.codigo_cliente_canal,
+                    codigo_mod_vers_repuesto=cliente_canal.codigo_mod_vers_repuesto
                 )
-                registros_cliente_canal_modelo.append(nuevo_ccm)
+                registros_repuesto.append(nuevo_compat)
 
-            # Insertar en ST_REPUESTO_COMPATIBILIDAD
-            nuevo_compat = StRepuestoCompatibilidad(
-                es_compatible=int(es_compatible),
-                validado_por=row['validado_por'],
-                fecha_validacion=fecha_validacion,
-                nivel_confianza=nivel_confianza,
-                origen_validacion=origen,
-                comentarios_tecnicos=row.get('comentarios_tecnicos'),
-                cod_producto=producto.cod_producto,
-                codigo_modelo_version=modelo_version.codigo_modelo_version,
-                empresa = empresa_id,
-                codigo_cliente_canal=cliente_canal.codigo_cliente_canal,
-                codigo_mod_vers_repuesto=cliente_canal.codigo_mod_vers_repuesto
-            )
-            registros_repuesto.append(nuevo_compat)
+            except Exception as e:
+                errores.append({"fila": fila, "error": str(e)})
 
-        # Guardar en lote
-        db.session.bulk_save_objects(registros_cliente_canal_modelo)
-        db.session.bulk_save_objects(registros_repuesto)
+        if registros_cliente_canal_modelo:
+            db.session.bulk_save_objects(registros_cliente_canal_modelo)
+        if registros_repuesto:
+            db.session.bulk_save_objects(registros_repuesto)
+
+
         db.session.commit()
 
         return jsonify({
-            "message": f"Se insertaron correctamente {len(registros_repuesto)} registros de compatibilidad"
-        }), 201
+            "insertados": len(registros_repuesto),
+            "duplicados": duplicados,
+            "errores": errores,
+            "message": f"Insertados: {len(registros_repuesto)}, Duplicados: {len(duplicados)}"
+        }), 200
 
     except Exception as e:
         db.session.rollback()
         return jsonify({
-            "error": "Error al procesar los registros",
+            "error": "Error general",
             "detalle": str(e)
         }), 500
 
@@ -886,7 +874,6 @@ def update_cliente_canal_repuesto_compatibilidad_masivo():
             for campo in campos_requeridos:
                 if campo not in row or row[campo] in [None, ""]:
                     raise ValueError(f"{fila}: Falta campo obligatorio: {campo}")
-
             try:
                 codigo_cliente_canal = int(row["codigo_cliente_canal"])
                 estado = int(row["estado"])
@@ -896,11 +883,9 @@ def update_cliente_canal_repuesto_compatibilidad_masivo():
                 origen = row["origen_validacion"].strip().upper()
                 comentarios_tecnicos = row.get("comentarios_tecnicos")
 
-                # Validar origen_validacion
                 if origen not in ["INTERNO", "PROVEEDOR", "FABRICANTE"]:
                     raise ValueError(f"{fila}: origen_validacion inválido")
 
-                # Normalizar fechas (soporte serial Excel y yyyy/mm/dd)
                 def parse_fecha(valor):
                     if isinstance(valor, (int, float)):
                         return datetime(1899, 12, 30) + timedelta(days=int(valor))
@@ -916,14 +901,11 @@ def update_cliente_canal_repuesto_compatibilidad_masivo():
                 if not canal:
                     raise ValueError(f"{fila}: Canal '{row['nombre_canal']}' no encontrado")
 
-                # Resolver cliente
                 cliente = db.session.query(StCliente).filter(
                     func.upper(StCliente.nombre_cliente) == row["nombre_cliente"].strip().upper()
                 ).first()
                 if not cliente:
                     raise ValueError(f"{fila}: Cliente '{row['nombre_cliente']}' no encontrado")
-
-                # Resolver producto
 
                 producto = db.session.query(Producto).filter(
                     func.upper(func.trim(Producto.nombre)) == row["nombre_producto"].strip().upper()
@@ -931,7 +913,6 @@ def update_cliente_canal_repuesto_compatibilidad_masivo():
                 if not producto:
                     raise ValueError(f"{fila}: Producto '{row['nombre_producto']}' no encontrado")
 
-                # Resolver cliente_canal
                 cliente_canal = db.session.query(ClienteCanal).filter_by(
                     codigo_cliente=cliente.codigo_cliente,
                     codigo_canal=canal.codigo_canal,
@@ -940,14 +921,12 @@ def update_cliente_canal_repuesto_compatibilidad_masivo():
                 if not cliente_canal:
                     raise ValueError(f"{fila}: No se encontró ClienteCanal con cliente, canal, producto")
 
-                # Resolver modelo_comercial → modelo_version
                 modelo_version = db.session.query(ModeloVersion).join(ModeloComercial).filter(
                     func.upper(ModeloComercial.nombre_modelo) == row["nombre_modelo_comercial"].strip().upper()
                 ).first()
                 if not modelo_version:
                     raise ValueError(f"{fila}: Modelo comercial '{row['nombre_modelo_comercial']}' no encontrado")
 
-                # Obtener datos clave
                 empresa = cliente_canal.empresa
                 cod_producto = cliente_canal.cod_producto
                 codigo_mod_vers_repuesto = cliente_canal.codigo_mod_vers_repuesto
@@ -998,4 +977,3 @@ def update_cliente_canal_repuesto_compatibilidad_masivo():
             "error": "Error al procesar registros",
             "detalle": str(e)
         }), 500
-
