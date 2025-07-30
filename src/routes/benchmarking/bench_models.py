@@ -255,8 +255,8 @@ def comparar_modelos():
                 })
 
             comparar("cilindrada_comercial",
-                     detalles_base["motor"].cilindrada_comercial,
-                     detalles_comp["motor"].cilindrada_comercial, "motor")
+                     detalles_base["motor"].cilindrada,
+                     detalles_comp["motor"].cilindrada, "motor")
             comparar("caballos_fuerza",
                      detalles_base["motor"].caballos_fuerza,
                      detalles_comp["motor"].caballos_fuerza, "motor")
