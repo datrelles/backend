@@ -155,6 +155,7 @@ class Motor(Base):
     codigo_tipo_motor = Column(NUMBER(14, 0), ForeignKey('stock.st_tipo_motor.codigo_tipo_motor'), primary_key=True)
     nombre_motor = Column(VARCHAR(100))
     cilindrada = Column(VARCHAR(60))
+    cilindrada_comercial = Column(VARCHAR(60))
     caballos_fuerza = Column(VARCHAR(60))
     torque_maximo = Column(VARCHAR(60))
     sistema_combustible = Column(VARCHAR(60))

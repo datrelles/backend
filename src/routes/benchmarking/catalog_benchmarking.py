@@ -9,7 +9,6 @@ from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import aliased
 from unidecode import unidecode
-from unidecode import unidecode
 
 from src.config.database import db
 from src.models.catalogos_bench import Chasis, DimensionPeso, ElectronicaOtros, Transmision, Imagenes, TipoMotor, Motor, \
@@ -409,6 +408,7 @@ def insert_motor():
 
                 nombre_motor = normalize(item.get("nombre_motor"))
                 cilindrada = normalize(item.get("cilindrada"))
+                cilindrada_comercial = normalize(item.get("cilindrada_comercial"))
                 caballos_fuerza = normalize(item.get("caballos_fuerza"))
                 torque_maximo = normalize(item.get("torque_maximo"))
                 sistema_combustible = normalize(item.get("sistema_combustible"))
@@ -420,6 +420,7 @@ def insert_motor():
                     codigo_tipo_motor=tipo_motor.codigo_tipo_motor,
                     nombre_motor=nombre_motor,
                     cilindrada=cilindrada,
+                    cilindrada_comercial=cilindrada_comercial,
                     sistema_combustible=sistema_combustible,
                     caballos_fuerza=caballos_fuerza,
                     torque_maximo=torque_maximo,
@@ -2062,6 +2063,7 @@ def get_motores():
                 "nombre_tipo_motor": m.tipo_motor.nombre_tipo if m.tipo_motor else None,
                 "nombre_motor": m.nombre_motor,
                 "cilindrada": m.cilindrada,
+                "cilindrada_comercial": m.cilindrada_comercial,
                 "caballos_fuerza": m.caballos_fuerza,
                 "torque_maximo": m.torque_maximo,
                 "sistema_combustible": m.sistema_combustible,
@@ -2876,6 +2878,7 @@ def update_motor(codigo_motor):
         motor.codigo_tipo_motor = data.get("codigo_tipo_motor", motor.codigo_tipo_motor)
         motor.nombre_motor = data.get("nombre_motor", motor.nombre_motor)
         motor.cilindrada = data.get("cilindrada", motor.cilindrada)
+        motor.cilindrada_comercial = data.get("cilindrada_comercial", motor.cilindrada_comercial)
         motor.caballos_fuerza = data.get("caballos_fuerza", motor.caballos_fuerza)
         motor.torque_maximo = data.get("torque_maximo", motor.torque_maximo)
         motor.sistema_combustible = data.get("sistema_combustible", motor.sistema_combustible)
@@ -3597,7 +3600,7 @@ def update_motor_masivo():
 
                 campos_actualizables = [
                     "nombre_motor", "cilindrada", "caballos_fuerza",
-                    "torque_maximo", "sistema_combustible",
+                    "torque_maximo", "sistema_combustible", "cilindrada_comercial",
                     "arranque", "sistema_refrigeracion", "descripcion_motor"
                 ]
 

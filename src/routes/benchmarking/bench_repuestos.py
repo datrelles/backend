@@ -836,7 +836,6 @@ def insert_repuesto_compatibilidad_masivo():
         if registros_repuesto:
             db.session.bulk_save_objects(registros_repuesto)
 
-
         db.session.commit()
 
         return jsonify({
