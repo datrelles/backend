@@ -32,7 +32,6 @@ def comparar_modelos():
             return jsonify({"error": "Se requiere modelo base y al menos un modelo comparable"}), 400
 
         # FUNCIONES DE EXTRACCIÓN NUMÉRICA
-
         def extract_kmh(val):
             match = re.search(r'([\d.]+)\s*km', str(val).lower())
             return float(match.group(1)) if match else None
@@ -115,7 +114,7 @@ def comparar_modelos():
         mejor_si_diferente = set()
 
         siempre_mejor_si_mayor = {
-            "velocidad_maxima","cilindrada","caballos_fuerza","capacidad_combustible","peso_seco",
+            "velocidad_maxima","cilindrada_comercial","caballos_fuerza","capacidad_combustible","peso_seco",
             "torque_maximo","caja_cambios","neumatico_delantero","neumatico_trasero","garantia",
             "ancho_total","longitud_total","altura_total"
         }
@@ -129,12 +128,12 @@ def comparar_modelos():
             })
         elif segmento_nombre == "scooter":
             mejor_si_menor.update({
-                "cilindrada","peso_seco","caballos_fuerza","torque_maximo",
+                "cilindrada_comercial","peso_seco","caballos_fuerza","torque_maximo",
                 "altura_total","ancho_total","longitud_total"
             })
         elif segmento_nombre == "caballito":
             mejor_si_menor.update({
-                "cilindrada", "peso_seco", "caballos_fuerza", "torque_maximo",
+                "cilindrada_comercial", "peso_seco", "caballos_fuerza", "torque_maximo",
                 "altura_total", "ancho_total", "longitud_total"
             })
         elif segmento_nombre == "adventure":
@@ -143,21 +142,20 @@ def comparar_modelos():
             })
         elif segmento_nombre == "utilitaria":
             mejor_si_menor.update({
-                "cilindrada", "altura_total", "ancho_total", "longitud_total"
+                "cilindrada_comercial", "altura_total", "ancho_total", "longitud_total"
             })
         elif segmento_nombre == "street":
             mejor_si_menor.update({
-                "cilindrada", "altura_total", "ancho_total", "longitud_total"
+                "cilindrada_comercial", "altura_total", "ancho_total", "longitud_total"
             })
         elif segmento_nombre == "ninja":
             mejor_si_menor.update({
-                "cilindrada", "altura_total", "ancho_total", "longitud_total"
+                "cilindrada_comercial", "altura_total", "ancho_total", "longitud_total"
             })
         elif segmento_nombre == "deportiva":
             mejor_si_menor.update({
                 "altura_total", "ancho_total", "longitud_total",
             })
-
 
         mejor_si_mayor.update(siempre_mejor_si_mayor)
 
@@ -184,7 +182,7 @@ def comparar_modelos():
                 "velocidad_maxima": extract_kmh,
                 "capacidad_combustible": extract_litros,
                 "garantia": extract_garantia_meses,
-                "cilindrada": extract_cc,
+                "cilindrada_comercial": extract_cc,
                 "neumatico_delantero": evaluar_pneumatic,
                 "neumatico_trasero": evaluar_pneumatic,
                 "caja_cambios": extract_cambios
@@ -256,7 +254,7 @@ def comparar_modelos():
                     "estado": estado
                 })
 
-            comparar("cilindrada",
+            comparar("cilindrada_comercial",
                      detalles_base["motor"].cilindrada,
                      detalles_comp["motor"].cilindrada, "motor")
             comparar("caballos_fuerza",
@@ -341,7 +339,6 @@ def comparar_modelos():
                 "mejor_en": mejor_en,
                 "diferente_en": diferente_en
             })
-
         return jsonify({"base": base_id, "comparables": resultado})
 
     except Exception as e:
@@ -680,7 +677,7 @@ def get_marcas_por_linea_segmento():
         # Subquery para extraer cilindrada como número
         cilindrada_num = func.cast(
             func.nullif(
-                func.regexp_replace(Motor.cilindrada, '[^0-9.]', ''),
+                func.regexp_replace(Motor.cilindrada_comercial, '[^0-9.]', ''),
                 ''
             ),
             Float
@@ -746,7 +743,7 @@ def get_modelos_por_linea_segmento_marca_cilindraje():
         # Subquery para extraer cilindrada como número (segura)
         cilindrada_num = func.cast(
             func.nullif(
-                func.regexp_replace(Motor.cilindrada, '[^0-9.]', ''),
+                func.regexp_replace(Motor.cilindrada_comercial, '[^0-9.]', ''),
                 ''
             ),
             Float
@@ -764,7 +761,7 @@ def get_modelos_por_linea_segmento_marca_cilindraje():
             Version.nombre_version,
             Marca.nombre_marca,
             Imagenes.path_imagen,
-            Motor.cilindrada,
+            Motor.cilindrada_comercial,
         ).join(ModeloComercial,
                (ModeloVersion.codigo_modelo_comercial == ModeloComercial.codigo_modelo_comercial) &
                (ModeloVersion.codigo_marca == ModeloComercial.codigo_marca)) \
@@ -824,7 +821,7 @@ def get_modelos_por_linea_segmento_marca_cilindraje():
             "nombre_version": r[7],
             "nombre_marca": r[8],
             "path_imagen": r[9],
-            "cilindrada": r[10],
+            "cilindrada": r[10]
         } for r in resultados]
 
         return jsonify(modelos), 200
@@ -903,7 +900,7 @@ def get_modelos():
 @cross_origin()
 def get_cilindradas_disponibles():
     try:
-        resultados = db.session.query(Motor.cilindrada).distinct().all()
+        resultados = db.session.query(Motor.cilindrada_comercial).distinct().all()
 
         # Convertimos a valores numéricos redondeados
         cilindros = []
@@ -916,7 +913,7 @@ def get_cilindradas_disponibles():
 
         cilindros = sorted(set(cilindros))
 
-        rangos_fijos = [(100, 149), (150, 199), (200, 249), (250, 299), (300, 399), (400, 450), (500, 550)]
+        rangos_fijos = [(100, 149), (150, 199), (200, 249), (250, 299), (300, 399), (400, 499), (500, 550)]
 
         etiquetas_rango = [{
             "label": f"{r_min} CC",

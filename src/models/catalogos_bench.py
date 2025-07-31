@@ -1,6 +1,6 @@
 # coding: utf-8
 from sqlalchemy import Column, Index, VARCHAR, ForeignKey, CheckConstraint, UniqueConstraint, \
-    ForeignKeyConstraint, PrimaryKeyConstraint, text
+    ForeignKeyConstraint, PrimaryKeyConstraint
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
@@ -155,6 +155,7 @@ class Motor(Base):
     codigo_tipo_motor = Column(NUMBER(14, 0), ForeignKey('stock.st_tipo_motor.codigo_tipo_motor'), primary_key=True)
     nombre_motor = Column(VARCHAR(100))
     cilindrada = Column(VARCHAR(60))
+    cilindrada_comercial = Column(VARCHAR(60))
     caballos_fuerza = Column(VARCHAR(60))
     torque_maximo = Column(VARCHAR(60))
     sistema_combustible = Column(VARCHAR(60))
@@ -518,14 +519,7 @@ class ModeloVersion(Base):
     __table_args__ = (
         UniqueConstraint('nombre_modelo_version', name='uq_mv_nombre_modelo_version'),
         CheckConstraint('anio_modelo_version BETWEEN 1950 AND 2100', name='ck_mv_anio_modelo'),
-        ForeignKeyConstraint(
-            ['codigo_cliente_canal', 'codigo_mod_vers_repuesto', 'cod_producto', 'empresa'],
-            ['stock.st_cliente_canal.codigo_cliente_canal',
-             'stock.st_cliente_canal.codigo_mod_vers_repuesto',
-             'stock.st_cliente_canal.cod_producto',
-             'stock.st_cliente_canal.empresa'],
-            name='fk_mv_cliente_canal'
-        ),
+
         ForeignKeyConstraint(
             ['codigo_modelo_comercial', 'codigo_marca'],
             ['stock.st_modelo_comercial.codigo_modelo_comercial',
@@ -548,10 +542,6 @@ class ModeloVersion(Base):
     codigo_modelo_comercial = Column(NUMBER(14), nullable=False)
     codigo_marca = Column(NUMBER(14), nullable=False)
 
-    codigo_cliente_canal = Column(NUMBER(14), nullable=False)
-    codigo_mod_vers_repuesto = Column(NUMBER(14), nullable=False)
-    empresa = Column(NUMBER(2), nullable=False)
-    cod_producto = Column(VARCHAR(14), nullable=False)
     codigo_version = Column(NUMBER(14), ForeignKey('stock.st_version.codigo_version'), nullable=False)
 
     nombre_modelo_version = Column(VARCHAR(50), nullable=False)
@@ -579,3 +569,82 @@ class StCliente(Base):
     fecha_modificacion = Column(DateTime, nullable=True)
 
 
+class StRepuestoCompatibilidad(Base):
+    __tablename__ = 'st_repuesto_compatibilidad'
+    __table_args__ = (
+        CheckConstraint('es_compatible IN (0, 1)', name='ck_es_compatible'),
+        CheckConstraint('nivel_confianza BETWEEN 0 AND 100', name='ck_nivel_confianza'),
+        CheckConstraint("origen_validacion IN ('FABRICANTE', 'PROVEEDOR', 'INTERNO')", name='ck_origen_validacion'),
+        ForeignKeyConstraint(
+            ['cod_producto', 'empresa', 'codigo_cliente_canal', 'codigo_modelo_version', 'codigo_mod_vers_repuesto'],
+            ['stock.st_cliente_canal_modelo.cod_producto',
+             'stock.st_cliente_canal_modelo.empresa',
+             'stock.st_cliente_canal_modelo.codigo_cliente_canal',
+             'stock.st_cliente_canal_modelo.codigo_modelo_version',
+             'stock.st_cliente_canal_modelo.codigo_mod_vers_repuesto'],
+            name='fk_rep_comp_cl_canal_modelo'
+        ),
+        UniqueConstraint(
+            'codigo_modelo_version',
+            'codigo_cliente_canal',
+            'codigo_mod_vers_repuesto',
+            'cod_producto',
+            name='uq_rep_comp_unico'
+        ),
+        {'schema': 'stock'}
+    )
+
+    codigo_compatibilidad = Column(
+        NUMBER(14, 0),
+        Sequence('seq_st_rep_compatibilidad', schema='stock'),
+        primary_key=True
+    )
+
+    es_compatible = Column(NUMBER(1), nullable=False)
+    validado_por = Column(VARCHAR(100), nullable=False)
+    fecha_validacion = Column(DateTime, nullable=False)
+    nivel_confianza = Column(NUMBER(3), nullable=False)
+    origen_validacion = Column(VARCHAR(20))
+    comentarios_tecnicos = Column(VARCHAR(500))
+
+    cod_producto = Column(VARCHAR(14), nullable=False)
+    empresa = Column(NUMBER(2), nullable=False)
+    codigo_cliente_canal = Column(NUMBER(14), nullable=False)
+    codigo_modelo_version = Column(NUMBER(14), nullable=False)
+    codigo_mod_vers_repuesto = Column(NUMBER(14), nullable=False)
+
+
+class ClienteCanalModelo(Base):
+    __tablename__ = 'st_cliente_canal_modelo'
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            'cod_producto',
+            'empresa',
+            'codigo_cliente_canal',
+            'codigo_modelo_version',
+            'codigo_mod_vers_repuesto',
+            name='pk_st_cliente_canal_modelo'
+        ),
+        ForeignKeyConstraint(
+            ['cod_producto', 'empresa', 'codigo_cliente_canal', 'codigo_mod_vers_repuesto'],
+            ['stock.st_cliente_canal.cod_producto',
+             'stock.st_cliente_canal.empresa',
+             'stock.st_cliente_canal.codigo_cliente_canal',
+             'stock.st_cliente_canal.codigo_mod_vers_repuesto'],
+            name='fk_ccm_cliente_canal'
+        ),
+        ForeignKeyConstraint(
+            ['codigo_modelo_version'],
+            ['stock.st_modelo_version.codigo_modelo_version'],
+            name='fk_ccm_modelo_version'
+        ),
+        {'schema': 'stock'}
+    )
+
+    cod_producto = Column(VARCHAR(14), nullable=False)
+    empresa = Column(NUMBER(2), nullable=False)
+    codigo_cliente_canal = Column(NUMBER(14), nullable=False)
+    codigo_modelo_version = Column(NUMBER(14), nullable=False)
+    codigo_mod_vers_repuesto = Column(NUMBER(14), nullable=False)
+    fecha_asignacion = Column(DateTime, nullable=False)
+    estado = Column(NUMBER(1), nullable=False, default=1)
