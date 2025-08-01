@@ -211,3 +211,17 @@ def eliminar_imagen():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+#---------------------------------------------------------
+#---------------------- OBTIENE IMAGEN PARA BENCH REPUESTOS
+
+@s3.route('/repuesto-url', methods=['GET'])
+def get_repuesto_url():
+    cod_producto = request.args.get("cod_producto")
+    if not cod_producto:
+        return jsonify({"error": "Código de repuesto no especificado"}), 400
+
+    object_key = f"repuestos/{cod_producto}.jpg"
+    public_url = f"https://shineray-public.s3.amazonaws.com/{object_key}"
+
+    return jsonify({"url": public_url})
