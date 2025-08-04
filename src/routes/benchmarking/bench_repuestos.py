@@ -14,7 +14,7 @@ from openpyxl.drawing.image import Image
 
 from src.config.database import db
 from src.models.catalogos_bench import StRepuestoCompatibilidad, ModeloVersion, ModeloComercial, ClienteCanal, Canal, \
-    StCliente, ClienteCanalModelo, Imagenes
+    StCliente, ClienteCanalModelo
 from src.models.productos import Producto
 from src.models.users import Empresa
 
