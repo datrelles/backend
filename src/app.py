@@ -47,6 +47,7 @@ from src.routes.images.s3_upload import s3
 from src.routes.module_order.pdf_upload import pdf_s3
 from src.routes.routes_modulo_formulas import formulas_b
 from src.routes.routes_modulo_importaciones import importaciones_b
+from src.routes.routes_modulo_activaciones import activaciones_b
 
 ###################################################
 
@@ -104,6 +105,7 @@ app.register_blueprint(bench_model, url_prefix="/bench_model")
 app.register_blueprint(bench_rep, url_prefix="/bench_rep")
 app.register_blueprint(formulas_b, url_prefix="/modulo-formulas")
 app.register_blueprint(importaciones_b, url_prefix="/modulo-importaciones")
+app.register_blueprint(activaciones_b, url_prefix="/modulo-activaciones")
 #############################################################################
 
 jwt_manager = JWTManager(app)
