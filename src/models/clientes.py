@@ -15,6 +15,7 @@ class Cliente(Base):
     nombre = Column(VARCHAR(100), nullable=False)
     apellido1 = Column(VARCHAR(100), nullable=False)
     ruc = Column(VARCHAR(13))
+    cupo_aprobado = Column(NUMBER(14, 2))
     @classmethod
     def query(cls):
         return db.session.query(cls)

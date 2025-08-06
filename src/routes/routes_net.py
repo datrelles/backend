@@ -183,7 +183,7 @@ def get_item(id):
 
 
 @net.route('/get_costumer', methods=['POST'])
-# @jwt_required()
+@jwt_required()
 @cross_origin()
 def consultar_cliente():
     from src.app import gen_api_token
@@ -224,7 +224,7 @@ def consultar_cliente():
 
 
 @net.route('/create_customer', methods=['POST'])
-# @jwt_required()
+@jwt_required()
 @cross_origin()
 def crear_cliente():
     from src.app import gen_api_token
@@ -249,7 +249,7 @@ def crear_cliente():
         if not cliente_h.email_factura:
             return {"error": f" {cod_cliente} no tiene e-mail registrado"}, 404
 
-        if not cliente_h.telefono1h:
+        if not cliente_h.telefono1h and not cliente_h.celular:
             return {"error": f" {cod_cliente} no tiene telefono registrado"}, 404
 
         id_sri_reg = tg_tipo_identificacion.query().filter_by(cod_tipo_identificacion=cliente.cod_tipo_identificacion,
@@ -261,10 +261,10 @@ def crear_cliente():
             "esPersona": 2 if id_sri == '04' else 1,
             "comentario": "Cliente Nuevo desde DB",
             "correo": cliente_h.email_factura if cliente_h.email_factura else 'test@test.com',
-            "telefonoPrincipal": cliente_h.telefono1h if cliente_h else None,
-            "telefonoAlternativo": cliente_h.telefono1h if cliente_h else None,
-            "telefonoCasa": cliente_h.telefono1h if cliente_h else None,
-            "telefonoMovil": cliente_h.telefono1h if cliente_h else None,
+            "telefonoPrincipal": cliente_h.telefono1h if cliente_h.telefono1h else cliente_h.celular,
+            "telefonoAlternativo": cliente_h.telefono2h if cliente_h.telefono2h else cliente_h.celular,
+            "telefonoCasa": cliente_h.telefono1h if cliente_h.telefono1h else cliente_h.celular,
+            "telefonoMovil": cliente_h.celular if cliente_h.celular else cliente_h.telefono1h,
             "idSubsidiariaNS": 3,
             "nombre": cliente.nombre,
             "apellido": cliente.apellido1,
@@ -276,16 +276,35 @@ def crear_cliente():
             "nombreComercial": cliente.apellido1 + ' ' + cliente.nombre if id_sri == '04' else None,
             "nombreCompania": cliente.apellido1 + ' ' + cliente.nombre if id_sri == '04' else None,
             "idEstadoClienteNS": 1 if cliente_h.activoh == 'S' else 2,
-            "idPaisOrigenNS": 63,
+            "idPaisOrigenNS": 5,
             "idTipoDocumentoNS": id_sri,
             "estado": 1,
             "fechaInicio": cliente_h.fecha_creacionh.isoformat() if cliente_h and cliente_h.fecha_creacionh else "2024-01-01",
             "diasRecordatorioPago": 30,
             "tipoDocumentoNS": str(cliente.cod_tipo_identificacion or "2"),
             "idCategoriaNS": 11,
-            "limiteCredito": cliente.cupo_aprobado if cliente.cupo_aprobado else None,
-
-            "direcciones": []
+            "limiteCredito": float(cliente.cupo_aprobado) if float(cliente.cupo_aprobado) > 0.0 else None,
+            "idTipoClienteNS": 36,
+            "direcciones": [
+                {
+                    "detalleDireccion": {
+                                            "callePrincipal": cliente_h.direccion_calleh,
+                                            "calleSecundaria": cliente_h.calle_transversal if cliente_h.calle_transversal else cliente_h.direccion_calleh,
+                                            "descripcion": cliente_h.direccion_refh if cliente_h.direccion_refh else "N/A",
+                                            "idDireccionCore": 0,
+                                            "extCodPaisNS": "EC",
+                                            "extIdProvinciaNS": "EC-A_88",
+                                            "extIdCiudadNS": "Ecuador_0101",
+                                            "extIdPaisNS": 5,
+                                            "nombreCiudad": cliente_h.zona_geograficah if cliente_h.zona_geograficah else "N/A",
+                                            "nombreProvincia": "estado",
+                                            "zip": cliente_h.zona_geograficah if cliente_h.zona_geograficah else None
+                                        },
+                    "envio": 0,
+                    "facturacion": 0,
+                    "nombreTipoDireccion": cliente_h.direccion_cobro if cliente_h.direccion_cobro else "N/A",
+            }
+            ]
         }
 
         headers = {
