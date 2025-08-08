@@ -7,14 +7,26 @@ from sqlalchemy import text
 
 from src.decorators import validate_json, handle_exceptions
 from src.config.database import db
+from src.enums import categoria_excepcion
+from src.exceptions import validation_error
+from src.models.modulo_activaciones import st_activacion
 from src.models.modulo_formulas import validar_empresa
 from src.models.users import Empresa
 from src.validations import validar_number, validar_varchar
+from src.validations.alfanumericas import validar_hora
 
 activaciones_b = Blueprint('routes_activaciones', __name__)
 logger = logging.getLogger(__name__)
 
 COD_MODELO_CATAL_ACTIV = "ACT"
+
+
+def calcular_diferencia_horas_en_minutos(inicio, fin):
+    inicio = validar_hora('hora_inicio', inicio, devuelve_string=False)
+    fin = validar_hora('hora_fin', fin, devuelve_string=False)
+    if inicio >= fin:
+        raise validation_error(mensaje='La hora de inicio debe ser menor a la hora de fin')
+    return (fin - inicio).total_seconds() / 60
 
 
 @activaciones_b.route("/promotores", methods=["GET"])
@@ -166,3 +178,24 @@ def get_tipos_activacion(empresa):
     rows = db.session.execute(sql, {"empresa": empresa, "cod_modelo": COD_MODELO_CATAL_ACTIV}).fetchall()
     result = [{"cod_modelo": row[0], "cod_item": row[1], "nombre": row[2]} for row in rows]
     return jsonify(result)
+
+
+@activaciones_b.route("/empresas/<empresa>/activaciones", methods=["POST"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("registrar la activación")
+def post_activacion(empresa, data):
+    empresa = validar_number('empresa', empresa, 2)
+    data = {'empresa': empresa, **data}
+    activacion = st_activacion(**data)
+    if not db.session.get(Empresa, data['empresa']):
+        mensaje = 'Empresa {} inexistente'.format(data['empresa'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    activacion.total_minutos = calcular_diferencia_horas_en_minutos(activacion.hora_inicio, activacion.hora_fin)
+    db.session.add(activacion)
+    db.session.commit()
+    mensaje = 'Se registró la activación {}'.format(activacion.cod_activacion)
+    logger.info(mensaje)
+    return jsonify({'mensaje': mensaje}), 201
