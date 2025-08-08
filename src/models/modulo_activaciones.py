@@ -1,10 +1,10 @@
-from sqlalchemy import Column, text, VARCHAR, DateTime
+from sqlalchemy import Column, text, VARCHAR, DateTime, FetchedValue
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.orm import declarative_base, validates
 from src.config.database import db
 from src.enums import tipo_estado
 from src.models.custom_base import custom_base
-from src.validations import validar_number, validar_varchar
+from src.validations import validar_number, validar_varchar, validar_fecha
 from src.validations.alfanumericas import validar_hora
 
 base = declarative_base(metadata=db.metadata)
@@ -23,10 +23,11 @@ class st_activacion(custom_base):
     __tablename__ = 'st_activacion'
     __table_args__ = {'schema': schema_name}
 
-    cod_activacion = Column(NUMBER(precision=22), primary_key=True)
+    cod_activacion = Column(NUMBER(precision=22), primary_key=True, server_default=FetchedValue())
     empresa = Column(NUMBER(precision=2))
     cod_promotor = Column(VARCHAR(20))
-    cod_tienda = Column(NUMBER(precision=2))
+    cod_cliente = Column(VARCHAR(14))
+    cod_tienda = Column(NUMBER(precision=3))
     cod_proveedor = Column(VARCHAR(14))
     cod_modelo_act = Column(VARCHAR(8))
     cod_item_act = Column(VARCHAR(3))
@@ -53,9 +54,13 @@ class st_activacion(custom_base):
     def validar_cod_promotor(self, key, value):
         return validar_varchar(key, value, 20)
 
+    @validates('cod_cliente')
+    def validar_cod_cliente(self, key, value):
+        return validar_varchar(key, value, 14)
+
     @validates('cod_tienda')
     def validar_cod_tienda(self, key, value):
-        return validar_number(key, value, 2)
+        return validar_number(key, value, 3)
 
     @validates('cod_proveedor')
     def validar_cod_proveedor(self, key, value):
@@ -81,9 +86,9 @@ class st_activacion(custom_base):
     def validar_hora_fin(self, key, value):
         return validar_hora(key, value)
 
-    @validates('total_minutos')
-    def validar_total_minutos(self, key, value):
-        return validar_number(key, value, 4, 0)
+    @validates('fecha_act')
+    def validar_fecha_act(self, key, value):
+        return validar_fecha(key, value)
 
     @validates('num_exhi_motos')
     def validar_num_exhi_motos(self, key, value):

@@ -124,7 +124,7 @@ def get_direcciones_por_promotor_y_cliente(cod_promotor, cod_cliente):
                   p.cod_cliente = :cod_cliente
                 """)
     rows = db.session.execute(sql, {"cod_promotor": cod_promotor, "cod_cliente": cod_cliente}).fetchall()
-    result = [{"cod_cliente": row[0], "nombre": row[1]} for row in rows]
+    result = [{"cod_direccion": row[0], "ciudad": row[1], "nombre": row[2], "direccion": row[3]} for row in rows]
     return jsonify(result)
 
 
