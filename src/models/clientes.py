@@ -15,6 +15,7 @@ class Cliente(Base):
     nombre = Column(VARCHAR(100), nullable=False)
     apellido1 = Column(VARCHAR(100), nullable=False)
     ruc = Column(VARCHAR(13))
+    cupo_aprobado = Column(NUMBER(14, 2))
     @classmethod
     def query(cls):
         return db.session.query(cls)
@@ -229,6 +230,21 @@ class cliente_hor(Base):
     nombre_representante_legal = Column(String(100))
 
     # Clase helper: si usas un objeto de sesión
+    @classmethod
+    def query(cls):
+        return db.session.query(cls)
+
+
+class tg_tipo_identificacion(Base):
+    __tablename__ = 'tg_tipo_identificacion'
+    __table_args__ = (
+        PrimaryKeyConstraint('cod_tipo_identificacion', 'empresa',  name='XPKTG_TIPO_IDENTIFICACION'),
+    )
+    cod_tipo_identificacion = Column(NUMBER(2), nullable=False)
+    empresa = Column(NUMBER(2), nullable=False)
+    nombre = Column(VARCHAR(15), nullable=False)
+    formato = Column(VARCHAR(30), nullable=False)
+    cod_tipo_identificacion_sri = Column(VARCHAR(2))
     @classmethod
     def query(cls):
         return db.session.query(cls)

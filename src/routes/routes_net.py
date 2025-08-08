@@ -16,6 +16,8 @@ import requests
 from src.apis.netsuite import rest_services
 import requests
 from flask import Flask, jsonify, request
+import re
+from src.models.clientes import cliente_hor, Cliente, tg_tipo_identificacion
 
 
 net = Blueprint('routes_net', __name__)
@@ -181,7 +183,7 @@ def get_item(id):
 
 
 @net.route('/get_costumer', methods=['POST'])
-# @jwt_required()
+@jwt_required()
 @cross_origin()
 def consultar_cliente():
     from src.app import gen_api_token
@@ -220,22 +222,96 @@ def consultar_cliente():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 @net.route('/create_customer', methods=['POST'])
-#@jwt_required()
+@jwt_required()
 @cross_origin()
 def crear_cliente():
     from src.app import gen_api_token
     data = request.get_json()
+    cod_cliente = data.get("cod_cliente")
+    empresa = 20
+    if not cod_cliente:
+        return {"error": "Faltan campos obligatorios: 'empresa'"}, 400
+
     url = f"{getenv('NESTJS_URL')}clientes/crear"
     jwt_token = gen_api_token()
     token = jwt_token.json.get("token")
 
     try:
+
+        cliente = Cliente.query().filter_by(cod_cliente=cod_cliente, empresa=empresa).first()
+        cliente_h = cliente_hor.query().filter_by(cod_clienteh=cod_cliente, empresah=empresa).first()
+
+        if not cliente:
+            return {"error": f"No se encontró cliente con código {cod_cliente}"}, 404
+
+        if not cliente_h.email_factura:
+            return {"error": f" {cod_cliente} no tiene e-mail registrado"}, 404
+
+        if not cliente_h.telefono1h and not cliente_h.celular:
+            return {"error": f" {cod_cliente} no tiene telefono registrado"}, 404
+
+        id_sri_reg = tg_tipo_identificacion.query().filter_by(cod_tipo_identificacion=cliente.cod_tipo_identificacion,
+                                                              empresa=empresa).first()
+        id_sri = id_sri_reg.cod_tipo_identificacion_sri
+
+        payload = {
+            "idClienteCore": cod_cliente,
+            "esPersona": 2 if id_sri == '04' else 1,
+            "comentario": "Cliente Nuevo desde DB",
+            "correo": cliente_h.email_factura if cliente_h.email_factura else 'test@test.com',
+            "telefonoPrincipal": cliente_h.telefono1h if cliente_h.telefono1h else cliente_h.celular,
+            "telefonoAlternativo": cliente_h.telefono2h if cliente_h.telefono2h else cliente_h.celular,
+            "telefonoCasa": cliente_h.telefono1h if cliente_h.telefono1h else cliente_h.celular,
+            "telefonoMovil": cliente_h.celular if cliente_h.celular else cliente_h.telefono1h,
+            "idSubsidiariaNS": 3,
+            "nombre": cliente.nombre,
+            "apellido": cliente.apellido1,
+            "identificacion": re.sub(r'[^a-zA-Z0-9]', '', cliente.cod_cliente),
+            "otroNombreLt": cliente.nombre,
+            "primerNombreLt": cliente.nombre.split()[0] if cliente.nombre else "",
+            "segundoNombreLt": cliente.nombre.split()[1] if len(cliente.nombre.split()) > 1 else "",
+            "apellidoLt": cliente.apellido1,
+            "nombreComercial": cliente.apellido1 + ' ' + cliente.nombre if id_sri == '04' else None,
+            "nombreCompania": cliente.apellido1 + ' ' + cliente.nombre if id_sri == '04' else None,
+            "idEstadoClienteNS": 1 if cliente_h.activoh == 'S' else 2,
+            "idPaisOrigenNS": 5,
+            "idTipoDocumentoNS": id_sri,
+            "estado": 1,
+            "fechaInicio": cliente_h.fecha_creacionh.isoformat() if cliente_h and cliente_h.fecha_creacionh else "2024-01-01",
+            "diasRecordatorioPago": 30,
+            "tipoDocumentoNS": str(cliente.cod_tipo_identificacion or "2"),
+            "idCategoriaNS": 11,
+            "limiteCredito": float(cliente.cupo_aprobado) if float(cliente.cupo_aprobado) > 0.0 else None,
+            "idTipoClienteNS": 36,
+            "direcciones": [
+                {
+                    "detalleDireccion": {
+                                            "callePrincipal": cliente_h.direccion_calleh,
+                                            "calleSecundaria": cliente_h.calle_transversal if cliente_h.calle_transversal else cliente_h.direccion_calleh,
+                                            "descripcion": cliente_h.direccion_refh if cliente_h.direccion_refh else "N/A",
+                                            "idDireccionCore": 0,
+                                            "extCodPaisNS": "EC",
+                                            "extIdProvinciaNS": "EC-A_88",
+                                            "extIdCiudadNS": "Ecuador_0101",
+                                            "extIdPaisNS": 5,
+                                            "nombreCiudad": cliente_h.zona_geograficah if cliente_h.zona_geograficah else "N/A",
+                                            "nombreProvincia": "estado",
+                                            "zip": cliente_h.zona_geograficah if cliente_h.zona_geograficah else None
+                                        },
+                    "envio": 0,
+                    "facturacion": 0,
+                    "nombreTipoDireccion": cliente_h.direccion_cobro if cliente_h.direccion_cobro else "N/A",
+            }
+            ]
+        }
+
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {token}"
         }
-        response = requests.post(url, json=data, headers=headers)
+        response = requests.post(url, json=payload, headers=headers)
 
         if response.status_code == 201:
             return response.json()

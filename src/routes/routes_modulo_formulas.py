@@ -23,7 +23,7 @@ from src.models.clientes import Cliente
 formulas_b = Blueprint('routes_formulas', __name__)
 logger = logging.getLogger(__name__)
 
-CODIGOS_MARCAS_PROPIAS = [94]
+CODIGOS_MARCAS_PROPIAS = [3]
 
 
 @formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>", methods=["GET"])
