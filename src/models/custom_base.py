@@ -30,19 +30,23 @@ class custom_base(base):
         return db.session.query(cls)
 
     @staticmethod
-    def to_list(items: list['custom_base'], excluir_none=False, *args) -> list[dict]:
-        return [item.to_dict(excluir_none, *args) for item in items]
+    def to_list(items: list['custom_base'], atributos_anidados: list = None, excluir_none=False) -> list[dict]:
+        return [item.to_dict(atributos_anidados, excluir_none) for item in items]
 
-    def to_dict(self, excluir_none=False, *args: tuple[str, ...]) -> dict:
+    def to_dict(self, atributos_anidados: list = None, excluir_none=False) -> dict:
         data = {
             column.name: getattr(self, column.name) for column in self.__table__.columns
         }
         if excluir_none:
             data = {k: v for k, v in data.items() if v is not None}
-        for arg in args:
-            atributo = getattr(self, arg, [])
-            data[arg] = ([item.to_dict() for item in atributo]) if isinstance(atributo,
-                                                                              Iterable) else atributo.to_dict()
+        if atributos_anidados:
+            for atr_ani in atributos_anidados:
+                atributo = getattr(self, atr_ani, None)
+                if atr_ani is None:
+                    data[atr_ani] = None
+                else:
+                    data[atr_ani] = [item.to_dict() for item in atributo] if isinstance(atributo,
+                                                                                        Iterable) else atributo.to_dict()
         return data
 
     @staticmethod

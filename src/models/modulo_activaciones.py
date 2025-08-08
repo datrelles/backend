@@ -1,8 +1,9 @@
-from sqlalchemy import Column, text, VARCHAR, DateTime, FetchedValue
+from sqlalchemy import Column, text, VARCHAR, DateTime, FetchedValue, ForeignKey, ForeignKeyConstraint, and_
 from sqlalchemy.dialects.oracle import NUMBER
-from sqlalchemy.orm import declarative_base, validates
+from sqlalchemy.orm import declarative_base, validates, relationship, foreign
 from src.config.database import db
 from src.enums import tipo_estado
+from src.models.clientes import Cliente
 from src.models.custom_base import custom_base
 from src.validations import validar_number, validar_varchar, validar_fecha
 from src.validations.alfanumericas import validar_hora
@@ -19,15 +20,78 @@ def validar_estado(clave, valor, es_requerido=True):
     return validar_number(clave, valor, 1, es_requerido=es_requerido, valores_permitidos=tipo_estado.values())
 
 
+class st_cliente_direccion_guias(custom_base):
+    __tablename__ = 'st_cliente_direccion_guias'
+    __table_args__ = {'schema': schema_name}
+
+    empresa = Column(NUMBER(precision=2), primary_key=True)
+    cod_cliente = Column(VARCHAR(14), primary_key=True)
+    cod_direccion = Column(NUMBER(precision=3), primary_key=True)
+    ciudad = Column(VARCHAR(200), nullable=False)
+    direccion = Column(VARCHAR(200))
+    direccion_larga = Column(VARCHAR(500))
+    cod_zona_ciudad = Column(VARCHAR(14))
+    es_activo = Column(NUMBER(precision=1), default=1)
+    nombre = Column(VARCHAR(100))
+
+    @validates('empresa')
+    def validar_empresa(self, key, value):
+        return validar_empresa(key, value)
+
+    @validates('cod_cliente')
+    def validar_cod_cliente(self, key, value):
+        return validar_varchar(key, value, 14)
+
+    @validates('cod_direccion')
+    def validar_cod_direccion(self, key, value):
+        return validar_number(key, value, 3)
+
+    @validates('ciudad')
+    def validar_ciudad(self, key, value):
+        return validar_varchar(key, value, 200)
+
+    @validates('direccion')
+    def validar_direccion(self, key, value):
+        return validar_varchar(key, value, 200, False)
+
+    @validates('direccion_larga')
+    def validar_direccion_larga(self, key, value):
+        return validar_varchar(key, value, 200, False)
+
+    @validates('cod_zona_ciudad')
+    def validar_cod_zona_ciudad(self, key, value):
+        return validar_varchar(key, value, 14, False)
+
+    @validates('es_activo')
+    def validar_es_activo(self, key, value):
+        return validar_number(key, value, 1)
+
+    @validates('nombre')
+    def validar_nombre(self, key, value):
+        return validar_varchar(key, value, 100, False)
+
+
 class st_activacion(custom_base):
     __tablename__ = 'st_activacion'
-    __table_args__ = {'schema': schema_name}
+    __table_args__ = (
+        ForeignKeyConstraint(['empresa', 'cod_cliente', 'cod_tienda'],
+                             ['{}.st_cliente_direccion_guias.empresa'.format(schema_name),
+                              '{}.st_cliente_direccion_guias.cod_cliente'.format(schema_name),
+                              '{}.st_cliente_direccion_guias.cod_direccion'.format(schema_name)]),
+        ForeignKeyConstraint(['empresa', 'cod_cliente'], ['{}.Cliente.empresa'.format(schema_name), '{}.Cliente.cod_cliente'.format(schema_name)]),
+        {'schema': schema_name})
 
     cod_activacion = Column(NUMBER(precision=22), primary_key=True, server_default=FetchedValue())
     empresa = Column(NUMBER(precision=2))
     cod_promotor = Column(VARCHAR(20))
     cod_cliente = Column(VARCHAR(14))
+    cliente = relationship(Cliente, primaryjoin=and_(empresa == foreign(Cliente.empresa),
+                                                     cod_cliente == foreign(Cliente.cod_cliente)))
     cod_tienda = Column(NUMBER(precision=3))
+    tienda = relationship("st_cliente_direccion_guias",
+                          primaryjoin='and_(st_activacion.empresa == st_cliente_direccion_guias.empresa, '
+                                      'st_activacion.cod_cliente == st_cliente_direccion_guias.cod_cliente, '
+                                      'st_activacion.cod_tienda == st_cliente_direccion_guias.cod_direccion)')
     cod_proveedor = Column(VARCHAR(14))
     cod_modelo_act = Column(VARCHAR(8))
     cod_item_act = Column(VARCHAR(3))

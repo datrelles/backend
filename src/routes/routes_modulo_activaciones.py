@@ -11,6 +11,7 @@ from src.enums import categoria_excepcion
 from src.exceptions import validation_error
 from src.models.modulo_activaciones import st_activacion
 from src.models.modulo_formulas import validar_empresa
+from src.models.proveedores import TgModeloItem, Proveedor
 from src.models.users import Empresa
 from src.validations import validar_number, validar_varchar
 from src.validations.alfanumericas import validar_hora
@@ -180,6 +181,22 @@ def get_tipos_activacion(empresa):
     return jsonify(result)
 
 
+@activaciones_b.route("/empresas/<empresa>/promotores/<cod_promotor>/activaciones", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar las activaciones del promotor")
+def get_activaciones_por_promotor(empresa, cod_promotor):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_promotor = validar_varchar('cod_promotor', cod_promotor, 20)
+    if not db.session.get(Empresa, empresa):
+        mensaje = 'Empresa {} inexistente'.format(empresa)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    query = st_activacion.query()
+    activaciones = query.filter(st_activacion.empresa == empresa, st_activacion.cod_promotor == cod_promotor).all()
+    return jsonify(st_activacion.to_list(activaciones, ["tienda"]))
+
+
 @activaciones_b.route("/empresas/<empresa>/activaciones", methods=["POST"])
 @jwt_required()
 @cross_origin()
@@ -191,6 +208,14 @@ def post_activacion(empresa, data):
     activacion = st_activacion(**data)
     if not db.session.get(Empresa, data['empresa']):
         mensaje = 'Empresa {} inexistente'.format(data['empresa'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(Proveedor, (data['empresa'], data['cod_proveedor'])):
+        mensaje = 'Proveedor {} inexistente'.format(data['cod_proveedor'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(TgModeloItem, (data['empresa'], data['cod_modelo_act'], data['cod_item_act'])):
+        mensaje = 'Tipo de activación {} inexistente'.format(data['cod_item_act'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     activacion.total_minutos = calcular_diferencia_horas_en_minutos(activacion.hora_inicio, activacion.hora_fin)
