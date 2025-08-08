@@ -21,7 +21,7 @@ COD_MODELO_CATAL_ACTIV = "ACT"
 @jwt_required()
 @cross_origin()
 @handle_exceptions("consultar los promotores")
-def get_proceso():
+def get_promotores():
     sql = text("""
                 SELECT
                     e.identificacion,
@@ -40,63 +40,6 @@ def get_proceso():
     return jsonify(result)
 
 
-@activaciones_b.route("/empresas/<empresa>/clientes", methods=["GET"])
-@jwt_required()
-@cross_origin()
-@handle_exceptions("consultar los clientes")
-def get_clientes(empresa):
-    if not db.session.get(Empresa, empresa):
-        mensaje = 'Empresa {} inexistente'.format(empresa)
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    empresa = validar_empresa('empresa', empresa)
-    sql = text("""
-                SELECT
-                    ch.cod_clienteh,
-                    ch.cod_tipo_clienteh,
-                    SUBSTR(c.nombre, 1) AS nombre
-                FROM
-                    cliente_hor ch
-                INNER JOIN
-                    cliente c
-                ON
-                    ch.empresah = c.empresa AND
-                    ch.cod_clienteh=c.cod_cliente
-                WHERE
-                    ch.empresah = :empresa
-                """)
-    rows = db.session.execute(sql, {"empresa": empresa}).fetchall()
-    result = [{"cod_clienteh": row[0], "cod_tipo_clienteh": row[1], "nombre": row[2]} for row in rows]
-    return jsonify(result)
-
-
-@activaciones_b.route("/empresas/<empresa>/tipos-activacion", methods=["GET"])
-@jwt_required()
-@cross_origin()
-@handle_exceptions("consultar los tipos de activación")
-def get_tipos_activacion(empresa):
-    empresa = validar_empresa('empresa', empresa)
-    if not db.session.get(Empresa, empresa):
-        mensaje = 'Empresa {} inexistente'.format(empresa)
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    sql = text("""
-                SELECT
-                    m.cod_modelo,
-                    m.cod_item,
-                    m.nombre
-                FROM
-                    tg_modelo_item m
-                WHERE
-                    m.empresa = :empresa AND
-                    m.cod_modelo = :cod_modelo
-                ORDER BY m.nombre
-                """)
-    rows = db.session.execute(sql, {"empresa": empresa, "cod_modelo": COD_MODELO_CATAL_ACTIV}).fetchall()
-    result = [{"cod_modelo": row[0], "cod_item": row[1], "nombre": row[2]} for row in rows]
-    return jsonify(result)
-
-
 @activaciones_b.route("/promotores/<cod_promotor>/clientes", methods=["GET"])
 @jwt_required()
 @cross_origin()
@@ -106,7 +49,7 @@ def get_clientes_por_promotor(cod_promotor):
     sql = text("""
                 SELECT
                     DISTINCT(p.cod_cliente) AS cod_cliente,
-                    c.nombre
+                    SUBSTR(c.nombre, 1) AS nombre
                 FROM
                     ST_PROMOTOR_TIENDA p
                 INNER JOIN
@@ -122,7 +65,7 @@ def get_clientes_por_promotor(cod_promotor):
                 WHERE
                     p.cod_promotor = :cod_promotor
                 ORDER BY
-                    c.nombre
+                    nombre
                 """)
     rows = db.session.execute(sql, {"cod_promotor": cod_promotor}).fetchall()
     result = [{"cod_cliente": row[0], "nombre": row[1]} for row in rows]
@@ -133,7 +76,7 @@ def get_clientes_por_promotor(cod_promotor):
 @jwt_required()
 @cross_origin()
 @handle_exceptions("consultar las tiendas del promotor por cliente")
-def get_direcciones_por_promotor_cliente(cod_promotor, cod_cliente):
+def get_direcciones_por_promotor_y_cliente(cod_promotor, cod_cliente):
     cod_promotor = validar_varchar('cod_promotor', cod_promotor, 20)
     cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
     sql = text("""
@@ -170,4 +113,56 @@ def get_direcciones_por_promotor_cliente(cod_promotor, cod_cliente):
                 """)
     rows = db.session.execute(sql, {"cod_promotor": cod_promotor, "cod_cliente": cod_cliente}).fetchall()
     result = [{"cod_cliente": row[0], "nombre": row[1]} for row in rows]
+    return jsonify(result)
+
+
+@activaciones_b.route("/empresas/<empresa>/proveedores", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar los proveedores")
+def get_proveedores(empresa):
+    empresa = validar_empresa('empresa', empresa)
+    if not db.session.get(Empresa, empresa):
+        mensaje = 'Empresa {} inexistente'.format(empresa)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    sql = text("""
+                SELECT
+                    p.cod_proveedor,
+                    REPLACE(TRIM(p.nombre), CHR(9), '') AS nombre
+                FROM
+                    proveedor p
+                WHERE
+                    p.empresa = :empresa
+                ORDER BY p.nombre
+                """)
+    rows = db.session.execute(sql, {"empresa": empresa}).fetchall()
+    result = [{"cod_proveedor": row[0], "nombre": row[1]} for row in rows]
+    return jsonify(result)
+
+
+@activaciones_b.route("/empresas/<empresa>/tipos-activacion", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar los tipos de activación")
+def get_tipos_activacion(empresa):
+    empresa = validar_empresa('empresa', empresa)
+    if not db.session.get(Empresa, empresa):
+        mensaje = 'Empresa {} inexistente'.format(empresa)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    sql = text("""
+                SELECT
+                    m.cod_modelo,
+                    m.cod_item,
+                    m.nombre
+                FROM
+                    tg_modelo_item m
+                WHERE
+                    m.empresa = :empresa AND
+                    m.cod_modelo = :cod_modelo
+                ORDER BY m.nombre
+                """)
+    rows = db.session.execute(sql, {"empresa": empresa, "cod_modelo": COD_MODELO_CATAL_ACTIV}).fetchall()
+    result = [{"cod_modelo": row[0], "cod_item": row[1], "nombre": row[2]} for row in rows]
     return jsonify(result)
