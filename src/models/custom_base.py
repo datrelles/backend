@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
-from sqlalchemy import text
+from sqlalchemy import text, inspect
 from src.exceptions import validation_error
 
 base = declarative_base(metadata=db.metadata)
@@ -46,7 +46,9 @@ class custom_base(base):
                     data[atr_ani] = None
                 else:
                     data[atr_ani] = [item.to_dict() for item in atributo] if isinstance(atributo,
-                                                                                        Iterable) else atributo.to_dict()
+                                                                                        Iterable) else atributo.to_dict() if getattr(
+                        atributo, 'to_dict', None) else {c.key: getattr(atributo, c.key) for c in
+                                                         inspect(atributo).mapper.column_attrs}
         return data
 
     @staticmethod

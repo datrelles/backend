@@ -74,24 +74,25 @@ class st_cliente_direccion_guias(custom_base):
 class st_activacion(custom_base):
     __tablename__ = 'st_activacion'
     __table_args__ = (
+        ForeignKeyConstraint(['empresa', 'cod_cliente'],
+                             ['cliente.empresa', 'cliente.cod_cliente']),
         ForeignKeyConstraint(['empresa', 'cod_cliente', 'cod_tienda'],
                              ['{}.st_cliente_direccion_guias.empresa'.format(schema_name),
                               '{}.st_cliente_direccion_guias.cod_cliente'.format(schema_name),
                               '{}.st_cliente_direccion_guias.cod_direccion'.format(schema_name)]),
-        ForeignKeyConstraint(['empresa', 'cod_cliente'], ['{}.Cliente.empresa'.format(schema_name), '{}.Cliente.cod_cliente'.format(schema_name)]),
         {'schema': schema_name})
 
     cod_activacion = Column(NUMBER(precision=22), primary_key=True, server_default=FetchedValue())
     empresa = Column(NUMBER(precision=2))
     cod_promotor = Column(VARCHAR(20))
     cod_cliente = Column(VARCHAR(14))
-    cliente = relationship(Cliente, primaryjoin=and_(empresa == foreign(Cliente.empresa),
-                                                     cod_cliente == foreign(Cliente.cod_cliente)))
+    cliente = relationship(
+        Cliente,
+        foreign_keys=[empresa, cod_cliente]
+    )
     cod_tienda = Column(NUMBER(precision=3))
-    tienda = relationship("st_cliente_direccion_guias",
-                          primaryjoin='and_(st_activacion.empresa == st_cliente_direccion_guias.empresa, '
-                                      'st_activacion.cod_cliente == st_cliente_direccion_guias.cod_cliente, '
-                                      'st_activacion.cod_tienda == st_cliente_direccion_guias.cod_direccion)')
+    tienda = relationship(st_cliente_direccion_guias,
+                          foreign_keys=[empresa, cod_cliente, cod_tienda])
     cod_proveedor = Column(VARCHAR(14))
     cod_modelo_act = Column(VARCHAR(8))
     cod_item_act = Column(VARCHAR(3))
