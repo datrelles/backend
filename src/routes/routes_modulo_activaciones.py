@@ -194,7 +194,7 @@ def get_activaciones_por_promotor(empresa, cod_promotor):
         return jsonify({'mensaje': mensaje}), 404
     query = st_activacion.query()
     activaciones = query.filter(st_activacion.empresa == empresa, st_activacion.cod_promotor == cod_promotor).all()
-    return jsonify(st_activacion.to_list(activaciones, ["cliente", "tienda"]))
+    return jsonify(st_activacion.to_list(activaciones, ["promotor", "cliente", "tienda", "proveedor"]))
 
 
 @activaciones_b.route("/empresas/<empresa>/activaciones", methods=["POST"])

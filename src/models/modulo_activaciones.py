@@ -5,6 +5,7 @@ from src.config.database import db
 from src.enums import tipo_estado
 from src.models.clientes import Cliente
 from src.models.custom_base import custom_base
+from src.models.proveedores import Proveedor
 from src.validations import validar_number, validar_varchar, validar_fecha
 from src.validations.alfanumericas import validar_hora
 
@@ -71,20 +72,39 @@ class st_cliente_direccion_guias(custom_base):
         return validar_varchar(key, value, 100, False)
 
 
+class rh_empleados(custom_base):
+    __tablename__ = 'rh_empleados'
+    __table_args__ = {'schema': 'jaher'}
+
+    identificacion = Column(VARCHAR(20), primary_key=True)
+    apellido_paterno = Column(VARCHAR(25), nullable=False)
+    apellido_materno = Column(VARCHAR(25), nullable=False)
+    nombres = Column(VARCHAR(50), nullable=False)
+    activo = Column(VARCHAR(1), nullable=False)
+
+
 class st_activacion(custom_base):
     __tablename__ = 'st_activacion'
     __table_args__ = (
+        ForeignKeyConstraint(['cod_promotor'],
+                             ['jaher.rh_empleados.identificacion']),
         ForeignKeyConstraint(['empresa', 'cod_cliente'],
                              ['cliente.empresa', 'cliente.cod_cliente']),
         ForeignKeyConstraint(['empresa', 'cod_cliente', 'cod_tienda'],
                              ['{}.st_cliente_direccion_guias.empresa'.format(schema_name),
                               '{}.st_cliente_direccion_guias.cod_cliente'.format(schema_name),
                               '{}.st_cliente_direccion_guias.cod_direccion'.format(schema_name)]),
+        ForeignKeyConstraint(['empresa', 'cod_proveedor'],
+                             ['proveedor.empresa', 'proveedor.cod_proveedor']),
         {'schema': schema_name})
 
     cod_activacion = Column(NUMBER(precision=22), primary_key=True, server_default=FetchedValue())
     empresa = Column(NUMBER(precision=2))
     cod_promotor = Column(VARCHAR(20))
+    promotor = relationship(
+        'rh_empleados',
+        foreign_keys=[cod_promotor]
+    )
     cod_cliente = Column(VARCHAR(14))
     cliente = relationship(
         Cliente,
@@ -94,6 +114,10 @@ class st_activacion(custom_base):
     tienda = relationship(st_cliente_direccion_guias,
                           foreign_keys=[empresa, cod_cliente, cod_tienda])
     cod_proveedor = Column(VARCHAR(14))
+    proveedor = relationship(
+        Proveedor,
+        foreign_keys=[empresa, cod_proveedor]
+    )
     cod_modelo_act = Column(VARCHAR(8))
     cod_item_act = Column(VARCHAR(3))
     animadora = Column(VARCHAR(150), nullable=False)
