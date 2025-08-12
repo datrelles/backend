@@ -11,7 +11,6 @@ from sqlalchemy import text, func
 import requests
 from openpyxl.drawing.image import Image
 
-
 from src.config.database import db
 from src.models.catalogos_bench import StRepuestoCompatibilidad, ModeloVersion, ModeloComercial, ClienteCanal, Canal, \
     StCliente, ClienteCanalModelo
@@ -97,8 +96,7 @@ def repuestos_compatibles_por_modelo():
             mar.NOMBRE_MARCA AS nombre_marca
         FROM STOCK.ST_MODELO_VERSION mv
             JOIN STOCK.ST_REPUESTO_COMPATIBILIDAD rc
-                ON rc.CODIGO_MODELO_VERSION = mv.CODIGO_MODELO_VERSION
-                AND rc.ES_COMPATIBLE = 1
+                ON rc.CODIGO_MODELO_VERSION = mv.CODIGO_MODELO_VERSION   
             JOIN STOCK.PRODUCTO p
                 ON p.COD_PRODUCTO = rc.COD_PRODUCTO
                 AND p.EMPRESA = rc.EMPRESA
@@ -117,7 +115,9 @@ def repuestos_compatibles_por_modelo():
         WHERE mv.CODIGO_MODELO_COMERCIAL = :codigo_modelo_comercial
           AND mv.CODIGO_MARCA = :codigo_marca
           AND p.COD_MODELO_CAT1 = 'PRO3'
-
+        ORDER BY 
+            CASE WHEN rc.NIVEL_CONFIANZA = 100 THEN 0 ELSE 1 END,
+            rc.NIVEL_CONFIANZA DESC
     """)
 
     try:
@@ -245,12 +245,10 @@ def exportar_modelos_compatibles_xlsx():
 
             for rep in repuestos:
                 confianza = rep.get("nivel_confianza", 0)
-                if confianza >= 95:
-                    conf_label, color = "Alta", "2e7d32"
-                elif confianza >= 85:
-                    conf_label, color = "Media", "FFB03A"
+                if confianza == 100:
+                    conf_label, color = "SI", "2e7d32"
                 else:
-                    conf_label, color = "Baja", "d32f2f"
+                    conf_label, color = "NO", "d32f2f"
 
                 fila = [
                     None,
@@ -356,67 +354,7 @@ def insert_repuesto_compatibilidad():
         db.session.rollback()
         return jsonify({"error": "Error al insertar", "detalle": str(e)}), 500
 
-"""@bench_rep.route('/get_repuesto_compatibilidad', methods=['GET'])
-@jwt_required()
-def get_repuesto_compatibilidad():
-    try:
-        registros = db.session.query(StRepuestoCompatibilidad).all()
-        salida = []
 
-        for r in registros:
-            # Producto
-            producto = db.session.query(Producto).filter_by(cod_producto=r.cod_producto, empresa=r.empresa).first()
-
-
-            empresa = db.session.query(Empresa).filter_by(empresa=r.empresa).first()
-
-            modelo_version = db.session.query(ModeloVersion).filter_by(
-                codigo_modelo_version=r.codigo_modelo_version).first()
-            modelo_comercial = None
-            if modelo_version:
-                modelo_comercial = db.session.query(ModeloComercial).filter_by(
-                    codigo_modelo_comercial=modelo_version.codigo_modelo_comercial
-                ).first()
-
-            # Cliente y canal desde ClienteCanal
-            cliente_canal = db.session.query(ClienteCanal).filter_by(
-                codigo_cliente_canal=r.codigo_cliente_canal,
-                cod_producto=r.cod_producto,
-                empresa=r.empresa,
-                codigo_mod_vers_repuesto=r.codigo_mod_vers_repuesto
-            ).first()
-            canal = None
-            cliente = None
-            if cliente_canal:
-                canal = db.session.query(Canal).filter_by(codigo_canal=cliente_canal.codigo_canal).first()
-                cliente = db.session.query(StCliente).filter_by(codigo_cliente=cliente_canal.codigo_cliente).first()
-
-            salida.append({
-                "codigo_compatibilidad": r.codigo_compatibilidad,
-                "es_compatible": r.es_compatible,
-                "validado_por": r.validado_por,
-                "fecha_validacion": r.fecha_validacion.isoformat(),
-                "nivel_confianza": r.nivel_confianza,
-                "origen_validacion": r.origen_validacion,
-                "comentarios_tecnicos": r.comentarios_tecnicos,
-                "cod_producto": r.cod_producto,
-                "nombre_producto": producto.nombre if producto else None,
-                "empresa": r.empresa,
-                "nombre_empresa": empresa.nombre if empresa else None,
-                "codigo_cliente_canal": r.codigo_cliente_canal,
-                "nombre_canal": canal.nombre_canal if canal else None,
-                "nombre_cliente": cliente.nombre_cliente if cliente else None,
-                "codigo_modelo_version": r.codigo_modelo_version,
-                "nombre_modelo_version": modelo_version.nombre_modelo_version if modelo_version else None,
-                "nombre_modelo_comercial": modelo_comercial.nombre_modelo if modelo_comercial else None,
-                "codigo_mod_vers_repuesto": r.codigo_mod_vers_repuesto
-            })
-
-        return jsonify(salida), 200
-
-    except Exception as e:
-        return jsonify({"error": "Error al obtener datos", "detalle": str(e)}), 500
-"""
 #------------------------------------------------------------ INSERT UNIFICADO ST_CLIENTE_CANAL_MODELO Y ST_REPUESTO COMPATIBILIDAD
 @bench_rep.route('/insert_cliente_canal_repuesto_compatibilidad', methods=["POST"])
 @jwt_required()
@@ -684,8 +622,7 @@ def get_repuestos_compatibles():
         WHERE rc.CODIGO_MODELO_VERSION = :modelo_version
           AND rc.CODIGO_CLIENTE_CANAL = :cliente_canal
           AND rc.CODIGO_MOD_VERS_REPUESTO = :codigo_mod_vers_repuesto
-          AND rc.EMPRESA = :empresa
-          AND rc.ES_COMPATIBLE = 1
+          AND rc.EMPRESA = :empresa          
         ORDER BY categoria, nombre_repuesto
     """)
 
