@@ -44,7 +44,12 @@ def get_promotores():
                 FROM
                     rh_empleados e
                 WHERE
-                    e.activo = 'S'
+                    e.activo = 'S' AND
+                    EXISTS (
+                        SELECT 1
+                        FROM st_promotor_tienda p
+                        WHERE p.cod_promotor = e.identificacion
+                    )
                 ORDER BY e.apellido_paterno, e.apellido_materno, e.nombres
                 """)
     rows = db.session.execute(sql).fetchall()
