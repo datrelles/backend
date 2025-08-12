@@ -67,6 +67,7 @@ def get_clientes_por_promotor(cod_promotor):
     sql = text("""
                 SELECT
                     DISTINCT(p.cod_cliente) AS cod_cliente,
+                    ch.cod_tipo_clienteh,
                     SUBSTR(c.nombre, 1) AS nombre
                 FROM
                     ST_PROMOTOR_TIENDA p
@@ -86,7 +87,7 @@ def get_clientes_por_promotor(cod_promotor):
                     nombre
                 """)
     rows = db.session.execute(sql, {"cod_promotor": cod_promotor}).fetchall()
-    result = [{"cod_cliente": row[0], "nombre": row[1]} for row in rows]
+    result = [{"cod_cliente": row[0], "cod_tipo_clienteh": row[1], "nombre": row[2]} for row in rows]
     return jsonify(result)
 
 
