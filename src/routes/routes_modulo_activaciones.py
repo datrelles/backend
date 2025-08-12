@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 import logging
@@ -7,13 +7,13 @@ from sqlalchemy import text
 
 from src.decorators import validate_json, handle_exceptions
 from src.config.database import db
-from src.enums import categoria_excepcion
 from src.exceptions import validation_error
+from src.models.clientes import cliente_hor
 from src.models.modulo_activaciones import st_activacion
 from src.models.modulo_formulas import validar_empresa
 from src.models.proveedores import TgModeloItem, Proveedor
 from src.models.users import Empresa
-from src.validations import validar_number, validar_varchar
+from src.validations import validar_number, validar_varchar, validar_fecha
 from src.validations.alfanumericas import validar_hora
 
 activaciones_b = Blueprint('routes_activaciones', __name__)
@@ -194,12 +194,34 @@ def get_tipos_activacion(empresa):
 def get_activaciones_por_promotor(empresa, cod_promotor):
     empresa = validar_number('empresa', empresa, 2)
     cod_promotor = validar_varchar('cod_promotor', cod_promotor, 20)
+    fecha_inicio = request.args.get("fecha_inicio")
+    fecha_inicio = validar_fecha('fecha_inicio', fecha_inicio) if fecha_inicio else None
+    fecha_fin = request.args.get("fecha_fin")
+    fecha_fin = validar_fecha('fecha_fin', fecha_fin) if fecha_fin else None
+    cod_cliente = validar_varchar('cod_cliente', request.args.get("cod_cliente"), 14, False)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
+    if cod_cliente and not db.session.get(cliente_hor, (empresa, cod_cliente)):
+        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if (fecha_inicio and not fecha_fin) or (not fecha_inicio and fecha_fin):
+        mensaje = 'Debes proveer las fechas de inicio y fin para filtrar por ese parámetro'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
     query = st_activacion.query()
-    activaciones = query.filter(st_activacion.empresa == empresa, st_activacion.cod_promotor == cod_promotor).all()
+    activaciones = query.filter(st_activacion.empresa == empresa, st_activacion.cod_promotor == cod_promotor)
+    if fecha_inicio and fecha_fin:
+        if fecha_inicio >= fecha_fin:
+            mensaje = 'La fecha de inicio debe ser menor a la de fin'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 400
+        activaciones = activaciones.filter(st_activacion.fecha_act.between(fecha_inicio, fecha_fin))
+    if cod_cliente:
+        activaciones = activaciones.filter(st_activacion.cod_cliente == cod_cliente)
+    activaciones = activaciones.all()
     return jsonify(st_activacion.to_list(activaciones, ["promotor", "cliente", "tienda", "proveedor"]))
 
 
