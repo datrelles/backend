@@ -1,9 +1,9 @@
-from sqlalchemy import Column, text, VARCHAR, DateTime, FetchedValue, ForeignKey, ForeignKeyConstraint, and_
+from sqlalchemy import Column, text, VARCHAR, DateTime, FetchedValue, ForeignKeyConstraint, and_
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.orm import declarative_base, validates, relationship, foreign
 from src.config.database import db
 from src.enums import tipo_estado
-from src.models.clientes import Cliente
+from src.models.clientes import Cliente, cliente_hor
 from src.models.custom_base import custom_base
 from src.models.proveedores import Proveedor
 from src.validations import validar_number, validar_varchar, validar_fecha
@@ -90,30 +90,52 @@ class st_activacion(custom_base):
                              ['jaher.rh_empleados.identificacion']),
         ForeignKeyConstraint(['empresa', 'cod_cliente'],
                              ['cliente.empresa', 'cliente.cod_cliente']),
+        ForeignKeyConstraint(['empresa', 'cod_cliente'],
+                             ['{}.CLIENTE_HOR.empresah'.format(schema_name),
+                              '{}.CLIENTE_HOR.cod_clienteh'.format(schema_name)]),
         ForeignKeyConstraint(['empresa', 'cod_cliente', 'cod_tienda'],
                              ['{}.st_cliente_direccion_guias.empresa'.format(schema_name),
                               '{}.st_cliente_direccion_guias.cod_cliente'.format(schema_name),
                               '{}.st_cliente_direccion_guias.cod_direccion'.format(schema_name)]),
         ForeignKeyConstraint(['empresa', 'cod_proveedor'],
                              ['proveedor.empresa', 'proveedor.cod_proveedor']),
-        {'schema': schema_name})
+        {'schema': schema_name}
+    )
 
     cod_activacion = Column(NUMBER(precision=22), primary_key=True, server_default=FetchedValue())
     empresa = Column(NUMBER(precision=2))
     cod_promotor = Column(VARCHAR(20))
+    cod_cliente = Column(VARCHAR(14))
+    cod_tienda = Column(NUMBER(precision=3))
+    cod_proveedor = Column(VARCHAR(14))
     promotor = relationship(
-        'rh_empleados',
+        "rh_empleados",
         foreign_keys=[cod_promotor]
     )
-    cod_cliente = Column(VARCHAR(14))
     cliente = relationship(
         Cliente,
-        foreign_keys=[empresa, cod_cliente]
+        primaryjoin=and_(
+            empresa == foreign(Cliente.empresa),
+            cod_cliente == foreign(Cliente.cod_cliente)
+        ),
+        foreign_keys=[empresa, cod_cliente],
+        overlaps="cliente_hor",
+        uselist=False
     )
-    cod_tienda = Column(NUMBER(precision=3))
-    tienda = relationship(st_cliente_direccion_guias,
-                          foreign_keys=[empresa, cod_cliente, cod_tienda])
-    cod_proveedor = Column(VARCHAR(14))
+    cliente_hor = relationship(
+        cliente_hor,
+        primaryjoin=and_(
+            empresa == foreign(cliente_hor.empresah),
+            cod_cliente == foreign(cliente_hor.cod_clienteh)
+        ),
+        foreign_keys=[empresa, cod_cliente],
+        overlaps="cliente",
+        uselist=False
+    )
+    tienda = relationship(
+        st_cliente_direccion_guias,
+        foreign_keys=[empresa, cod_cliente, cod_tienda]
+    )
     proveedor = relationship(
         Proveedor,
         foreign_keys=[empresa, cod_proveedor]

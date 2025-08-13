@@ -222,7 +222,7 @@ def get_activaciones_por_promotor(empresa, cod_promotor):
     if cod_cliente:
         activaciones = activaciones.filter(st_activacion.cod_cliente == cod_cliente)
     activaciones = activaciones.all()
-    return jsonify(st_activacion.to_list(activaciones, ["promotor", "cliente", "tienda", "proveedor"]))
+    return jsonify(st_activacion.to_list(activaciones, ["promotor", "cliente", "cliente_hor", "tienda", "proveedor"]))
 
 
 @activaciones_b.route("/empresas/<empresa>/activaciones", methods=["POST"])

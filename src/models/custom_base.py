@@ -1,10 +1,20 @@
 from collections.abc import Iterable
+
+from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.ext.declarative import declarative_base
 from src.config.database import db
 from sqlalchemy import text, inspect
 from src.exceptions import validation_error
 
 base = declarative_base(metadata=db.metadata)
+
+
+def es_objeto_mapeado(obj):
+    try:
+        inspect(obj)
+        return True
+    except NoInspectionAvailable:
+        return False
 
 
 class custom_base(base):
@@ -42,13 +52,16 @@ class custom_base(base):
         if atributos_anidados:
             for atr_ani in atributos_anidados:
                 atributo = getattr(self, atr_ani, None)
-                if atr_ani is None:
+                if atributo is None:
                     data[atr_ani] = None
                 else:
-                    data[atr_ani] = [item.to_dict() for item in atributo] if isinstance(atributo,
-                                                                                        Iterable) else atributo.to_dict() if getattr(
-                        atributo, 'to_dict', None) else {c.key: getattr(atributo, c.key) for c in
-                                                         inspect(atributo).mapper.column_attrs}
+                    data[atr_ani] = [
+                        item.to_dict() if getattr(item, 'to_dict', None) else {c.key: getattr(item, c.key) for c in
+                                                                               inspect(item).mapper.column_attrs} for
+                        item in atributo] if isinstance(atributo, Iterable) else atributo.to_dict() if getattr(atributo,
+                                                                                                               'to_dict',
+                                                                                                               None) else {
+                        c.key: getattr(atributo, c.key) for c in inspect(atributo).mapper.column_attrs}
         return data
 
     @staticmethod
