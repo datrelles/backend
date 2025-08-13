@@ -32,7 +32,7 @@ class st_cliente_direccion_guias(custom_base):
     direccion = Column(VARCHAR(200))
     direccion_larga = Column(VARCHAR(500))
     cod_zona_ciudad = Column(VARCHAR(14))
-    es_activo = Column(NUMBER(precision=1), default=1)
+    es_activo = Column(NUMBER(precision=1), nullable=False)
     nombre = Column(VARCHAR(100))
 
     @validates('empresa')
@@ -65,7 +65,7 @@ class st_cliente_direccion_guias(custom_base):
 
     @validates('es_activo')
     def validar_es_activo(self, key, value):
-        return validar_number(key, value, 1)
+        return validar_number(key, value, 1, valores_permitidos=[0, 1])
 
     @validates('nombre')
     def validar_nombre(self, key, value):
@@ -105,13 +105,11 @@ class st_activacion(custom_base):
     cod_activacion = Column(NUMBER(precision=22), primary_key=True, server_default=FetchedValue())
     empresa = Column(NUMBER(precision=2))
     cod_promotor = Column(VARCHAR(20))
-    cod_cliente = Column(VARCHAR(14))
-    cod_tienda = Column(NUMBER(precision=3))
-    cod_proveedor = Column(VARCHAR(14))
     promotor = relationship(
         "rh_empleados",
         foreign_keys=[cod_promotor]
     )
+    cod_cliente = Column(VARCHAR(14))
     cliente = relationship(
         Cliente,
         primaryjoin=and_(
@@ -132,10 +130,12 @@ class st_activacion(custom_base):
         overlaps="cliente",
         uselist=False
     )
+    cod_tienda = Column(NUMBER(precision=3))
     tienda = relationship(
         st_cliente_direccion_guias,
         foreign_keys=[empresa, cod_cliente, cod_tienda]
     )
+    cod_proveedor = Column(VARCHAR(14))
     proveedor = relationship(
         Proveedor,
         foreign_keys=[empresa, cod_proveedor]

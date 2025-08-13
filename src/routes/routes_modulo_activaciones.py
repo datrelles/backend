@@ -8,8 +8,8 @@ from sqlalchemy import text
 from src.decorators import validate_json, handle_exceptions
 from src.config.database import db
 from src.exceptions import validation_error
-from src.models.clientes import cliente_hor
-from src.models.modulo_activaciones import st_activacion
+from src.models.clientes import cliente_hor, Cliente
+from src.models.modulo_activaciones import st_activacion, st_cliente_direccion_guias, rh_empleados
 from src.models.modulo_formulas import validar_empresa
 from src.models.proveedores import TgModeloItem, Proveedor
 from src.models.users import Empresa
@@ -234,15 +234,27 @@ def post_activacion(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
     data = {'empresa': empresa, **data}
     activacion = st_activacion(**data)
-    if not db.session.get(Empresa, data['empresa']):
-        mensaje = 'Empresa {} inexistente'.format(data['empresa'])
+    if not db.session.get(Empresa, empresa):
+        mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(Proveedor, (data['empresa'], data['cod_proveedor'])):
+    if not db.session.get(rh_empleados, data['cod_promotor']):
+        mensaje = 'Promotor {} inexistente'.format(data['cod_promotor'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(Cliente, (empresa, data['cod_cliente'])):
+        mensaje = 'Cliente {} inexistente'.format(data['cod_cliente'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_cliente_direccion_guias, (empresa, data['cod_cliente'], data['cod_tienda'])):
+        mensaje = 'Tienda {} inexistente'.format(data['cod_tienda'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(Proveedor, (empresa, data['cod_proveedor'])):
         mensaje = 'Proveedor {} inexistente'.format(data['cod_proveedor'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(TgModeloItem, (data['empresa'], data['cod_modelo_act'], data['cod_item_act'])):
+    if not db.session.get(TgModeloItem, (empresa, data['cod_modelo_act'], data['cod_item_act'])):
         mensaje = 'Tipo de activación {} inexistente'.format(data['cod_item_act'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
@@ -252,3 +264,41 @@ def post_activacion(empresa, data):
     mensaje = 'Se registró la activación {}'.format(activacion.cod_activacion)
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
+
+
+@activaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/direcciones-guia/<cod_direccion>", methods=["PUT"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("actualizar la dirección guia")
+def put_direccion_guia(empresa, cod_cliente, cod_direccion, data):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    cod_direccion = validar_number('cod_direccion', cod_direccion, 3)
+    data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_direccion': cod_direccion, **data}
+    st_cliente_direccion_guias(**data)
+    if not db.session.get(Empresa, empresa):
+        mensaje = 'Empresa {} inexistente'.format(empresa)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(Cliente, (empresa, cod_cliente)):
+        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    direccion_guia = db.session.get(st_cliente_direccion_guias, (empresa, cod_cliente, cod_direccion))
+    if not direccion_guia:
+        mensaje = 'Dirección guía {} inexistente'.format(cod_direccion)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    direccion_guia.ciudad = data['ciudad']
+    direccion_guia.direccion = data.get('direccion')
+    direccion_guia.direccion_larga = data.get('direccion_larga')
+    direccion_guia.cod_zona_ciudad = data.get('cod_zona_ciudad')
+    direccion_guia.es_activo = data['es_activo']
+    nombre = data.get('nombre')
+    if nombre:
+        direccion_guia.nombre = nombre
+    db.session.commit()
+    mensaje = 'Se actualizó la dirección guía {}'.format(direccion_guia.cod_direccion)
+    logger.info(mensaje)
+    return jsonify({'mensaje': mensaje}), 204
