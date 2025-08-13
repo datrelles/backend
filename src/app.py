@@ -105,7 +105,7 @@ app.register_blueprint(bench_model, url_prefix="/bench_model")
 app.register_blueprint(bench_rep, url_prefix="/bench_rep")
 app.register_blueprint(formulas_b, url_prefix="/modulo-formulas")
 app.register_blueprint(importaciones_b, url_prefix="/modulo-importaciones")
-app.register_blueprint(bi, url_prefix="/bi")
+#app.register_blueprint(bi, url_prefix="/bi")
 #############################################################################
 
 jwt_manager = JWTManager(app)
