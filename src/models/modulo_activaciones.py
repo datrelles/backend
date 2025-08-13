@@ -83,6 +83,17 @@ class rh_empleados(custom_base):
     activo = Column(VARCHAR(1), nullable=False)
 
 
+class st_bodega_consignacion(custom_base):
+    __tablename__ = 'st_bodega_consignacion'
+    __table_args__ = {'schema': schema_name}
+
+    empresa = Column(NUMBER(precision=2), primary_key=True)
+    cod_bodega = Column(NUMBER(precision=4), primary_key=True)
+    ruc_cliente = Column(VARCHAR(14), nullable=False)
+    cod_direccion = Column(NUMBER(precision=3), nullable=False)
+    nombre = Column(VARCHAR(100), nullable=False)
+
+
 class st_activacion(custom_base):
     __tablename__ = 'st_activacion'
     __table_args__ = (
@@ -92,6 +103,10 @@ class st_activacion(custom_base):
                              ['{}.st_cliente_direccion_guias.empresa'.format(schema_name),
                               '{}.st_cliente_direccion_guias.cod_cliente'.format(schema_name),
                               '{}.st_cliente_direccion_guias.cod_direccion'.format(schema_name)]),
+        ForeignKeyConstraint(['empresa', 'cod_cliente', 'cod_tienda'],
+                             ['{}.st_bodega_consignacion.empresa'.format(schema_name),
+                              '{}.st_bodega_consignacion.ruc_cliente'.format(schema_name),
+                              '{}.st_bodega_consignacion.cod_direccion'.format(schema_name)]),
         ForeignKeyConstraint(['empresa', 'cod_proveedor'],
                              ['proveedor.empresa', 'proveedor.cod_proveedor']),
         {'schema': schema_name}
@@ -128,7 +143,14 @@ class st_activacion(custom_base):
     cod_tienda = Column(NUMBER(precision=3))
     tienda = relationship(
         st_cliente_direccion_guias,
-        foreign_keys=[empresa, cod_cliente, cod_tienda]
+        foreign_keys=[empresa, cod_cliente, cod_tienda],
+        overlaps="bodega",
+    )
+    bodega = relationship(
+        st_bodega_consignacion,
+        foreign_keys=[empresa, cod_cliente, cod_tienda],
+        overlaps="tienda",
+        uselist=False
     )
     cod_proveedor = Column(VARCHAR(14))
     proveedor = relationship(
