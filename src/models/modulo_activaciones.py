@@ -88,11 +88,6 @@ class st_activacion(custom_base):
     __table_args__ = (
         ForeignKeyConstraint(['cod_promotor'],
                              ['jaher.rh_empleados.identificacion']),
-        ForeignKeyConstraint(['empresa', 'cod_cliente'],
-                             ['cliente.empresa', 'cliente.cod_cliente']),
-        ForeignKeyConstraint(['empresa', 'cod_cliente'],
-                             ['{}.CLIENTE_HOR.empresah'.format(schema_name),
-                              '{}.CLIENTE_HOR.cod_clienteh'.format(schema_name)]),
         ForeignKeyConstraint(['empresa', 'cod_cliente', 'cod_tienda'],
                              ['{}.st_cliente_direccion_guias.empresa'.format(schema_name),
                               '{}.st_cliente_direccion_guias.cod_cliente'.format(schema_name),
