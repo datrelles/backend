@@ -21,6 +21,15 @@ def validar_estado(clave, valor, es_requerido=True):
     return validar_number(clave, valor, 1, es_requerido=es_requerido, valores_permitidos=tipo_estado.values())
 
 
+class ad_usuarios(custom_base):
+    __tablename__ = 'ad_usuarios'
+    __table_args__ = {'schema': 'jaher'}
+
+    codigo_usuario = Column(VARCHAR(30), primary_key=True)
+    identificacion = Column(VARCHAR(10), nullable=False)
+    codigo_usuario_externo = Column(VARCHAR(10))
+
+
 class st_cliente_direccion_guias(custom_base):
     __tablename__ = 'st_cliente_direccion_guias'
     __table_args__ = {'schema': schema_name}

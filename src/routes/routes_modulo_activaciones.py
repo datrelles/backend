@@ -9,10 +9,11 @@ from src.decorators import validate_json, handle_exceptions
 from src.config.database import db
 from src.exceptions import validation_error
 from src.models.clientes import cliente_hor, Cliente
-from src.models.modulo_activaciones import st_activacion, st_cliente_direccion_guias, rh_empleados, st_promotor_tienda
+from src.models.modulo_activaciones import st_activacion, st_cliente_direccion_guias, rh_empleados, st_promotor_tienda, \
+    ad_usuarios
 from src.models.modulo_formulas import validar_empresa
 from src.models.proveedores import TgModeloItem, Proveedor
-from src.models.users import Empresa
+from src.models.users import Empresa, Usuario
 from src.validations import validar_number, validar_varchar, validar_fecha
 from src.validations.alfanumericas import validar_hora
 
@@ -28,6 +29,30 @@ def calcular_diferencia_horas_en_minutos(inicio, fin):
     if inicio >= fin:
         raise validation_error(mensaje='La hora de inicio debe ser menor a la hora de fin')
     return (fin - inicio).total_seconds() / 60
+
+
+@activaciones_b.route("/promotores/<usuario_oracle>", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar el promotor")
+def get_promotor(usuario_oracle):
+    usuario_oracle = validar_varchar('usuario_oracle', usuario_oracle, 20)
+    usuario = db.session.get(Usuario, usuario_oracle)
+    if not usuario:
+        mensaje = 'Usuario {} inexistente'.format(usuario_oracle)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    ad_usuario = db.session.get(ad_usuarios, usuario.usuario_oracle)
+    if not ad_usuario:
+        mensaje = 'AD usuario {} inexistente'.format(usuario_oracle)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    promotor = db.session.get(rh_empleados, ad_usuario.identificacion)
+    if not promotor:
+        mensaje = 'Promotor {} inexistente'.format(ad_usuario.identificacion)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    return jsonify(promotor.to_dict())
 
 
 @activaciones_b.route("/promotores", methods=["GET"])
