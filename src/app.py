@@ -36,6 +36,7 @@ from src.routes.routes_auth import au
 from src.routes.routes_custom import bpcustom
 from src.routes.routes_net import net
 from src.routes.routes_fin import bpfin
+from src.routes.routes_bi import bi
 from src.routes.routes_logis import bplog
 from src.routes.routes_com import bpcom
 from src.routes.module_contabilidad import rmc
@@ -104,6 +105,7 @@ app.register_blueprint(bench_model, url_prefix="/bench_model")
 app.register_blueprint(bench_rep, url_prefix="/bench_rep")
 app.register_blueprint(formulas_b, url_prefix="/modulo-formulas")
 app.register_blueprint(importaciones_b, url_prefix="/modulo-importaciones")
+app.register_blueprint(bi, url_prefix="/bi")
 #############################################################################
 
 jwt_manager = JWTManager(app)
