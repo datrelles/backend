@@ -94,6 +94,20 @@ class st_bodega_consignacion(custom_base):
     nombre = Column(VARCHAR(100), nullable=False)
 
 
+class st_promotor_tienda(custom_base):
+    __tablename__ = 'st_promotor_tienda'
+    __table_args__ = {'schema': schema_name}
+
+    empresa = Column(NUMBER(precision=2), primary_key=True)
+    cod_promotor = Column(VARCHAR(20), primary_key=True)
+    cod_cliente = Column(VARCHAR(14), primary_key=True)
+    cod_direccion_guia = Column(NUMBER(precision=3), primary_key=True)
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+    audit_usuario_mod = Column(VARCHAR(30))
+    audit_fecha_mod = Column(DateTime)
+
+
 class st_activacion(custom_base):
     __tablename__ = 'st_activacion'
     __table_args__ = (

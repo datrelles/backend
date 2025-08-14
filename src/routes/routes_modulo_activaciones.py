@@ -9,7 +9,7 @@ from src.decorators import validate_json, handle_exceptions
 from src.config.database import db
 from src.exceptions import validation_error
 from src.models.clientes import cliente_hor, Cliente
-from src.models.modulo_activaciones import st_activacion, st_cliente_direccion_guias, rh_empleados
+from src.models.modulo_activaciones import st_activacion, st_cliente_direccion_guias, rh_empleados, st_promotor_tienda
 from src.models.modulo_formulas import validar_empresa
 from src.models.proveedores import TgModeloItem, Proveedor
 from src.models.users import Empresa
@@ -265,6 +265,59 @@ def post_activacion(empresa, data):
     mensaje = 'Se registró la activación {}'.format(activacion.cod_activacion)
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
+
+
+@activaciones_b.route("/activaciones/<cod_activacion>", methods=["PUT"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("actualizar la activación")
+def put_activacion(cod_activacion, data):
+    cod_activacion = validar_number('cod_activacion', cod_activacion, 22)
+    activacion = db.session.get(st_activacion, cod_activacion)
+    if not activacion:
+        mensaje = 'Activación {} inexistente'.format(cod_activacion)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    data = {**data, 'cod_activacion': cod_activacion, 'empresa': activacion.empresa,
+            'cod_promotor': activacion.cod_promotor}
+    st_activacion(**data)
+    if not db.session.get(Cliente, (data['empresa'], data['cod_cliente'])):
+        mensaje = 'Cliente {} inexistente'.format(data['cod_cliente'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_cliente_direccion_guias, (data['empresa'], data['cod_cliente'], data['cod_tienda'])):
+        mensaje = 'Tienda {} inexistente'.format(data['cod_tienda'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_promotor_tienda,
+                          (data['empresa'], data['cod_promotor'], data['cod_cliente'], data['cod_tienda'])):
+        mensaje = 'Promotor {} no vinculado a la tienda {}'.format(data['cod_promotor'], data['cod_tienda'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(Proveedor, (data['empresa'], data['cod_proveedor'])):
+        mensaje = 'Proveedor {} inexistente'.format(data['cod_proveedor'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(TgModeloItem, (data['empresa'], data['cod_modelo_act'], data['cod_item_act'])):
+        mensaje = 'Tipo de activación {} inexistente'.format(data['cod_item_act'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    activacion.cod_cliente = data['cod_cliente']
+    activacion.cod_tienda = data['cod_tienda']
+    activacion.cod_proveedor = data['cod_proveedor']
+    activacion.cod_modelo_act = data['cod_modelo_act']
+    activacion.cod_item_act = data['cod_item_act']
+    activacion.animadora = data['animadora']
+    activacion.fecha_act = data['fecha_act']
+    activacion.hora_inicio = data['hora_inicio']
+    activacion.hora_fin = data['hora_fin']
+    activacion.total_minutos = calcular_diferencia_horas_en_minutos(activacion.hora_inicio, activacion.hora_fin)
+    activacion.num_exhi_motos = data['num_exhi_motos']
+    db.session.commit()
+    mensaje = 'Se actualizó la activación {}'.format(activacion.cod_activacion)
+    logger.info(mensaje)
+    return jsonify({'mensaje': mensaje}), 204
 
 
 @activaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/direcciones-guia/<cod_direccion>", methods=["PUT"])
