@@ -8,6 +8,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from sqlalchemy import text, func
+import requests
+from openpyxl.drawing.image import Image
 
 
 from src.config.database import db
@@ -20,76 +22,6 @@ bench_rep = Blueprint('routes_bench_rep', __name__)
 logger = logging.getLogger(__name__)
 
 
-"""@bench_rep.route('/repuesto_compatibilidad', methods=['GET'])
-def obtener_modelos_compatibles():
-    cod_producto = request.args.get('cod_producto')
-    empresa = request.args.get('empresa')
-
-    if not cod_producto or not empresa:
-        return jsonify({"error": "Parámetros 'cod_producto' y 'empresa' son obligatorios"}), 400
-
-    # sql = text("""
-    #     SELECT *
-    #     FROM (
-    #         SELECT
-    #             mv.CODIGO_MODELO_VERSION        AS codigo_modelo_version,
-    #             mv.NOMBRE_MODELO_VERSION        AS nombre_modelo_version,
-    #             m.NOMBRE_MARCA                  AS nombre_marca,
-    #             mc.NOMBRE_MODELO                AS nombre_modelo_comercial,
-    #             l.NOMBRE_LINEA                  AS nombre_linea,
-    #             ls.NOMBRE_SEGMENTO              AS nombre_segmento,
-    #             im.PATH_IMAGEN                  AS path_imagen,
-    #             v.NOMBRE_VERSION                AS nombre_version,
-    #             e.NOMBRE                        AS nombre_empresa,
-    #             rc.NIVEL_CONFIANZA              AS nivel_confianza,
-    #             ROW_NUMBER() OVER (
-    #                 PARTITION BY mv.CODIGO_MODELO_VERSION
-    #                 ORDER BY rc.NIVEL_CONFIANZA DESC
-    #             ) AS row_num
-    #         FROM ST_MODELO_VERSION_REPUESTO r
-    #         JOIN ST_CLIENTE_CANAL_MODELO ccm
-    #           ON r.CODIGO_MOD_VERS_REPUESTO = ccm.CODIGO_MOD_VERS_REPUESTO
-    #           AND r.COD_PRODUCTO = ccm.COD_PRODUCTO
-    #           AND r.EMPRESA = ccm.EMPRESA
-    #         JOIN ST_REPUESTO_COMPATIBILIDAD rc
-    #           ON rc.CODIGO_MODELO_VERSION = ccm.CODIGO_MODELO_VERSION
-    #           AND rc.ES_COMPATIBLE = 1
-    #         JOIN ST_MODELO_VERSION mv
-    #           ON rc.CODIGO_MODELO_VERSION = mv.CODIGO_MODELO_VERSION
-    #         JOIN ST_MARCA m
-    #           ON mv.CODIGO_MARCA = m.CODIGO_MARCA
-    #         JOIN ST_MODELO_COMERCIAL mc
-    #           ON mv.CODIGO_MODELO_COMERCIAL = mc.CODIGO_MODELO_COMERCIAL
-    #           AND mv.CODIGO_MARCA = mc.CODIGO_MARCA
-    #         JOIN ST_SEGMENTO ls
-    #           ON mc.CODIGO_MODELO_COMERCIAL = ls.CODIGO_MODELO_COMERCIAL
-    #         JOIN ST_LINEA l
-    #           ON ls.CODIGO_LINEA = l.CODIGO_LINEA
-    #         JOIN ST_IMAGENES im
-    #           ON im.CODIGO_IMAGEN = mv.CODIGO_IMAGEN
-    #         JOIN ST_VERSION v
-    #           ON v.CODIGO_VERSION = mv.CODIGO_VERSION
-    #         JOIN EMPRESA e
-    #           ON ccm.EMPRESA = e.EMPRESA
-    #         WHERE r.COD_PRODUCTO = :cod_producto
-    #           AND r.EMPRESA = :empresa
-    #     )
-    #     WHERE row_num = 1
-    # """)
-    #
-    # try:
-    #     resultados = db.session.execute(sql, {
-    #         "cod_producto": cod_producto,
-    #         "empresa": empresa
-    #     }).mappings().all()
-    #
-    #     salida = [dict(row) for row in resultados]
-    #
-    #     return jsonify(salida)
-    #
-    # except Exception as e:
-    #     print(f"[ERROR] repuesto_compatibilidad: {str(e)}")
-    #     return jsonify({"error": "Error interno", "detalle": str(e)}), 500
 @bench_rep.route('/modelos_comerciales_por_marca', methods=['GET'])
 def get_modelos_comerciales_por_marca():
     codigo_marca = request.args.get('codigo_marca')
@@ -98,13 +30,38 @@ def get_modelos_comerciales_por_marca():
         return jsonify({"error": "Parámetro 'codigo_marca' obligatorio"}), 400
 
     try:
-        modelos = db.session.query(ModeloComercial).filter_by(codigo_marca=codigo_marca).all()
+        sql = text("""
+            SELECT 
+                mc.CODIGO_MODELO_COMERCIAL,
+                mc.NOMBRE_MODELO,
+                mc.ANIO_MODELO,
+                img.PATH_IMAGEN
+            FROM STOCK.ST_MODELO_COMERCIAL mc
+            LEFT JOIN (
+                SELECT 
+                    mv.CODIGO_MODELO_COMERCIAL,
+                    img.PATH_IMAGEN,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY mv.CODIGO_MODELO_COMERCIAL 
+                        ORDER BY mv.CODIGO_MODELO_VERSION
+                    ) AS rn
+                FROM STOCK.ST_MODELO_VERSION mv
+                JOIN STOCK.ST_IMAGENES img 
+                    ON mv.CODIGO_IMAGEN = img.CODIGO_IMAGEN
+                WHERE mv.CODIGO_MARCA = :codigo_marca
+            ) img 
+            ON img.CODIGO_MODELO_COMERCIAL = mc.CODIGO_MODELO_COMERCIAL AND img.rn = 1
+            WHERE mc.CODIGO_MARCA = :codigo_marca
+        """)
+        resultados = db.session.execute(sql, {"codigo_marca": codigo_marca}).mappings().all()
+
         salida = [
             {
-                "codigo_modelo_comercial": m.codigo_modelo_comercial,
-                "nombre_modelo": m.nombre_modelo,
-                "anio_modelo": m.anio_modelo,
-            } for m in modelos
+                "codigo_modelo_comercial": row["codigo_modelo_comercial"],
+                "nombre_modelo": row["nombre_modelo"],
+                "anio_modelo": row["anio_modelo"],
+                "path_imagen": row["path_imagen"]
+            } for row in resultados
         ]
         return jsonify(salida), 200
 
@@ -135,25 +92,32 @@ def repuestos_compatibles_por_modelo():
             mc.NOMBRE_MODELO AS nombre_modelo_comercial,
             mc.ANIO_MODELO,
             p.COD_ITEM_CAT1,
-            mi.NOMBRE AS nombre_item
+            mi.NOMBRE AS nombre_item,
+            img.PATH_IMAGEN AS path_imagen,
+            mar.NOMBRE_MARCA AS nombre_marca
         FROM STOCK.ST_MODELO_VERSION mv
-                 JOIN STOCK.ST_REPUESTO_COMPATIBILIDAD rc
-                      ON rc.CODIGO_MODELO_VERSION = mv.CODIGO_MODELO_VERSION
-                          AND rc.ES_COMPATIBLE = 1
-                 JOIN STOCK.PRODUCTO p
-                      ON p.COD_PRODUCTO = rc.COD_PRODUCTO
-                          AND p.EMPRESA = rc.EMPRESA
-                 LEFT JOIN STOCK.TG_MODELO_ITEM mi
-                           ON p.COD_ITEM_CAT1 = mi.COD_ITEM
-                               AND p.COD_MODELO_CAT1 = mi.COD_MODELO
-                               AND p.EMPRESA = mi.EMPRESA
-                 JOIN STOCK.EMPRESA e
-                      ON rc.EMPRESA = e.EMPRESA
-                 JOIN STOCK.ST_MODELO_COMERCIAL mc
-                      ON mc.CODIGO_MODELO_COMERCIAL = mv.CODIGO_MODELO_COMERCIAL
+            JOIN STOCK.ST_REPUESTO_COMPATIBILIDAD rc
+                ON rc.CODIGO_MODELO_VERSION = mv.CODIGO_MODELO_VERSION
+                AND rc.ES_COMPATIBLE = 1
+            JOIN STOCK.PRODUCTO p
+                ON p.COD_PRODUCTO = rc.COD_PRODUCTO
+                AND p.EMPRESA = rc.EMPRESA
+            LEFT JOIN STOCK.TG_MODELO_ITEM mi
+                ON p.COD_ITEM_CAT1 = mi.COD_ITEM
+                AND p.COD_MODELO_CAT1 = mi.COD_MODELO
+                AND p.EMPRESA = mi.EMPRESA
+            JOIN STOCK.EMPRESA e
+                ON rc.EMPRESA = e.EMPRESA
+            JOIN STOCK.ST_MODELO_COMERCIAL mc
+                ON mc.CODIGO_MODELO_COMERCIAL = mv.CODIGO_MODELO_COMERCIAL
+            JOIN STOCK.ST_IMAGENES img
+                ON mv.CODIGO_IMAGEN = img.CODIGO_IMAGEN
+            JOIN STOCK.ST_MARCA mar
+                ON mv.CODIGO_MARCA = mar.CODIGO_MARCA
         WHERE mv.CODIGO_MODELO_COMERCIAL = :codigo_modelo_comercial
           AND mv.CODIGO_MARCA = :codigo_marca
           AND p.COD_MODELO_CAT1 = 'PRO3'
+
     """)
 
     try:
@@ -164,13 +128,11 @@ def repuestos_compatibles_por_modelo():
 
         salida = [dict(row) for row in resultados]
 
-        # Agrupación por categoría (nombre_item)
         from collections import defaultdict
         agrupados = defaultdict(list)
         for row in salida:
             nombre_item = row.pop("nombre_item") or "Sin Categoría"
             agrupados[nombre_item].append(row)
-
 
         return jsonify(agrupados), 200
 
@@ -181,15 +143,30 @@ def repuestos_compatibles_por_modelo():
 
 #-----------------------------------------------------------------------------------------------------------------------
 #-------------------------------------------ENDPOINT PARA EXPORTAR EL BENCH REPUESTOS ----------------------------------
+def descargar_imagen_openpyxl(url, width=200, height=150):
+    try:
+        if url:
+            res = requests.get(url, timeout=2)
+            if res.ok:
+                img = Image(io.BytesIO(res.content))
+                img.width = width
+                img.height = height
+                return img
+    except Exception as e:
+        print(f"[IMG] Error al descargar: {url} -> {e}")
+    return None
 
 @bench_rep.route('/exportar_modelos_compatibles_xlsx', methods=["POST"])
 @jwt_required()
 @cross_origin()
 def exportar_modelos_compatibles_xlsx():
     try:
+        from collections import defaultdict
+
         data = request.get_json()
-        modelos = data.get("modelos", [])
-        nombre_producto = data.get("nombre_producto", "MODELO DESCONOCIDO")
+        modelos = data.get("modelos", {})
+        nombre_modelo = data.get("nombre_modelo", "MODELO DESCONOCIDO")
+        nombre_marca = data.get("nombre_marca", "SN")
 
         if not modelos:
             return jsonify({"error": "No hay modelos compatibles para exportar"}), 400
@@ -200,60 +177,107 @@ def exportar_modelos_compatibles_xlsx():
 
         rojo = "B22222"
         blanco = "FFFFFF"
-        # Borde gris
+        gris = "808080"
+
         gray_border = Border(
-            left=Side(border_style="thin", color="808080"),
-            right=Side(border_style="thin", color="808080"),
-            top=Side(border_style="thin", color="808080"),
-            bottom=Side(border_style="thin", color="808080")
+            left=Side(border_style="thin", color=gris),
+            right=Side(border_style="thin", color=gris),
+            top=Side(border_style="thin", color=gris),
+            bottom=Side(border_style="thin", color=gris)
         )
 
-        # Fila 1 - Título principal (producto/Repuesto)
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=6)
-        for col in range(1, 7):
-            cell = ws.cell(row=1, column=col)
-            if col == 1:
-                cell.value = nombre_producto.upper()
-                cell.font = Font(bold=True, size=12)
-                cell.alignment = Alignment(horizontal="center")
-            cell.border = gray_border
+        fill = PatternFill(start_color="B22222", end_color="B22222", fill_type="solid")
+        font_white = Font(color="FFFFFF", bold=True)
 
-        # Fila 2 - Subtítulo
-        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=6)
-        for col in range(1, 7):
-            cell = ws.cell(row=2, column=col)
-            if col == 1:
-                cell.value = "MODELOS COMPATIBLES"
-                cell.font = Font(bold=True)
-                cell.alignment = Alignment(horizontal="center")
-            cell.border = gray_border
+        ws.merge_cells(start_row=1, start_column=3, end_row=1, end_column=5)
+        cell = ws.cell(row=1, column=3, value="REPUESTOS COMPATIBLES")
+        cell.font = Font(bold=True, size=14)
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = gray_border
 
-        # Fila 3 - Cabecera
-        columnas = ["MODELO COMERCIAL", "EMPRESA", "VERSIÓN", "MARCA", "LÍNEA", "SEGMENTO"]
+        # Subtítulo (Marca y Modelo)
+        ws.merge_cells(start_row=2, start_column=3, end_row=2, end_column=5)
+        cell = ws.cell(row=2, column=3, value=f"{nombre_marca.upper()} - {nombre_modelo.upper()}")
+
+        cell.font = font_white
+        cell.fill = fill
+        cell.alignment = Alignment(horizontal="center")
+
+        # Imagen (fila 4)
+        imagen_url = next(iter(modelos.values()))[0].get("path_imagen", None)
+        if imagen_url:
+            try:
+                res = requests.get(imagen_url, timeout=3)
+                if res.ok:
+                    img = Image(io.BytesIO(res.content))
+                    img.width = 250
+                    img.height = 200
+                    ws.add_image(img, "D4")
+            except Exception as e:
+                print("[ERROR IMG]", e)
+
+        current_row = 15
+
+        columnas = ["ITEM", "COD_PRODUCTO", "NOMBRE_PRODUCTO", "CONFIANZA", "VALIDADO POR", "ORIGEN", "COMENTARIOS"]
         for col_idx, nombre_col in enumerate(columnas, start=1):
-            c = ws.cell(row=3, column=col_idx, value=nombre_col)
-            c.border = gray_border
-            c.font = Font(bold=True, color=blanco)
-            c.fill = PatternFill(start_color=rojo, end_color=rojo, fill_type="solid")
-            c.alignment = Alignment(horizontal="center", vertical="center")
+            cell = ws.cell(row=current_row, column=col_idx, value=nombre_col)
+            cell.border = gray_border
+            cell.font = Font(bold=True, color=blanco)
+            cell.fill = PatternFill(start_color=rojo, end_color=rojo, fill_type="solid")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
             ws.column_dimensions[get_column_letter(col_idx)].width = 25
+        current_row += 1
 
-        # registro de datos
-        for i, m in enumerate(modelos, start=4):
-            fila = [
-                m.get("nombre_modelo_comercial", ""),
-                m.get("nombre_empresa", ""),
-                m.get("nombre_version", ""),
-                m.get("nombre_marca", ""),
-                m.get("nombre_linea", ""),
-                m.get("nombre_segmento", "")
-            ]
-            for col_idx, valor in enumerate(fila, start=1):
-                c = ws.cell(row=i, column=col_idx, value=valor)
-                c.border = gray_border
-                c.alignment = Alignment(horizontal="left", vertical="center")
+        sql_items = text("""
+            SELECT DISTINCT p.cod_item_cat1, i.nombre
+            FROM producto p
+            JOIN stock.tg_modelo_item i ON i.cod_item = p.cod_item_cat1
+            WHERE i.cod_modelo = 'PRO3'
+        """)
+        mapeo_items = {
+            row['cod_item_cat1']: row['nombre']
+            for row in db.session.execute(sql_items).mappings()
+        }
 
-        # Guardado del archivo Excel
+        for categoria, repuestos in modelos.items():
+            nombre_item = mapeo_items.get(categoria, "SIN CATEGORÍA").upper()
+            inicio_categoria_row = current_row
+
+            for rep in repuestos:
+                confianza = rep.get("nivel_confianza", 0)
+                if confianza >= 95:
+                    conf_label, color = "Alta", "2e7d32"
+                elif confianza >= 85:
+                    conf_label, color = "Media", "FFB03A"
+                else:
+                    conf_label, color = "Baja", "d32f2f"
+
+                fila = [
+                    None,
+                    rep.get("cod_producto", ""),
+                    rep.get("nombre_producto", ""),
+                    f"{confianza}% – {conf_label}",
+                    rep.get("validado_por", ""),
+                    rep.get("origen_validacion", ""),
+                    rep.get("comentarios_tecnicos", "")
+                ]
+
+                for col_idx, valor in enumerate(fila, start=1):
+                    c = ws.cell(row=current_row, column=col_idx, value=valor)
+                    c.border = gray_border
+                    c.alignment = Alignment(horizontal="left", vertical="center")
+                    if col_idx == 4:
+                        c.font = Font(bold=True, color=color)
+
+                current_row += 1
+
+            # Combinar celdas verticalmente para la categoría en columna 1
+            ws.merge_cells(start_row=inicio_categoria_row, end_row=current_row - 1, start_column=1, end_column=1)
+            cell_merged = ws.cell(row=inicio_categoria_row, column=1, value=nombre_item)
+            cell_merged.alignment = Alignment(horizontal="center", vertical="center")
+            cell_merged.font = Font(bold=True)
+            cell_merged.border = gray_border
+
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
@@ -261,12 +285,11 @@ def exportar_modelos_compatibles_xlsx():
         return send_file(
             output,
             as_attachment=True,
-            download_name="modelos_compatibles.xlsx",
+            download_name="repuestos_compatibles.xlsx",
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @bench_rep.route('/insert_repuesto_compatibilidad', methods=['POST'])
 @jwt_required()

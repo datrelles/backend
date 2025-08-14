@@ -253,3 +253,99 @@ def consulta_pdf():
     finally:
         if c:
             c.close()
+
+
+@pdf_s3.route('/consulta_pdf_lasted', methods=['GET'])
+@jwt_required()
+def consulta_pdf_lasted():
+    c = None
+    try:
+        nombre_pdf = request.args.get('nombre_pdf')
+        timestamp_str = request.args.get('fecha')
+
+        c = get_oracle_connection()
+        cur = c.cursor()
+
+        # --- LISTAR ÚLTIMOS POR (empresa, nombre_pdf) CUANDO NO HAY PARÁMETROS ---
+        if not nombre_pdf and not timestamp_str:
+            sql_all = """
+                SELECT empresa, nombre_pdf, agencia, usuario_ultima_modificacion, fecha_ultima_modificacion, descripcion
+                FROM (
+                    SELECT t.*,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY t.empresa, t.nombre_pdf
+                               ORDER BY t.fecha_ultima_modificacion DESC
+                           ) AS rn
+                    FROM TG_PDF_UPLOADS t
+                )
+                WHERE rn = 1
+                ORDER BY fecha_ultima_modificacion DESC
+            """
+            cur.execute(sql_all)
+            rows = cur.fetchall()
+            cur.close()
+
+            data = [{
+                "empresa": r[0],
+                "key": r[1],
+                "agencia": r[2],
+                "usuario_ultima_modificacion": r[3],
+                "fecha_ultima_modificacion": r[4].strftime('%Y-%m-%d %H:%M:%S'),
+                "fecha_timestamp": int(r[4].timestamp()),
+                "label": r[5]
+
+            } for r in rows]
+
+            return jsonify(data)
+
+        # --- LÓGICA EXISTENTE PARA CUANDO SE PASAN PARÁMETROS ---
+        if not nombre_pdf or not timestamp_str:
+            return jsonify({"error": "Parámetros requeridos: nombre_pdf y fecha (timestamp en segundos)"}), 400
+
+        try:
+            timestamp = float(timestamp_str)
+        except Exception as e:
+            return jsonify({"error": f"Formato de fecha inválido (se esperaba timestamp): {e}"}), 400
+
+        sql_latest = """
+        SELECT empresa, nombre_pdf, agencia, usuario_ultima_modificacion, fecha_ultima_modificacion
+        FROM TG_PDF_UPLOADS
+        WHERE nombre_pdf = :nombre_pdf
+        AND fecha_ultima_modificacion = (
+            SELECT MAX(fecha_ultima_modificacion)
+            FROM TG_PDF_UPLOADS
+            WHERE nombre_pdf = :nombre_pdf
+        )
+        """
+        cur.execute(sql_latest, nombre_pdf=nombre_pdf)
+        row = cur.fetchone()
+        cur.close()
+
+        if not row:
+            return jsonify({"error": "No se encontró registro"}), 404
+
+        fecha_ultima_modificacion = row[4]
+        timestamp_bd = int(fecha_ultima_modificacion.timestamp())
+
+        if int(timestamp) == timestamp_bd:
+            return jsonify({"pdf_current": True})
+        else:
+            bucket_url = f"https://{BUCKET_NAME}.s3.us-east-1.amazonaws.com/{nombre_pdf}"
+            return jsonify({
+                "empresa": row[0],
+                "nombre_pdf": row[1],
+                "agencia": row[2],
+                "usuario_ultima_modificacion": row[3],
+                "fecha_ultima_modificacion": fecha_ultima_modificacion.strftime('%Y-%m-%d %H:%M:%S'),
+                "fecha_timestamp": timestamp_bd,
+                "pdf_current": False,
+                "url": bucket_url
+            })
+
+    except Exception as ex:
+        if c:
+            c.rollback()
+        return jsonify({"error": str(ex)}), 500
+    finally:
+        if c:
+            c.close()
