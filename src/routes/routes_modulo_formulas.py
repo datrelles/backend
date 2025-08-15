@@ -402,7 +402,7 @@ def get_parametros_por_proceso(empresa, cod_proceso):
     parametros = query.filter(st_parametro_por_proceso.empresa == empresa,
                               st_parametro_por_proceso.cod_proceso == cod_proceso).order_by(
         st_parametro_por_proceso.orden_imprime).all()
-    return jsonify(st_parametro_por_proceso.to_list(parametros, False, 'parametro'))
+    return jsonify(st_parametro_por_proceso.to_list(parametros, ['parametro'], False))
 
 
 @formulas_b.route("/empresas/<empresa>/procesos/<cod_proceso>/parametros/<cod_parametro>", methods=["POST"])

@@ -35,3 +35,19 @@ def validar_fecha(clave, valor, es_requerido=True, formato="%Y-%m-%d"):
         return datetime.strptime(valor, formato)
     except Exception:
         raise validation_error(campo=clave, categoria=categoria_excepcion.TIPO.value)
+
+
+def validar_hora(clave, valor, es_requerido=True, formato="%H:%M", devuelve_string=True):
+    if es_requerido:
+        if valor is None:
+            raise validation_error(campo=clave, categoria=categoria_excepcion.FALTANTE.value)
+        if valor == '':
+            raise validation_error(campo=clave, categoria=categoria_excepcion.VACIO.value)
+    else:
+        if valor == '' or valor is None:
+            return None
+    try:
+        nuevo_valor = datetime.strptime(valor, formato)
+        return valor if devuelve_string else nuevo_valor
+    except Exception:
+        raise validation_error(campo=clave, categoria=categoria_excepcion.TIPO.value)

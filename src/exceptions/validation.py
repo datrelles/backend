@@ -5,7 +5,7 @@ class validation_error(Exception):
     def __init__(self, **kwargs):
         if 'campo' in kwargs and 'categoria' in kwargs:
             self.campo, self.categoria = kwargs['campo'], kwargs['categoria']
-            match (self.categoria):
+            match self.categoria:
                 case categoria_excepcion.LONGITUD.value:
                     self.longitud = kwargs['longitud']
                 case categoria_excepcion.DIGITOS.value:
@@ -16,7 +16,7 @@ class validation_error(Exception):
             self.faltantes = kwargs['faltantes']
         elif 'no_requeridos' in kwargs:
             self.no_requeridos = kwargs['no_requeridos']
-        self.mensaje = self.__generar_mensaje()
+        self.mensaje = kwargs['mensaje'] if 'mensaje' in kwargs else self.__generar_mensaje()
         super().__init__(self.mensaje)
 
     def __str__(self):
