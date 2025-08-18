@@ -10,10 +10,10 @@ from src.config.database import db
 from src.exceptions import validation_error
 from src.models.clientes import cliente_hor, Cliente
 from src.models.modulo_activaciones import st_activacion, st_cliente_direccion_guias, rh_empleados, st_promotor_tienda, \
-    ad_usuarios
+    ad_usuarios, st_encuesta
 from src.models.modulo_formulas import validar_empresa
 from src.models.proveedores import TgModeloItem, Proveedor
-from src.models.users import Empresa, Usuario
+from src.models.users import Empresa, Usuario, tg_rol_usuario
 from src.validations import validar_number, validar_varchar, validar_fecha
 from src.validations.alfanumericas import validar_hora
 
@@ -212,24 +212,18 @@ def get_tipos_activacion(empresa):
     return jsonify(result)
 
 
-@activaciones_b.route("/empresas/<empresa>/promotores/<cod_promotor>/activaciones", methods=["GET"])
+@activaciones_b.route("/empresas/<empresa>/activaciones", methods=["GET"])
 @jwt_required()
 @cross_origin()
-@handle_exceptions("consultar las activaciones del promotor")
-def get_activaciones_por_promotor(empresa, cod_promotor):
+@handle_exceptions("consultar las activaciones")
+def get_activaciones_por_promotor(empresa):
     empresa = validar_number('empresa', empresa, 2)
-    cod_promotor = validar_varchar('cod_promotor', cod_promotor, 20)
-    fecha_inicio = request.args.get("fecha_inicio")
-    fecha_inicio = validar_fecha('fecha_inicio', fecha_inicio) if fecha_inicio else None
-    fecha_fin = request.args.get("fecha_fin")
-    fecha_fin = validar_fecha('fecha_fin', fecha_fin) if fecha_fin else None
+    cod_promotor = validar_varchar('cod_promotor', request.args.get('cod_promotor'), 20, False)
     cod_cliente = validar_varchar('cod_cliente', request.args.get("cod_cliente"), 14, False)
+    fecha_inicio = validar_fecha('fecha_inicio', request.args.get("fecha_inicio"), False)
+    fecha_fin = validar_fecha('fecha_fin', request.args.get("fecha_fin"), False)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    if cod_cliente and not db.session.get(cliente_hor, (empresa, cod_cliente)):
-        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if (fecha_inicio and not fecha_fin) or (not fecha_inicio and fecha_fin):
@@ -237,15 +231,25 @@ def get_activaciones_por_promotor(empresa, cod_promotor):
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 400
     query = st_activacion.query()
-    activaciones = query.filter(st_activacion.empresa == empresa, st_activacion.cod_promotor == cod_promotor)
+    activaciones = query.filter(st_activacion.empresa == empresa)
+    if cod_promotor:
+        if not db.session.get(rh_empleados, cod_promotor):
+            mensaje = 'Promotor {} inexistente'.format(cod_promotor)
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        activaciones = activaciones.filter(st_activacion.cod_promotor == cod_promotor)
+    if cod_cliente:
+        if not db.session.get(cliente_hor, (empresa, cod_cliente)):
+            mensaje = 'Cliente {} inexistente'.format(cod_cliente)
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        activaciones = activaciones.filter(st_activacion.cod_cliente == cod_cliente)
     if fecha_inicio and fecha_fin:
         if fecha_inicio >= fecha_fin:
             mensaje = 'La fecha de inicio debe ser menor a la de fin'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        activaciones = activaciones.filter(st_activacion.fecha_act.between(fecha_inicio, fecha_fin))
-    if cod_cliente:
-        activaciones = activaciones.filter(st_activacion.cod_cliente == cod_cliente)
+        activaciones = activaciones.filter(st_activacion.audit_fecha_ing.between(fecha_inicio, fecha_fin))
     activaciones = activaciones.all()
     return jsonify(
         st_activacion.to_list(activaciones, ["promotor", "cliente", "cliente_hor", "tienda", "bodega", "proveedor"]))
@@ -276,6 +280,11 @@ def post_activacion(empresa, data):
         mensaje = 'Tienda {} inexistente'.format(data['cod_tienda'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_promotor_tienda,
+                          (data['empresa'], data['cod_promotor'], data['cod_cliente'], data['cod_tienda'])):
+        mensaje = 'Promotor {} no vinculado a la tienda {}'.format(data['cod_promotor'], data['cod_tienda'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 403
     if not db.session.get(Proveedor, (empresa, data['cod_proveedor'])):
         mensaje = 'Proveedor {} inexistente'.format(data['cod_proveedor'])
         logger.error(mensaje)
@@ -319,7 +328,7 @@ def put_activacion(cod_activacion, data):
                           (data['empresa'], data['cod_promotor'], data['cod_cliente'], data['cod_tienda'])):
         mensaje = 'Promotor {} no vinculado a la tienda {}'.format(data['cod_promotor'], data['cod_tienda'])
         logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
+        return jsonify({'mensaje': mensaje}), 403
     if not db.session.get(Proveedor, (data['empresa'], data['cod_proveedor'])):
         mensaje = 'Proveedor {} inexistente'.format(data['cod_proveedor'])
         logger.error(mensaje)
@@ -383,3 +392,127 @@ def put_direccion_guia(empresa, cod_cliente, cod_direccion, data):
     mensaje = 'Se actualizó la dirección guía {}'.format(direccion_guia.cod_direccion)
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 204
+
+
+@activaciones_b.route("/canal-promotor/<usuario_oracle>", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar el canal del promotor")
+def get_canal_promotor(usuario_oracle):
+    usuario_oracle = validar_varchar('usuario_oracle', usuario_oracle, 20)
+    usuario = db.session.get(Usuario, usuario_oracle)
+    if not usuario:
+        mensaje = 'Usuario {} inexistente'.format(usuario_oracle)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    rol = tg_rol_usuario.query().filter(tg_rol_usuario.empresa == usuario.empresa_actual,
+                                        tg_rol_usuario.usuario == usuario.usuario_oracle,
+                                        tg_rol_usuario.activo == 1).first()
+    if not rol:
+        mensaje = 'El usuario {} no tiene ningún rol activo asignado'.format(usuario_oracle)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    return jsonify({'canal': rol.cod_rol})
+
+
+@activaciones_b.route("/empresas/<empresa>/encuestas", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar las encuestas")
+def get_encuestas(empresa):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_promotor = validar_varchar('cod_promotor', request.args.get('cod_promotor'), 20, False)
+    cod_cliente = validar_varchar('cod_cliente', request.args.get("cod_cliente"), 14, False)
+    fecha_inicio = validar_fecha('fecha_inicio', request.args.get("fecha_inicio"), False)
+    fecha_fin = validar_fecha('fecha_fin', request.args.get("fecha_fin"), False)
+    if not db.session.get(Empresa, empresa):
+        mensaje = 'Empresa {} inexistente'.format(empresa)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if (fecha_inicio and not fecha_fin) or (not fecha_inicio and fecha_fin):
+        mensaje = 'Debes proveer las fechas de inicio y fin para filtrar por ese parámetro'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
+    query = st_encuesta.query()
+    encuestas = query.filter(st_encuesta.empresa == empresa)
+    if cod_promotor:
+        if not db.session.get(rh_empleados, cod_promotor):
+            mensaje = 'Promotor {} inexistente'.format(cod_promotor)
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        encuestas = encuestas.filter(st_encuesta.cod_promotor == cod_promotor)
+    if cod_cliente:
+        if not db.session.get(cliente_hor, (empresa, cod_cliente)):
+            mensaje = 'Cliente {} inexistente'.format(cod_cliente)
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        encuestas = encuestas.filter(st_encuesta.cod_cliente == cod_cliente)
+    if fecha_inicio and fecha_fin:
+        if fecha_inicio >= fecha_fin:
+            mensaje = 'La fecha de inicio debe ser menor a la de fin'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 400
+        encuestas = encuestas.filter(st_encuesta.audit_fecha_ing.between(fecha_inicio, fecha_fin))
+    encuestas = encuestas.all()
+    return jsonify(
+        st_encuesta.to_list(encuestas, ["promotor", "cliente", "cliente_hor", "tienda", "bodega"]))
+
+
+@activaciones_b.route("/empresas/<empresa>/encuestas", methods=["POST"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("registrar la encuesta")
+def post_encuesta(empresa, data):
+    empresa = validar_number('empresa', empresa, 2)
+    data = {'empresa': empresa, **data}
+    encuesta = st_encuesta(**data)
+    if not db.session.get(Empresa, empresa):
+        mensaje = 'Empresa {} inexistente'.format(empresa)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(rh_empleados, data['cod_promotor']):
+        mensaje = 'Promotor {} inexistente'.format(data['cod_promotor'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(Cliente, (empresa, data['cod_cliente'])):
+        mensaje = 'Cliente {} inexistente'.format(data['cod_cliente'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_cliente_direccion_guias, (empresa, data['cod_cliente'], data['cod_tienda'])):
+        mensaje = 'Tienda {} inexistente'.format(data['cod_tienda'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_promotor_tienda,
+                          (data['empresa'], data['cod_promotor'], data['cod_cliente'], data['cod_tienda'])):
+        mensaje = 'Promotor {} no vinculado a la tienda {}'.format(data['cod_promotor'], data['cod_tienda'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 403
+    ad_usuario = ad_usuarios.query().filter(ad_usuarios.identificacion == data['cod_promotor']).first()
+    if not ad_usuario:
+        mensaje = 'AD usuario del promotor {} inexistente'.format(data['cod_promotor'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    rol = tg_rol_usuario.query().filter(tg_rol_usuario.usuario == ad_usuario.codigo_usuario,
+                                        tg_rol_usuario.activo == 1).first()
+    if not rol:
+        mensaje = 'El usuario {} no tiene ningún rol activo asignado'.format(ad_usuario.codigo_usuario)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if rol.cod_rol != 'RETAIL' and data.get('prec_vis_corr'):
+        mensaje = "Solo los promotores de retail pueden responder a la pregunta de 'precios visibles y correctos'"
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 409
+    if not data.get('estado_publi') and data.get('estado_publi_obs'):
+        mensaje = "Si el estado de la publicidad de la marca no aplica, no debe existir observación al respecto"
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 409
+    if not data.get('confor_compe') and data.get('confor_compe_obs'):
+        mensaje = "Si la conformidad del incentivo actual de la competencia no aplica, no debe existir observación al respecto"
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 409
+    db.session.add(encuesta)
+    db.session.commit()
+    mensaje = 'Se registró la encuesta {}'.format(encuesta.cod_encuesta)
+    logger.info(mensaje)
+    return jsonify({'mensaje': mensaje}), 201

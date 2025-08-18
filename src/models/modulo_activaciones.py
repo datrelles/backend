@@ -21,6 +21,14 @@ def validar_estado(clave, valor, es_requerido=True):
     return validar_number(clave, valor, 1, es_requerido=es_requerido, valores_permitidos=tipo_estado.values())
 
 
+def validar_escala(clave, valor, es_requerido=True, inicio=1, fin=5):
+    return validar_number(clave, valor, 1, es_requerido=es_requerido, valores_permitidos=range(inicio, fin + 1))
+
+
+def validar_observacion(clave, valor, es_requerido=False, longitud=500):
+    return validar_varchar(clave, valor, longitud, es_requerido)
+
+
 class ad_usuarios(custom_base):
     __tablename__ = 'ad_usuarios'
     __table_args__ = {'schema': 'jaher'}
@@ -150,7 +158,7 @@ class st_activacion(custom_base):
             cod_cliente == foreign(Cliente.cod_cliente)
         ),
         foreign_keys=[empresa, cod_cliente],
-        overlaps="cliente_hor",
+        viewonly=True,
         uselist=False
     )
     cliente_hor = relationship(
@@ -160,25 +168,27 @@ class st_activacion(custom_base):
             cod_cliente == foreign(cliente_hor.cod_clienteh)
         ),
         foreign_keys=[empresa, cod_cliente],
-        overlaps="cliente",
+        viewonly=True,
         uselist=False
     )
     cod_tienda = Column(NUMBER(precision=3))
     tienda = relationship(
         st_cliente_direccion_guias,
         foreign_keys=[empresa, cod_cliente, cod_tienda],
-        overlaps="bodega",
+        viewonly=True,
     )
     bodega = relationship(
         st_bodega_consignacion,
         foreign_keys=[empresa, cod_cliente, cod_tienda],
-        overlaps="tienda",
+        viewonly=True,
         uselist=False
     )
     cod_proveedor = Column(VARCHAR(14))
     proveedor = relationship(
         Proveedor,
-        foreign_keys=[empresa, cod_proveedor]
+        foreign_keys=[empresa, cod_proveedor],
+        viewonly=True,
+        uselist=False
     )
     cod_modelo_act = Column(VARCHAR(8))
     cod_item_act = Column(VARCHAR(3))
@@ -244,3 +254,176 @@ class st_activacion(custom_base):
     @validates('num_exhi_motos')
     def validar_num_exhi_motos(self, key, value):
         return validar_number(key, value, 3, 0)
+
+
+class st_encuesta(custom_base):
+    __tablename__ = 'st_encuesta'
+    __table_args__ = (
+        ForeignKeyConstraint(['cod_promotor'],
+                             ['jaher.rh_empleados.identificacion']),
+        ForeignKeyConstraint(['empresa', 'cod_cliente', 'cod_tienda'],
+                             ['{}.st_cliente_direccion_guias.empresa'.format(schema_name),
+                              '{}.st_cliente_direccion_guias.cod_cliente'.format(schema_name),
+                              '{}.st_cliente_direccion_guias.cod_direccion'.format(schema_name)]),
+        ForeignKeyConstraint(['empresa', 'cod_cliente', 'cod_tienda'],
+                             ['{}.st_bodega_consignacion.empresa'.format(schema_name),
+                              '{}.st_bodega_consignacion.ruc_cliente'.format(schema_name),
+                              '{}.st_bodega_consignacion.cod_direccion'.format(schema_name)]),
+        {'schema': schema_name}
+    )
+
+    cod_encuesta = Column(NUMBER(precision=22), primary_key=True, server_default=FetchedValue())
+    empresa = Column(NUMBER(precision=2))
+    cod_promotor = Column(VARCHAR(20))
+    promotor = relationship(
+        "rh_empleados",
+        foreign_keys=[cod_promotor]
+    )
+    cod_cliente = Column(VARCHAR(14))
+    cliente = relationship(
+        Cliente,
+        primaryjoin=and_(
+            empresa == foreign(Cliente.empresa),
+            cod_cliente == foreign(Cliente.cod_cliente)
+        ),
+        foreign_keys=[empresa, cod_cliente],
+        viewonly=True,
+        uselist=False
+    )
+    cliente_hor = relationship(
+        cliente_hor,
+        primaryjoin=and_(
+            empresa == foreign(cliente_hor.empresah),
+            cod_cliente == foreign(cliente_hor.cod_clienteh)
+        ),
+        foreign_keys=[empresa, cod_cliente],
+        viewonly=True,
+        uselist=False
+    )
+    cod_tienda = Column(NUMBER(precision=3))
+    tienda = relationship(
+        st_cliente_direccion_guias,
+        foreign_keys=[empresa, cod_cliente, cod_tienda],
+        viewonly=True,
+        uselist=False
+    )
+    bodega = relationship(
+        st_bodega_consignacion,
+        foreign_keys=[empresa, cod_cliente, cod_tienda],
+        viewonly=True,
+        uselist=False
+    )
+    limp_orden = Column(NUMBER(1), nullable=False)
+    pop_actual = Column(NUMBER(1), nullable=False)
+    pop_actual_obs = Column(VARCHAR(500))
+    pop_sufic = Column(NUMBER(3), nullable=False)
+    prec_vis_corr = Column(NUMBER(1))
+    motos_desper = Column(NUMBER(1), nullable=False)
+    motos_desper_obs = Column(VARCHAR(500))
+    estado_publi = Column(NUMBER(1))
+    estado_publi_obs = Column(VARCHAR(500))
+    conoc_portaf = Column(NUMBER(1), nullable=False)
+    conoc_prod = Column(NUMBER(1), nullable=False)
+    conoc_garan = Column(NUMBER(1), nullable=False)
+    conoc_promo = Column(NUMBER(1))
+    confor_shine = Column(NUMBER(1))
+    confor_compe = Column(NUMBER(1))
+    confor_compe_obs = Column(VARCHAR(500))
+    conoc_shibot = Column(NUMBER(1), nullable=False)
+    ubi_talleres = Column(NUMBER(1), nullable=False)
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+    audit_usuario_mod = Column(VARCHAR(30))
+    audit_fecha_mod = Column(DateTime)
+
+    @validates('cod_encuesta')
+    def validar_cod_encuesta(self, key, value):
+        return validar_number(key, value, 22)
+
+    @validates('empresa')
+    def validar_empresa(self, key, value):
+        return validar_empresa(key, value)
+
+    @validates('cod_promotor')
+    def validar_cod_promotor(self, key, value):
+        return validar_varchar(key, value, 20)
+
+    @validates('cod_cliente')
+    def validar_cod_cliente(self, key, value):
+        return validar_varchar(key, value, 14)
+
+    @validates('cod_tienda')
+    def validar_cod_tienda(self, key, value):
+        return validar_number(key, value, 3)
+
+    @validates('limp_orden')
+    def validar_limp_orden(self, key, value):
+        return validar_escala(key, value)
+
+    @validates('pop_actual')
+    def validar_pop_actual(self, key, value):
+        return validar_estado(key, value)
+
+    @validates('pop_actual_obs')
+    def validar_pop_actual_obs(self, key, value):
+        return validar_observacion(key, value)
+
+    @validates('pop_sufic')
+    def validar_pop_sufic(self, key, value):
+        return validar_number(key, value, 3, valores_permitidos=range(101))
+
+    @validates('prec_vis_corr')
+    def validar_prec_vis_corr(self, key, value):
+        return validar_escala(key, value, es_requerido=False)
+
+    @validates('motos_desper')
+    def validar_motos_desper(self, key, value):
+        return validar_estado(key, value)
+
+    @validates('motos_desper_obs')
+    def validar_motos_desper_obs(self, key, value):
+        return validar_observacion(key, value)
+
+    @validates('estado_publi')
+    def validar_estado_publi(self, key, value):
+        return validar_estado(key, value, es_requerido=False)
+
+    @validates('estado_publi_obs')
+    def validar_estado_publi_obs(self, key, value):
+        return validar_observacion(key, value)
+
+    @validates('conoc_portaf')
+    def validar_conoc_portaf(self, key, value):
+        return validar_escala(key, value)
+
+    @validates('conoc_prod')
+    def validar_conoc_prod(self, key, value):
+        return validar_escala(key, value)
+
+    @validates('conoc_garan')
+    def validar_conoc_garan(self, key, value):
+        return validar_escala(key, value)
+
+    @validates('conoc_promo')
+    def validar_conoc_promo(self, key, value):
+        return validar_estado(key, value, es_requerido=False)
+
+    @validates('confor_shine')
+    def validar_confor_shine(self, key, value):
+        return validar_escala(key, value, es_requerido=False)
+
+    @validates('confor_compe')
+    def validar_confor_compe(self, key, value):
+        return validar_escala(key, value, es_requerido=False)
+
+    @validates('confor_compe_obs')
+    def validar_confor_compe_obs(self, key, value):
+        return validar_observacion(key, value)
+
+    @validates('conoc_shibot')
+    def validar_conoc_shibot(self, key, value):
+        return validar_escala(key, value)
+
+    @validates('ubi_talleres')
+    def validar_ubi_talleres(self, key, value):
+        return validar_escala(key, value)
