@@ -339,6 +339,8 @@ def put_activacion(cod_activacion, data):
     activacion.hora_fin = data['hora_fin']
     activacion.total_minutos = calcular_diferencia_horas_en_minutos(activacion.hora_inicio, activacion.hora_fin)
     activacion.num_exhi_motos = data['num_exhi_motos']
+    activacion.audit_usuario_mod = text('user')
+    activacion.audit_fecha_mod = text('sysdate')
     db.session.commit()
     mensaje = 'Se actualizó la activación {}'.format(activacion.cod_activacion)
     logger.info(mensaje)
