@@ -499,7 +499,7 @@ def post_encuesta(empresa, data):
         mensaje = 'El usuario {} no tiene ningún rol activo asignado'.format(ad_usuario.codigo_usuario)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    if rol.cod_rol != 'RETAIL' and data.get('prec_vis_corr'):
+    if rol.cod_rol != 'PROM_RET' and data.get('prec_vis_corr'):
         mensaje = "Solo los promotores de retail pueden responder a la pregunta de 'precios visibles y correctos'"
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
