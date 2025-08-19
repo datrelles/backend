@@ -503,11 +503,11 @@ def post_encuesta(empresa, data):
         mensaje = "Solo los promotores de retail pueden responder a la pregunta de 'precios visibles y correctos'"
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
-    if not data.get('estado_publi') and data.get('estado_publi_obs'):
-        mensaje = "Si el estado de la publicidad de la marca no aplica, no debe existir observación al respecto"
+    if data.get('estado_publi') != 0 and data.get('estado_publi_obs'):
+        mensaje = "Solo si la respuesta del estado de publicidad de la marca es no, debe existir observación al respecto"
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
-    if not data.get('confor_compe') and data.get('confor_compe_obs'):
+    if data.get('confor_compe') is None and data.get('confor_compe_obs'):
         mensaje = "Si la conformidad del incentivo actual de la competencia no aplica, no debe existir observación al respecto"
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
