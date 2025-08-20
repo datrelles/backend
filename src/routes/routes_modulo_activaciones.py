@@ -8,10 +8,11 @@ from sqlalchemy import text
 from src.decorators import validate_json, handle_exceptions
 from src.config.database import db
 from src.exceptions import validation_error
+from src.models.catalogos_bench import Marca, Segmento
 from src.models.clientes import cliente_hor, Cliente
 from src.models.modulo_activaciones import st_activacion, st_cliente_direccion_guias, rh_empleados, st_promotor_tienda, \
-    ad_usuarios, st_encuesta
-from src.models.modulo_formulas import validar_empresa
+    ad_usuarios, st_encuesta, st_form_promotoria, st_mod_seg_frm_prom
+from src.models.modulo_formulas import validar_empresa, st_modelo_comercial
 from src.models.proveedores import TgModeloItem, Proveedor
 from src.models.users import Empresa, Usuario, tg_rol_usuario
 from src.validations import validar_number, validar_varchar, validar_fecha
@@ -21,6 +22,7 @@ activaciones_b = Blueprint('routes_activaciones', __name__)
 logger = logging.getLogger(__name__)
 
 COD_MODELO_CATAL_ACTIV = "ACT"
+CODIGOS_MARCAS_PROPIAS = [94, 99]  # 3, 18, 22
 
 
 def calcular_diferencia_horas_en_minutos(inicio, fin):
@@ -514,5 +516,114 @@ def post_encuesta(empresa, data):
     db.session.add(encuesta)
     db.session.commit()
     mensaje = 'Se registró la encuesta {}'.format(encuesta.cod_encuesta)
+    logger.info(mensaje)
+    return jsonify({'mensaje': mensaje}), 201
+
+
+@activaciones_b.route("/catalogo-segmentos", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar el catálogo de segmentos")
+def get_catalogo_segmentos():
+    sql = text("""
+                SELECT
+                    DISTINCT(s.nombre_segmento)
+                FROM
+                    st_segmento s
+                ORDER BY
+                    s.nombre_segmento
+                """)
+    rows = db.session.execute(sql).fetchall()
+    result = [{"nombre_segmento": row[0]} for row in rows]
+    return jsonify(result)
+
+
+@activaciones_b.route("/segmentos", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar los segmentos")
+def get_segmentos():
+    sql = text("""
+                SELECT
+                    s.codigo_segmento,
+                    s.codigo_linea,
+                    s.codigo_modelo_comercial,
+                    s.nombre_segmento,
+                    m.codigo_marca,
+                    m.nombre_modelo
+                FROM st_segmento s
+                INNER JOIN
+                    st_modelo_comercial m
+                ON
+                    s.codigo_modelo_comercial = m.codigo_modelo_comercial AND
+                    s.codigo_marca = m.codigo_marca
+                WHERE
+                    s.estado_segmento = 1 AND
+                    m.codigo_marca IN (""" + ','.join(map(str, CODIGOS_MARCAS_PROPIAS)) + """)
+                ORDER BY s.nombre_segmento, m.nombre_modelo
+                """)
+    rows = db.session.execute(sql).fetchall()
+    result = [
+        {"codigo_segmento": row[0], "codigo_linea": row[1], "codigo_modelo_comercial": row[2],
+         "nombre_segmento": row[3], "codigo_marca": row[4],
+         "nombre_modelo": row[5]} for
+        row in rows]
+    return jsonify(result)
+
+
+@activaciones_b.route("/marcas", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar las marcas")
+def get_marcas():
+    marcas = db.session.query(Marca).first(Marca.estado_marca == 1).order_by(Marca.nombre_marca).all()
+    result = [{"codigo_marca": marca.codigo_marca, "nombre_marca": marca.nombre_marca} for marca in marcas]
+    return jsonify(result)
+
+
+@activaciones_b.route("/empresas/<empresa>/formularios-promotoria", methods=["POST"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("registrar el formulario de promotoría")
+def post_form_promotoria(empresa, data):
+    empresa = validar_number('empresa', empresa, 2)
+    modelos_segmento = data.pop("modelos_segmento", None)
+    marcas_segmento = data.pop("marcas_segmento", None)
+    data = {'empresa': empresa, **data}
+    st_form_promotoria(**data)
+    if not db.session.get(Empresa, empresa):
+        mensaje = 'Empresa {} inexistente'.format(empresa)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(rh_empleados, data['cod_promotor']):
+        mensaje = 'Promotor {} inexistente'.format(data['cod_promotor'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(Cliente, (empresa, data['cod_cliente'])):
+        mensaje = 'Cliente {} inexistente'.format(data['cod_cliente'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_cliente_direccion_guias, (empresa, data['cod_cliente'], data['cod_tienda'])):
+        mensaje = 'Tienda {} inexistente'.format(data['cod_tienda'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_promotor_tienda,
+                          (data['empresa'], data['cod_promotor'], data['cod_cliente'], data['cod_tienda'])):
+        mensaje = 'Promotor {} no vinculado a la tienda {}'.format(data['cod_promotor'], data['cod_tienda'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 403
+    for modelo in modelos_segmento:
+        if not db.session.get(Segmento, (
+        modelo['cod_segmento'], modelo['cod_linea'], modelo['cod_modelo_comercial'], modelo['cod_marca'])):
+            mensaje = 'Segmento {} inexistente'.format(modelo['cod_segmento'])
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+    formulario = st_form_promotoria(**data)
+    db.session.add(formulario)
+    formulario.modelos_segmento = [st_mod_seg_frm_prom(cod_form=formulario.cod_form, **item) for item in
+                                   modelos_segmento]
+    db.session.commit()
+    mensaje = 'Se registró el formulario {}'.format(formulario.cod_form)
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
