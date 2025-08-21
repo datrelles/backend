@@ -25,12 +25,15 @@ class custom_base(base):
             col.name for col in self.__table__.columns if
             not col.nullable and col.default is None and col.server_default is None
         }
-        faltantes = requeridos - kwargs.keys()
+        keys = kwargs.keys()
+        faltantes = requeridos - keys
         if faltantes:
             raise validation_error(faltantes=faltantes)
-        no_requeridos = {
-            key for key in kwargs.keys() if key not in self.__table__.columns
-        }
+        no_requeridos = set()
+        for key in keys - requeridos:
+            columna = self.__table__.columns.get(key)
+            if columna is None or (columna is not None and columna.server_default is not None):
+                no_requeridos.add(key)
         if no_requeridos:
             raise validation_error(no_requeridos=no_requeridos)
         super().__init__(**kwargs)

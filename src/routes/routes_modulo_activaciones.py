@@ -1,3 +1,5 @@
+from functools import reduce
+
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
@@ -11,7 +13,7 @@ from src.exceptions import validation_error
 from src.models.catalogos_bench import Marca, Segmento
 from src.models.clientes import cliente_hor, Cliente
 from src.models.modulo_activaciones import st_activacion, st_cliente_direccion_guias, rh_empleados, st_promotor_tienda, \
-    ad_usuarios, st_encuesta, st_form_promotoria, st_mod_seg_frm_prom
+    ad_usuarios, st_encuesta, st_form_promotoria, st_mod_seg_frm_prom, st_mar_seg_frm_prom
 from src.models.modulo_formulas import validar_empresa, st_modelo_comercial
 from src.models.proveedores import TgModeloItem, Proveedor
 from src.models.users import Empresa, Usuario, tg_rol_usuario
@@ -576,7 +578,7 @@ def get_segmentos():
 @cross_origin()
 @handle_exceptions("consultar las marcas")
 def get_marcas():
-    marcas = db.session.query(Marca).first(Marca.estado_marca == 1).order_by(Marca.nombre_marca).all()
+    marcas = db.session.query(Marca).filter(Marca.estado_marca == 1).order_by(Marca.nombre_marca).all()
     result = [{"codigo_marca": marca.codigo_marca, "nombre_marca": marca.nombre_marca} for marca in marcas]
     return jsonify(result)
 
@@ -588,10 +590,16 @@ def get_marcas():
 @handle_exceptions("registrar el formulario de promotoría")
 def post_form_promotoria(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
-    modelos_segmento = data.pop("modelos_segmento", None)
-    marcas_segmento = data.pop("marcas_segmento", None)
+    modelos_segmento = data.pop("modelos_segmento", [])
+    marcas_segmento = data.pop("marcas_segmento", [])
     data = {'empresa': empresa, **data}
-    st_form_promotoria(**data)
+    if data.get('total_motos_shi') is not None:
+        raise validation_error(no_requeridos=['total_motos_shi'])
+    if data.get('total_motos_piso') is not None:
+        raise validation_error(no_requeridos=['total_motos_piso'])
+    data['total_motos_shi'] = 0
+    data['total_motos_piso'] = 0
+    formulario = st_form_promotoria(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -615,14 +623,25 @@ def post_form_promotoria(empresa, data):
         return jsonify({'mensaje': mensaje}), 403
     for modelo in modelos_segmento:
         if not db.session.get(Segmento, (
-        modelo['cod_segmento'], modelo['cod_linea'], modelo['cod_modelo_comercial'], modelo['cod_marca'])):
+                modelo['cod_segmento'], modelo['cod_linea'], modelo['cod_modelo_comercial'], modelo['cod_marca'])):
             mensaje = 'Segmento {} inexistente'.format(modelo['cod_segmento'])
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-    formulario = st_form_promotoria(**data)
+    for marca in marcas_segmento:
+        if not db.session.get(Marca, marca['cod_marca']):
+            mensaje = 'Marca {} inexistente'.format(marca['cod_marca'])
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+    formulario.total_motos_shi = reduce(lambda total, item: total + item['cantidad'], modelos_segmento, 0)
+    formulario.total_motos_piso = formulario.total_motos_shi + reduce(lambda total, item: total + item['cantidad'],
+                                                                      marcas_segmento, 0)
     db.session.add(formulario)
-    formulario.modelos_segmento = [st_mod_seg_frm_prom(cod_form=formulario.cod_form, **item) for item in
-                                   modelos_segmento]
+    if modelos_segmento:
+        formulario.modelos_segmento = [st_mod_seg_frm_prom(**{**item, "cod_form": formulario.cod_form}) for item in
+                                       modelos_segmento]
+    if marcas_segmento:
+        formulario.marcas_segmento = [st_mar_seg_frm_prom(**{**item, "cod_form": formulario.cod_form}) for item in
+                                      marcas_segmento]
     db.session.commit()
     mensaje = 'Se registró el formulario {}'.format(formulario.cod_form)
     logger.info(mensaje)

@@ -490,6 +490,10 @@ class st_form_promotoria(custom_base):
         "st_mod_seg_frm_prom",
         back_populates="form_promotoria"
     )
+    marcas_segmento = relationship(
+        "st_mar_seg_frm_prom",
+        back_populates="form_promotoria"
+    )
     correo_tienda = Column(VARCHAR(50), nullable=False)
     prom_venta_tienda = Column(NUMBER(precision=3, scale=2))
     nom_jefe_tienda = Column(VARCHAR(250), nullable=False)
@@ -566,6 +570,25 @@ class st_mod_seg_frm_prom(custom_base):
     cod_marca = Column(NUMBER(14), primary_key=True)
     cantidad = Column(NUMBER(3, 0), nullable=False)
     form_promotoria = relationship("st_form_promotoria", back_populates="modelos_segmento")
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+    audit_usuario_mod = Column(VARCHAR(30))
+    audit_fecha_mod = Column(DateTime)
+
+
+class st_mar_seg_frm_prom(custom_base):
+    __tablename__ = 'st_mar_seg_frm_prom'
+    __table_args__ = (
+        ForeignKeyConstraint(['cod_form'],
+                             ['{}.st_form_promotoria.cod_form'.format(schema_name)]),
+        {'schema': schema_name}
+    )
+
+    cod_form = Column(NUMBER(precision=22), primary_key=True)
+    cod_marca = Column(NUMBER(14), primary_key=True)
+    nombre_segmento = Column(VARCHAR(70), primary_key=True)
+    cantidad = Column(NUMBER(3, 0), nullable=False)
+    form_promotoria = relationship("st_form_promotoria", back_populates="marcas_segmento")
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
