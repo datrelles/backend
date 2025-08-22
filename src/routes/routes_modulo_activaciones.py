@@ -13,7 +13,7 @@ from src.exceptions import validation_error
 from src.models.catalogos_bench import Marca, Segmento
 from src.models.clientes import cliente_hor, Cliente
 from src.models.modulo_activaciones import st_activacion, st_cliente_direccion_guias, rh_empleados, st_promotor_tienda, \
-    ad_usuarios, st_encuesta, st_form_promotoria, st_mod_seg_frm_prom, st_mar_seg_frm_prom
+    ad_usuarios, st_encuesta, st_form_promotoria, st_mod_seg_frm_prom, st_mar_seg_frm_prom, st_info_tienda
 from src.models.modulo_formulas import validar_empresa, st_modelo_comercial
 from src.models.proveedores import TgModeloItem, Proveedor
 from src.models.users import Empresa, Usuario, tg_rol_usuario
@@ -357,7 +357,7 @@ def put_activacion(cod_activacion, data):
     db.session.commit()
     mensaje = 'Se actualizó la activación {}'.format(activacion.cod_activacion)
     logger.info(mensaje)
-    return jsonify({'mensaje': mensaje}), 204
+    return '', 204
 
 
 @activaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/direcciones-guia/<cod_direccion>", methods=["PUT"])
@@ -395,7 +395,7 @@ def put_direccion_guia(empresa, cod_cliente, cod_direccion, data):
     db.session.commit()
     mensaje = 'Se actualizó la dirección guía {}'.format(direccion_guia.cod_direccion)
     logger.info(mensaje)
-    return jsonify({'mensaje': mensaje}), 204
+    return '', 204
 
 
 @activaciones_b.route("/canal-promotor/<usuario_oracle>", methods=["GET"])
@@ -583,6 +583,128 @@ def get_marcas():
     return jsonify(result)
 
 
+@activaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/tiendas/<cod_tienda>", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar información de la tienda")
+def get_info_tienda(empresa, cod_cliente, cod_tienda):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    cod_tienda = validar_number('cod_tienda', cod_tienda, 3)
+    if not db.session.get(Empresa, empresa):
+        mensaje = 'Empresa {} inexistente'.format(empresa)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(Cliente, (empresa, cod_cliente)):
+        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    info_tienda = db.session.get(st_info_tienda, (empresa, cod_cliente, cod_tienda))
+    if not info_tienda:
+        mensaje = 'No existe información de la tienda {}'.format(cod_tienda)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    return jsonify(info_tienda.to_dict(['cliente', 'cliente_hor', 'tienda', 'bodega']))
+
+
+@activaciones_b.route("/empresas/<empresa>/tiendas", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar información de las tiendas")
+def get_info_tiendas(empresa):
+    empresa = validar_number('empresa', empresa, 2)
+    if not db.session.get(Empresa, empresa):
+        mensaje = 'Empresa {} inexistente'.format(empresa)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    query = st_info_tienda.query()
+    info_tiendas = query.filter(st_info_tienda.empresa == empresa)
+    return jsonify(st_info_tienda.to_list(info_tiendas, ['cliente', 'cliente_hor', 'tienda', 'bodega']))
+
+
+@activaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/tiendas/<cod_tienda>", methods=["POST"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("registrar información de la tienda")
+def post_info_tienda(empresa, cod_cliente, cod_tienda, data):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    cod_tienda = validar_number('cod_tienda', cod_tienda, 3)
+    data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_tienda': cod_tienda, **data}
+    info_tienda = st_info_tienda(**data)
+    if not db.session.get(Empresa, empresa):
+        mensaje = 'Empresa {} inexistente'.format(empresa)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(Cliente, (empresa, cod_cliente)):
+        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if db.session.get(st_info_tienda, (empresa, cod_cliente, cod_tienda)):
+        mensaje = 'La información de la tienda {} ya existe'.format(cod_tienda)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 409
+    db.session.add(info_tienda)
+    db.session.commit()
+    mensaje = 'Se registró la información de la tienda {}'.format(info_tienda.cod_tienda)
+    logger.info(mensaje)
+    return jsonify({'mensaje': mensaje}), 201
+
+
+@activaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/tiendas/<cod_tienda>", methods=["PUT"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("actualizar la información de la tienda")
+def put_info_tienda(empresa, cod_cliente, cod_tienda, data):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    cod_tienda = validar_number('cod_tienda', cod_tienda, 3)
+    data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_tienda': cod_tienda, **data}
+    st_info_tienda(**data)
+    if not db.session.get(Empresa, empresa):
+        mensaje = 'Empresa {} inexistente'.format(empresa)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(Cliente, (empresa, cod_cliente)):
+        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    info_tienda = db.session.get(st_info_tienda, (empresa, cod_cliente, cod_tienda))
+    if not info_tienda:
+        mensaje = 'Información de la tienda {} inexistente'.format(cod_cliente)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    info_tienda.correo_tienda = data['correo_tienda']
+    info_tienda.prom_venta_tienda = data['prom_venta_tienda']
+    info_tienda.nom_jefe_tienda = data['nom_jefe_tienda']
+    info_tienda.cel_jefe_tienda = data['cel_jefe_tienda']
+    info_tienda.audit_usuario_mod = text('user')
+    info_tienda.audit_fecha_mod = text('sysdate')
+    db.session.commit()
+    mensaje = 'Se actualizó la información de la tienda {}'.format(info_tienda.cod_tienda)
+    logger.info(mensaje)
+    return '', 204
+
+
+@activaciones_b.route("/empresas/<empresa>/formularios-promotoria", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar los formularios de promotoría")
+def get_forms_promotoria(empresa):
+    empresa = validar_number('empresa', empresa, 2)
+    if not db.session.get(Empresa, empresa):
+        mensaje = 'Empresa {} inexistente'.format(empresa)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    query = st_form_promotoria.query()
+    formularios = query.filter(st_form_promotoria.empresa == empresa)
+    return jsonify(st_form_promotoria.to_list(formularios,
+                                              ['cliente', 'cliente_hor', 'tienda', 'bodega', 'modelos_segmento',
+                                               'marcas_segmento']))
+
+
 @activaciones_b.route("/empresas/<empresa>/formularios-promotoria", methods=["POST"])
 @jwt_required()
 @cross_origin()
@@ -636,6 +758,8 @@ def post_form_promotoria(empresa, data):
     formulario.total_motos_piso = formulario.total_motos_shi + reduce(lambda total, item: total + item['cantidad'],
                                                                       marcas_segmento, 0)
     db.session.add(formulario)
+    db.session.flush()
+    db.session.refresh(formulario)
     if modelos_segmento:
         formulario.modelos_segmento = [st_mod_seg_frm_prom(**{**item, "cod_form": formulario.cod_form}) for item in
                                        modelos_segmento]

@@ -7,7 +7,7 @@ from src.models.clientes import Cliente, cliente_hor
 from src.models.custom_base import custom_base
 from src.models.proveedores import Proveedor
 from src.validations import validar_number, validar_varchar, validar_fecha
-from src.validations.alfanumericas import validar_hora
+from src.validations.alfanumericas import validar_hora, validar_celular, validar_correo
 
 base = declarative_base(metadata=db.metadata)
 schema_name = 'stock'
@@ -429,6 +429,93 @@ class st_encuesta(custom_base):
         return validar_escala(key, value)
 
 
+class st_info_tienda(custom_base):
+    __tablename__ = 'st_info_tienda'
+    __table_args__ = (
+        ForeignKeyConstraint(['empresa', 'cod_cliente', 'cod_tienda'],
+                             ['{}.st_cliente_direccion_guias.empresa'.format(schema_name),
+                              '{}.st_cliente_direccion_guias.cod_cliente'.format(schema_name),
+                              '{}.st_cliente_direccion_guias.cod_direccion'.format(schema_name)]),
+        ForeignKeyConstraint(['empresa', 'cod_cliente', 'cod_tienda'],
+                             ['{}.st_bodega_consignacion.empresa'.format(schema_name),
+                              '{}.st_bodega_consignacion.ruc_cliente'.format(schema_name),
+                              '{}.st_bodega_consignacion.cod_direccion'.format(schema_name)]),
+        {'schema': schema_name}
+    )
+
+    empresa = Column(NUMBER(precision=2), primary_key=True)
+    cod_cliente = Column(VARCHAR(14), primary_key=True)
+    cliente = relationship(
+        Cliente,
+        primaryjoin=and_(
+            empresa == foreign(Cliente.empresa),
+            cod_cliente == foreign(Cliente.cod_cliente)
+        ),
+        foreign_keys=[empresa, cod_cliente],
+        viewonly=True,
+        uselist=False
+    )
+    cliente_hor = relationship(
+        cliente_hor,
+        primaryjoin=and_(
+            empresa == foreign(cliente_hor.empresah),
+            cod_cliente == foreign(cliente_hor.cod_clienteh)
+        ),
+        foreign_keys=[empresa, cod_cliente],
+        viewonly=True,
+        uselist=False
+    )
+    cod_tienda = Column(NUMBER(precision=3), primary_key=True)
+    tienda = relationship(
+        st_cliente_direccion_guias,
+        foreign_keys=[empresa, cod_cliente, cod_tienda],
+        viewonly=True,
+        uselist=False
+    )
+    bodega = relationship(
+        st_bodega_consignacion,
+        foreign_keys=[empresa, cod_cliente, cod_tienda],
+        viewonly=True,
+        uselist=False
+    )
+    correo_tienda = Column(VARCHAR(50), nullable=False)
+    prom_venta_tienda = Column(NUMBER(precision=5, scale=2), nullable=False)
+    nom_jefe_tienda = Column(VARCHAR(250), nullable=False)
+    cel_jefe_tienda = Column(VARCHAR(10), nullable=False)
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+    audit_usuario_mod = Column(VARCHAR(30))
+    audit_fecha_mod = Column(DateTime)
+
+    @validates('empresa')
+    def validar_empresa(self, key, value):
+        return validar_empresa(key, value)
+
+    @validates('cod_cliente')
+    def validar_cod_cliente(self, key, value):
+        return validar_varchar(key, value, 14)
+
+    @validates('cod_tienda')
+    def validar_cod_tienda(self, key, value):
+        return validar_number(key, value, 3)
+
+    @validates('correo_tienda')
+    def validar_correo_tienda(self, key, value):
+        return validar_correo(key, value)
+
+    @validates('prom_venta_tienda')
+    def validar_prom_venta_tienda(self, key, value):
+        return validar_number(key, value, 3, 2)
+
+    @validates('nom_jefe_tienda')
+    def validar_nom_jefe_tienda(self, key, value):
+        return validar_varchar(key, value, 250)
+
+    @validates('cel_jefe_tienda')
+    def validar_cel_jefe_tienda(self, key, value):
+        return validar_celular(key, value)
+
+
 class st_form_promotoria(custom_base):
     __tablename__ = 'st_form_promotoria'
     __table_args__ = (
@@ -494,10 +581,6 @@ class st_form_promotoria(custom_base):
         "st_mar_seg_frm_prom",
         back_populates="form_promotoria"
     )
-    correo_tienda = Column(VARCHAR(50), nullable=False)
-    prom_venta_tienda = Column(NUMBER(precision=3, scale=2))
-    nom_jefe_tienda = Column(VARCHAR(250), nullable=False)
-    cel_jefe_tienda = Column(VARCHAR(10), nullable=False)
     total_vendedores = Column(NUMBER(3), nullable=False)
     total_motos_piso = Column(NUMBER(3), nullable=False)
     total_motos_shi = Column(NUMBER(3), nullable=False)
@@ -505,10 +588,6 @@ class st_form_promotoria(custom_base):
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
     audit_fecha_mod = Column(DateTime)
-
-    @validates('cod_encuesta')
-    def validar_cod_encuesta(self, key, value):
-        return validar_number(key, value, 22)
 
     @validates('empresa')
     def validar_empresa(self, key, value):
@@ -525,22 +604,6 @@ class st_form_promotoria(custom_base):
     @validates('cod_tienda')
     def validar_cod_tienda(self, key, value):
         return validar_number(key, value, 3)
-
-    @validates('correo_tienda')
-    def validar_correo_tienda(self, key, value):
-        return validar_varchar(key, value, 50)
-
-    @validates('prom_venta_tienda')
-    def validar_prom_venta_tienda(self, key, value):
-        return validar_number(key, value, 3, 2)
-
-    @validates('nom_jefe_tienda')
-    def validar_nom_jefe_tienda(self, key, value):
-        return validar_varchar(key, value, 250)
-
-    @validates('cel_jefe_tienda')
-    def validar_cel_jefe_tienda(self, key, value):
-        return validar_varchar(key, value, 10)
 
     @validates('total_vendedores')
     def validar_total_vendedores(self, key, value):
@@ -564,16 +627,40 @@ class st_mod_seg_frm_prom(custom_base):
     )
 
     cod_form = Column(NUMBER(precision=22), primary_key=True)
+    form_promotoria = relationship("st_form_promotoria", back_populates="modelos_segmento")
     cod_segmento = Column(NUMBER(14), primary_key=True)
     cod_linea = Column(NUMBER(14), primary_key=True)
     cod_modelo_comercial = Column(NUMBER(14), primary_key=True)
     cod_marca = Column(NUMBER(14), primary_key=True)
     cantidad = Column(NUMBER(3, 0), nullable=False)
-    form_promotoria = relationship("st_form_promotoria", back_populates="modelos_segmento")
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
     audit_fecha_mod = Column(DateTime)
+
+    @validates('cod_form')
+    def validar_cod_form(self, key, value):
+        return validar_number(key, value, 22)
+
+    @validates('cod_segmento')
+    def validar_cod_segmento(self, key, value):
+        return validar_number(key, value, 14)
+
+    @validates('cod_linea')
+    def validar_cod_linea(self, key, value):
+        return validar_number(key, value, 14)
+
+    @validates('cod_modelo_comercial')
+    def validar_cod_modelo_comercial(self, key, value):
+        return validar_number(key, value, 14)
+
+    @validates('cod_marca')
+    def validar_cod_marca(self, key, value):
+        return validar_number(key, value, 14)
+
+    @validates('cantidad')
+    def validar_cantidad(self, key, value):
+        return validar_number(key, value, 3)
 
 
 class st_mar_seg_frm_prom(custom_base):
@@ -585,11 +672,27 @@ class st_mar_seg_frm_prom(custom_base):
     )
 
     cod_form = Column(NUMBER(precision=22), primary_key=True)
+    form_promotoria = relationship("st_form_promotoria", back_populates="marcas_segmento")
     cod_marca = Column(NUMBER(14), primary_key=True)
     nombre_segmento = Column(VARCHAR(70), primary_key=True)
     cantidad = Column(NUMBER(3, 0), nullable=False)
-    form_promotoria = relationship("st_form_promotoria", back_populates="marcas_segmento")
     audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
     audit_fecha_mod = Column(DateTime)
+
+    @validates('cod_form')
+    def validar_cod_form(self, key, value):
+        return validar_number(key, value, 22)
+
+    @validates('cod_marca')
+    def validar_cod_marca(self, key, value):
+        return validar_number(key, value, 14)
+
+    @validates('nombre_segmento')
+    def validar_nombre_segmento(self, key, value):
+        return validar_varchar(key, value, 70)
+
+    @validates('cantidad')
+    def validar_cantidad(self, key, value):
+        return validar_number(key, value, 3)
