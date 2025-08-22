@@ -529,6 +529,10 @@ class st_form_promotoria(custom_base):
                              ['{}.st_bodega_consignacion.empresa'.format(schema_name),
                               '{}.st_bodega_consignacion.ruc_cliente'.format(schema_name),
                               '{}.st_bodega_consignacion.cod_direccion'.format(schema_name)]),
+        ForeignKeyConstraint(['empresa', 'cod_cliente', 'cod_tienda'],
+                             ['{}.st_info_tienda.empresa'.format(schema_name),
+                              '{}.st_info_tienda.cod_cliente'.format(schema_name),
+                              '{}.st_info_tienda.cod_tienda'.format(schema_name)]),
         {'schema': schema_name}
     )
 
@@ -563,6 +567,17 @@ class st_form_promotoria(custom_base):
     cod_tienda = Column(NUMBER(precision=3))
     tienda = relationship(
         st_cliente_direccion_guias,
+        foreign_keys=[empresa, cod_cliente, cod_tienda],
+        viewonly=True,
+        uselist=False
+    )
+    info_tienda = relationship(
+        st_info_tienda,
+        primaryjoin=and_(
+            empresa == foreign(st_info_tienda.empresa),
+            cod_cliente == foreign(st_info_tienda.cod_cliente),
+            cod_tienda == foreign(st_info_tienda.cod_tienda),
+        ),
         foreign_keys=[empresa, cod_cliente, cod_tienda],
         viewonly=True,
         uselist=False

@@ -700,9 +700,8 @@ def get_forms_promotoria(empresa):
         return jsonify({'mensaje': mensaje}), 404
     query = st_form_promotoria.query()
     formularios = query.filter(st_form_promotoria.empresa == empresa)
-    return jsonify(st_form_promotoria.to_list(formularios,
-                                              ['cliente', 'cliente_hor', 'tienda', 'bodega', 'modelos_segmento',
-                                               'marcas_segmento']))
+    return jsonify(st_form_promotoria.to_list(formularios, ['cliente', 'cliente_hor', 'tienda', 'info_tienda', 'bodega',
+                                                            'modelos_segmento', 'marcas_segmento']))
 
 
 @activaciones_b.route("/empresas/<empresa>/formularios-promotoria", methods=["POST"])
