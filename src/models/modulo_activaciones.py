@@ -472,10 +472,6 @@ class st_form_promotoria(custom_base):
                              ['{}.st_bodega_consignacion.empresa'.format(schema_name),
                               '{}.st_bodega_consignacion.ruc_cliente'.format(schema_name),
                               '{}.st_bodega_consignacion.cod_direccion'.format(schema_name)]),
-        ForeignKeyConstraint(['empresa', 'cod_cliente', 'cod_tienda'],
-                             ['{}.st_info_tienda.empresa'.format(schema_name),
-                              '{}.st_info_tienda.cod_cliente'.format(schema_name),
-                              '{}.st_info_tienda.cod_tienda'.format(schema_name)]),
         {'schema': schema_name}
     )
 
