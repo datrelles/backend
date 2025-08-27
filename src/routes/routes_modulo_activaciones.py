@@ -13,8 +13,8 @@ from src.exceptions import validation_error
 from src.models.catalogos_bench import Marca, Segmento
 from src.models.clientes import cliente_hor, Cliente
 from src.models.modulo_activaciones import st_activacion, st_cliente_direccion_guias, rh_empleados, st_promotor_tienda, \
-    ad_usuarios, st_encuesta, st_form_promotoria, st_mod_seg_frm_prom, st_mar_seg_frm_prom, st_info_tienda
-from src.models.modulo_formulas import validar_empresa, st_modelo_comercial
+    ad_usuarios, st_encuesta, st_form_promotoria, st_mod_seg_frm_prom, st_mar_seg_frm_prom, st_bodega_consignacion
+from src.models.modulo_formulas import validar_empresa
 from src.models.proveedores import TgModeloItem, Proveedor
 from src.models.users import Empresa, Usuario, tg_rol_usuario
 from src.validations import validar_number, validar_varchar, validar_fecha
@@ -24,7 +24,7 @@ activaciones_b = Blueprint('routes_activaciones', __name__)
 logger = logging.getLogger(__name__)
 
 COD_MODELO_CATAL_ACTIV = "ACT"
-CODIGOS_MARCAS_PROPIAS = [94, 99]  # 3, 18, 22
+CODIGOS_MARCAS_PROPIAS = [3, 18, 22]
 
 
 def calcular_diferencia_horas_en_minutos(inicio, fin):
@@ -253,7 +253,7 @@ def get_activaciones_por_promotor(empresa):
             mensaje = 'La fecha de inicio debe ser menor a la de fin'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-        activaciones = activaciones.filter(st_activacion.audit_fecha_ing.between(fecha_inicio, fecha_fin))
+        activaciones = activaciones.filter(st_activacion.fecha_act.between(fecha_inicio, fecha_fin))
     activaciones = activaciones.all()
     return jsonify(
         st_activacion.to_list(activaciones, ["promotor", "cliente", "cliente_hor", "tienda", "bodega", "proveedor"]))
@@ -356,44 +356,6 @@ def put_activacion(cod_activacion, data):
     activacion.audit_fecha_mod = text('sysdate')
     db.session.commit()
     mensaje = 'Se actualizó la activación {}'.format(activacion.cod_activacion)
-    logger.info(mensaje)
-    return '', 204
-
-
-@activaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/direcciones-guia/<cod_direccion>", methods=["PUT"])
-@jwt_required()
-@cross_origin()
-@validate_json()
-@handle_exceptions("actualizar la dirección guia")
-def put_direccion_guia(empresa, cod_cliente, cod_direccion, data):
-    empresa = validar_number('empresa', empresa, 2)
-    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
-    cod_direccion = validar_number('cod_direccion', cod_direccion, 3)
-    data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_direccion': cod_direccion, **data}
-    st_cliente_direccion_guias(**data)
-    if not db.session.get(Empresa, empresa):
-        mensaje = 'Empresa {} inexistente'.format(empresa)
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(Cliente, (empresa, cod_cliente)):
-        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    direccion_guia = db.session.get(st_cliente_direccion_guias, (empresa, cod_cliente, cod_direccion))
-    if not direccion_guia:
-        mensaje = 'Dirección guía {} inexistente'.format(cod_direccion)
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    direccion_guia.ciudad = data['ciudad']
-    direccion_guia.direccion = data.get('direccion')
-    direccion_guia.direccion_larga = data.get('direccion_larga')
-    direccion_guia.cod_zona_ciudad = data.get('cod_zona_ciudad')
-    direccion_guia.es_activo = data['es_activo']
-    nombre = data.get('nombre')
-    if nombre:
-        direccion_guia.nombre = nombre
-    db.session.commit()
-    mensaje = 'Se actualizó la dirección guía {}'.format(direccion_guia.cod_direccion)
     logger.info(mensaje)
     return '', 204
 
@@ -578,7 +540,12 @@ def get_segmentos():
 @cross_origin()
 @handle_exceptions("consultar las marcas")
 def get_marcas():
-    marcas = db.session.query(Marca).filter(Marca.estado_marca == 1).order_by(Marca.nombre_marca).all()
+    segmento = validar_varchar('segmento', request.args.get("segmento"), 70, False)
+    query = db.session.query(Marca)
+    marcas = query.filter(Marca.estado_marca == 1).join(Segmento, (Segmento.codigo_marca == Marca.codigo_marca))
+    if segmento:
+        marcas = marcas.filter(Segmento.nombre_segmento.like("%{}%".format(segmento)))
+    marcas = marcas.all()
     result = [{"codigo_marca": marca.codigo_marca, "nombre_marca": marca.nombre_marca} for marca in marcas]
     return jsonify(result)
 
@@ -599,40 +566,24 @@ def get_info_tienda(empresa, cod_cliente, cod_tienda):
         mensaje = 'Cliente {} inexistente'.format(cod_cliente)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    info_tienda = db.session.get(st_info_tienda, (empresa, cod_cliente, cod_tienda))
+    query = st_cliente_direccion_guias.query()
+    info_tienda = query.filter(st_cliente_direccion_guias.empresa == empresa,
+                               st_cliente_direccion_guias.cod_cliente == cod_cliente,
+                               st_cliente_direccion_guias.cod_direccion == cod_tienda).first()
     if not info_tienda:
         mensaje = 'No existe información de la tienda {}'.format(cod_tienda)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    return jsonify(info_tienda.to_dict(['cliente', 'cliente_hor', 'tienda', 'bodega']))
+    return jsonify(info_tienda.to_dict(['cliente', 'cliente_hor', 'bodega']))
 
 
-@activaciones_b.route("/empresas/<empresa>/tiendas", methods=["GET"])
+@activaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/tiendas", methods=["GET"])
 @jwt_required()
 @cross_origin()
 @handle_exceptions("consultar información de las tiendas")
-def get_info_tiendas(empresa):
-    empresa = validar_number('empresa', empresa, 2)
-    if not db.session.get(Empresa, empresa):
-        mensaje = 'Empresa {} inexistente'.format(empresa)
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    query = st_info_tienda.query()
-    info_tiendas = query.filter(st_info_tienda.empresa == empresa)
-    return jsonify(st_info_tienda.to_list(info_tiendas, ['cliente', 'cliente_hor', 'tienda', 'bodega']))
-
-
-@activaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/tiendas/<cod_tienda>", methods=["POST"])
-@jwt_required()
-@cross_origin()
-@validate_json()
-@handle_exceptions("registrar información de la tienda")
-def post_info_tienda(empresa, cod_cliente, cod_tienda, data):
+def get_info_tiendas(empresa, cod_cliente):
     empresa = validar_number('empresa', empresa, 2)
     cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
-    cod_tienda = validar_number('cod_tienda', cod_tienda, 3)
-    data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_tienda': cod_tienda, **data}
-    info_tienda = st_info_tienda(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -641,51 +592,9 @@ def post_info_tienda(empresa, cod_cliente, cod_tienda, data):
         mensaje = 'Cliente {} inexistente'.format(cod_cliente)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    if db.session.get(st_info_tienda, (empresa, cod_cliente, cod_tienda)):
-        mensaje = 'La información de la tienda {} ya existe'.format(cod_tienda)
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 409
-    db.session.add(info_tienda)
-    db.session.commit()
-    mensaje = 'Se registró la información de la tienda {}'.format(info_tienda.cod_tienda)
-    logger.info(mensaje)
-    return jsonify({'mensaje': mensaje}), 201
-
-
-@activaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/tiendas/<cod_tienda>", methods=["PUT"])
-@jwt_required()
-@cross_origin()
-@validate_json()
-@handle_exceptions("actualizar la información de la tienda")
-def put_info_tienda(empresa, cod_cliente, cod_tienda, data):
-    empresa = validar_number('empresa', empresa, 2)
-    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
-    cod_tienda = validar_number('cod_tienda', cod_tienda, 3)
-    data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_tienda': cod_tienda, **data}
-    st_info_tienda(**data)
-    if not db.session.get(Empresa, empresa):
-        mensaje = 'Empresa {} inexistente'.format(empresa)
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(Cliente, (empresa, cod_cliente)):
-        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    info_tienda = db.session.get(st_info_tienda, (empresa, cod_cliente, cod_tienda))
-    if not info_tienda:
-        mensaje = 'Información de la tienda {} inexistente'.format(cod_cliente)
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 404
-    info_tienda.correo_tienda = data['correo_tienda']
-    info_tienda.prom_venta_tienda = data['prom_venta_tienda']
-    info_tienda.nom_jefe_tienda = data['nom_jefe_tienda']
-    info_tienda.cel_jefe_tienda = data['cel_jefe_tienda']
-    info_tienda.audit_usuario_mod = text('user')
-    info_tienda.audit_fecha_mod = text('sysdate')
-    db.session.commit()
-    mensaje = 'Se actualizó la información de la tienda {}'.format(info_tienda.cod_tienda)
-    logger.info(mensaje)
-    return '', 204
+    query = st_cliente_direccion_guias.query()
+    tiendas = query.filter(st_cliente_direccion_guias.empresa == empresa, st_cliente_direccion_guias.cod_cliente == cod_cliente)
+    return jsonify(st_cliente_direccion_guias.to_list(tiendas, ['cliente', 'cliente_hor', 'bodega']))
 
 
 @activaciones_b.route("/empresas/<empresa>/formularios-promotoria", methods=["GET"])
@@ -694,12 +603,45 @@ def put_info_tienda(empresa, cod_cliente, cod_tienda, data):
 @handle_exceptions("consultar los formularios de promotoría")
 def get_forms_promotoria(empresa):
     empresa = validar_number('empresa', empresa, 2)
+    cod_cliente = validar_varchar('cod_cliente', request.args.get("cod_cliente"), 14, False)
+    cod_promotor = validar_varchar('cod_promotor', request.args.get("cod_promotor"), 20, False)
+    cod_tienda = validar_number('cod_tienda', request.args.get("cod_tienda"), 3, es_requerido=False)
+    fecha_inicio = validar_fecha('fecha_inicio', request.args.get("fecha_inicio"), False)
+    fecha_fin = validar_fecha('fecha_fin', request.args.get("fecha_fin"), False)
+    if (fecha_inicio and not fecha_fin) or (not fecha_inicio and fecha_fin):
+        mensaje = 'Debes proveer las fechas de inicio y fin para filtrar por ese parámetro'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 400
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_form_promotoria.query()
     formularios = query.filter(st_form_promotoria.empresa == empresa)
+    if cod_cliente:
+        if not db.session.get(cliente_hor, (empresa, cod_cliente)):
+            mensaje = 'Cliente {} inexistente'.format(cod_cliente)
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        formularios = formularios.filter(st_form_promotoria.cod_cliente == cod_cliente)
+    if cod_promotor:
+        if not db.session.get(rh_empleados, cod_promotor):
+            mensaje = 'Promotor {} inexistente'.format(cod_promotor)
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        formularios = formularios.filter(st_form_promotoria.cod_promotor == cod_promotor)
+    if cod_tienda:
+        if not db.session.get(st_cliente_direccion_guias, (empresa, cod_cliente, cod_tienda)):
+            mensaje = 'Dirección guía {} inexistente'.format(cod_tienda)
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        formularios = formularios.filter(st_form_promotoria.cod_tienda == cod_tienda)
+    if fecha_inicio and fecha_fin:
+        if fecha_inicio >= fecha_fin:
+            mensaje = 'La fecha de inicio debe ser menor a la de fin'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 400
+        formularios = formularios.filter(st_form_promotoria.audit_fecha_ing.between(fecha_inicio, fecha_fin))
     return jsonify(st_form_promotoria.to_list(formularios, ['cliente', 'cliente_hor', 'tienda', 'info_tienda', 'bodega',
                                                             'modelos_segmento', 'marcas_segmento']))
 
