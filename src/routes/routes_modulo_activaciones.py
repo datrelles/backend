@@ -5,7 +5,7 @@ from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 import logging
 
-from sqlalchemy import text
+from sqlalchemy import text, and_
 
 from src.decorators import validate_json, handle_exceptions
 from src.config.database import db
@@ -64,27 +64,11 @@ def get_promotor(usuario_oracle):
 @cross_origin()
 @handle_exceptions("consultar los promotores")
 def get_promotores():
-    sql = text("""
-                SELECT
-                    e.identificacion,
-                    e.apellido_paterno,
-                    e.apellido_materno,
-                    e.nombres
-                FROM
-                    rh_empleados e
-                WHERE
-                    e.activo = 'S' AND
-                    EXISTS (
-                        SELECT 1
-                        FROM st_promotor_tienda p
-                        WHERE p.cod_promotor = e.identificacion
-                    )
-                ORDER BY e.apellido_paterno, e.apellido_materno, e.nombres
-                """)
-    rows = db.session.execute(sql).fetchall()
-    result = [{"identificacion": row[0], "apellido_paterno": row[1], "apellido_materno": row[2], "nombres": row[3]} for
-              row in rows]
-    return jsonify(result)
+    query = rh_empleados.query().join(st_promotor_tienda,
+                                      (rh_empleados.identificacion == st_promotor_tienda.cod_promotor)).filter(
+        rh_empleados.activo == 'S')
+    promotores = query.all()
+    return jsonify(rh_empleados.to_list(promotores))
 
 
 @activaciones_b.route("/promotores/<cod_promotor>/clientes", methods=["GET"])
@@ -93,30 +77,16 @@ def get_promotores():
 @handle_exceptions("consultar los clientes del promotor")
 def get_clientes_por_promotor(cod_promotor):
     cod_promotor = validar_varchar('cod_promotor', cod_promotor, 20)
-    sql = text("""
-                SELECT
-                    DISTINCT(p.cod_cliente) AS cod_cliente,
-                    ch.cod_tipo_clienteh,
-                    SUBSTR(c.nombre, 1) AS nombre
-                FROM
-                    ST_PROMOTOR_TIENDA p
-                INNER JOIN
-                    CLIENTE_HOR ch
-                    ON
-                    ch.empresah = p.empresa AND
-                    ch.cod_clienteh = p.cod_cliente
-                INNER JOIN
-                    CLIENTE c
-                    ON
-                    c.empresa = ch.empresah AND
-                    c.cod_cliente = ch.cod_clienteh
-                WHERE
-                    p.cod_promotor = :cod_promotor
-                ORDER BY
-                    nombre
-                """)
-    rows = db.session.execute(sql, {"cod_promotor": cod_promotor}).fetchall()
-    result = [{"cod_cliente": row[0], "cod_tipo_clienteh": row[1], "nombre": row[2]} for row in rows]
+    query = db.session.query(cliente_hor, Cliente).join(Cliente, and_(cliente_hor.empresah == Cliente.empresa,
+                                                                      cliente_hor.cod_clienteh == Cliente.cod_cliente)).join(
+        st_promotor_tienda, and_(cliente_hor.empresah == st_promotor_tienda.empresa,
+                                 cliente_hor.cod_clienteh == st_promotor_tienda.cod_cliente)).filter(
+        st_promotor_tienda.cod_promotor == cod_promotor, cliente_hor.activoh == 'S')
+    clientes = query.all()
+    result = [
+        {"cod_cliente": clienteh.cod_clienteh, "cod_tipo_clienteh": clienteh.cod_tipo_clienteh,
+         "nombre": cliente.nombre}
+        for clienteh, cliente in clientes]
     return jsonify(result)
 
 
@@ -593,7 +563,8 @@ def get_info_tiendas(empresa, cod_cliente):
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     query = st_cliente_direccion_guias.query()
-    tiendas = query.filter(st_cliente_direccion_guias.empresa == empresa, st_cliente_direccion_guias.cod_cliente == cod_cliente)
+    tiendas = query.filter(st_cliente_direccion_guias.empresa == empresa,
+                           st_cliente_direccion_guias.cod_cliente == cod_cliente)
     return jsonify(st_cliente_direccion_guias.to_list(tiendas, ['cliente', 'cliente_hor', 'bodega']))
 
 
