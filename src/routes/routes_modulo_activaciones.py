@@ -97,41 +97,12 @@ def get_clientes_por_promotor(cod_promotor):
 def get_direcciones_por_promotor_y_cliente(cod_promotor, cod_cliente):
     cod_promotor = validar_varchar('cod_promotor', cod_promotor, 20)
     cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
-    sql = text("""
-                SELECT
-                   g.cod_direccion,
-                   SUBSTR(g.ciudad, 1) AS ciudad,
-                   SUBSTR(CASE
-                     WHEN b.nombre IS NULL THEN
-                       CASE
-                         WHEN g.nombre IS NOT NULL THEN g.nombre
-                         ELSE 'SIN NOMBRE'
-                       END
-                     ELSE b.nombre
-                   END, 1) AS nombre,
-                   SUBSTR(g.direccion, 1) AS direccion
-                FROM
-                   ST_PROMOTOR_TIENDA p
-                INNER JOIN
-                   ST_CLIENTE_DIRECCION_GUIAS g
-                   ON
-                   g.empresa = p.empresa AND
-                   g.cod_cliente = p.cod_cliente AND
-                   g.cod_direccion = p.cod_direccion_guia
-                LEFT JOIN
-                   ST_BODEGA_CONSIGNACION b
-                   ON
-                   b.empresa = g.empresa AND
-                   b.ruc_cliente = g.cod_cliente AND
-                   b.cod_direccion = g.cod_direccion
-                WHERE
-                  g.es_activo = 1 AND
-                  p.cod_promotor = :cod_promotor AND
-                  p.cod_cliente = :cod_cliente
-                """)
-    rows = db.session.execute(sql, {"cod_promotor": cod_promotor, "cod_cliente": cod_cliente}).fetchall()
-    result = [{"cod_direccion": row[0], "ciudad": row[1], "nombre": row[2], "direccion": row[3]} for row in rows]
-    return jsonify(result)
+    query = st_cliente_direccion_guias.query().join(st_promotor_tienda, and_(
+        st_cliente_direccion_guias.cod_cliente == st_promotor_tienda.cod_cliente,
+        st_cliente_direccion_guias.cod_direccion == st_promotor_tienda.cod_direccion_guia))
+    direcciones = query.filter(st_promotor_tienda.cod_promotor == cod_promotor,
+                               st_promotor_tienda.cod_cliente == cod_cliente).all()
+    return jsonify(st_cliente_direccion_guias.to_list(direcciones, ["cliente", "cliente_hor", "bodega"]))
 
 
 @activaciones_b.route("/empresas/<empresa>/proveedores", methods=["GET"])
