@@ -287,7 +287,6 @@ def put_activacion(cod_activacion, data):
     activacion.cod_proveedor = data['cod_proveedor']
     activacion.cod_modelo_act = data['cod_modelo_act']
     activacion.cod_item_act = data['cod_item_act']
-    activacion.animadora = data['animadora']
     activacion.fecha_act = data['fecha_act']
     activacion.hora_inicio = data['hora_inicio']
     activacion.hora_fin = data['hora_fin']
