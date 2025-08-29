@@ -221,10 +221,18 @@ def post_activacion(empresa, data):
         mensaje = 'Cliente {} inexistente'.format(data['cod_cliente'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    if not db.session.get(st_cliente_direccion_guias, (empresa, data['cod_cliente'], data['cod_tienda'])):
+    tienda = db.session.get(st_cliente_direccion_guias, (empresa, data['cod_cliente'], data['cod_tienda']))
+    if not tienda:
         mensaje = 'Tienda {} inexistente'.format(data['cod_tienda'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
+    if tienda and not tienda.nombre:
+        bodega = st_bodega_consignacion.query().filter(st_bodega_consignacion.empresa == tienda.empresa,
+                                                       st_bodega_consignacion.cod_direccion == tienda.cod_direccion).first()
+        if not bodega:
+            mensaje = 'La tienda {} no tiene nombre, ni bodega de consignación'.format(data['cod_tienda'])
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
     if not db.session.get(st_promotor_tienda,
                           (data['empresa'], data['cod_promotor'], data['cod_cliente'], data['cod_tienda'])):
         mensaje = 'Promotor {} no vinculado a la tienda {}'.format(data['cod_promotor'], data['cod_tienda'])
