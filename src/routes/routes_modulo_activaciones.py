@@ -266,8 +266,7 @@ def put_activacion(cod_activacion, data):
         mensaje = 'Activación {} inexistente'.format(cod_activacion)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    data = {**data, 'cod_activacion': cod_activacion, 'empresa': activacion.empresa,
-            'cod_promotor': activacion.cod_promotor}
+    data = {**data, 'empresa': activacion.empresa, 'cod_promotor': activacion.cod_promotor}
     st_activacion(**data)
     if not db.session.get(Cliente, (data['empresa'], data['cod_cliente'])):
         mensaje = 'Cliente {} inexistente'.format(data['cod_cliente'])
