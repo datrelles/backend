@@ -590,7 +590,3 @@ def info_moto():
     except cx_Oracle.DatabaseError as e:
         error, = e.args
         return jsonify({"error": error.message}), 500
-
-
-
-
