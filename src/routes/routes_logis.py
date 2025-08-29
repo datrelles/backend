@@ -134,6 +134,14 @@ def info_moto():
     cod_bodega = data.get('cod_bodega')
     current_identification = data.get('current_identification')
     cod_motor = data.get('cod_motor')
+
+    if cod_bodega == 1:
+        bodega_actual = cod_bodega
+        bodega_contra = 25
+    else:
+        bodega_actual = 25
+        bodega_contra = cod_bodega
+
     try:
         db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cursor = db1.cursor()
@@ -151,7 +159,7 @@ def info_moto():
                           and a.cod_producto=p.cod_producto 
                           and a.empresa=p.empresa 
                           and replace(a.cod_motor,' ') =replace(:cod_motor,' ') 
-                          and b.cod_bodega=5 
+                          and b.cod_bodega= :bodega_actual  
                           and exists 
                             (select * from sta_movimiento x 
                                 where a.cod_producto=x.cod_producto 
@@ -161,63 +169,92 @@ def info_moto():
                             )  
                                     """
 
-        cursor = cursor.execute(sql, [cod_motor, cod_comprobante, tipo_comprobante])
+        cursor = cursor.execute(sql, [cod_motor, cod_comprobante, tipo_comprobante, bodega_actual])
         columns = [col[0] for col in cursor.description]
         results = cursor.fetchall()
         data = [dict(zip(columns, row)) for row in results]
         x = data[0]['X']
-        # if x == 0:
-        #     return jsonify({"error": 'SERIE NO EXISTE EN B1'}), 500
 
-        cursor.close()
-    ###########################################################################################
-        cursor = db1.cursor()
-
-        sql = """
-                            SELECT A.*
-                            FROM stock.st_prod_orden_d a, ST_PROD_PACKING_LIST B
-                            WHERE A.empresa = 20
-                                AND A.cod_motor = REPLACE(:cod_motor, ' ')
-                                AND fecha_fin IS NULL
-                                AND fecha_inicio IS NOT NULL
-                                AND A.COD_PRODUCTO = B.COD_PRODUCTO
-                                AND A.COD_CHASIS = B.COD_CHASIS
-                                AND A.COD_MOTOR = B.COD_MOTOR
-                                AND A.EMPRESA = B.EMPRESA
-                                        """
-
-        cursor = cursor.execute(sql, [cod_motor])
-        columns = [col[0] for col in cursor.description]
-        results = cursor.fetchall()
-        data = [dict(zip(columns, row)) for row in results]
-        if not data:
+        if x == 0:
             sql = """
-                                    SELECT A.*
-                                    FROM stock.st_prod_orden_d a, ST_PROD_PACKING_LIST B
-                                    WHERE A.empresa = 20
-                                        AND A.cod_motor = REPLACE(:cod_motor, ' ')
-                                        AND fecha_fin IS NOT NULL
-                                        AND fecha_inicio IS NOT NULL
-                                        AND A.COD_PRODUCTO = B.COD_PRODUCTO
-                                        AND A.COD_CHASIS = B.COD_CHASIS
-                                        AND A.COD_MOTOR = B.COD_MOTOR
-                                        AND A.EMPRESA = B.EMPRESA
+                                    select count(*) as x
+                                      from  
+                                        st_prod_packing_list a,
+                                        st_inventario_serie b,
+                                        producto p 
+                                      where a.cod_motor=b.numero_serie 
+                                      and a.cod_producto = b.cod_producto  
+                                      and a.empresa=b.empresa 
+                                      and a.cod_producto=p.cod_producto 
+                                      and a.empresa=p.empresa 
+                                      and replace(a.cod_motor,' ') =replace(:cod_motor,' ') 
+                                      and b.cod_bodega in (:bodega_contra, 5)
+                                      and exists 
+                                        (select * from sta_movimiento x 
+                                            where a.cod_producto=x.cod_producto 
+                                            and x.cod_comprobante=:cod_comprobante 
+                                            and x.tipo_comprobante=:tipo_comprobante 
+                                            and x.empresa=a.empresa 
+                                        )  
                                                 """
 
-            cursor = cursor.execute(sql, [cod_motor])
+            cursor = cursor.execute(sql, [cod_motor, cod_comprobante, tipo_comprobante, bodega_contra])
             columns = [col[0] for col in cursor.description]
             results = cursor.fetchall()
             data = [dict(zip(columns, row)) for row in results]
+            y = data[0]['X']
+            if y == 0:
+                return jsonify({"error": 'SERIE NO EXISTE EN B1, A3 ni N2'}), 500
 
         cursor.close()
-
-        cod_orden = data[0]['COD_ORDEN']
-        secuencia = data[0]['SECUENCIA']
-        secuencia1 = data[0]['SECUENCIA1']
-        fecha_inicio = data[0]['FECHA_INICIO']
-        fecha_fin = data[0]['FECHA_FIN']
-        cod_producto_x = data[0]['COD_PRODUCTO']
-        cod_chasis = data[0]['COD_CHASIS']
+    #######################################Consulta motor y consulta motor pt####################################################
+        # cursor = db1.cursor()
+        #
+        # sql = """
+        #                     SELECT A.*
+        #                     FROM stock.st_prod_orden_d a, ST_PROD_PACKING_LIST B
+        #                     WHERE A.empresa = 20
+        #                         AND A.cod_motor = REPLACE(:cod_motor, ' ')
+        #                         AND fecha_fin IS NULL
+        #                         AND fecha_inicio IS NOT NULL
+        #                         AND A.COD_PRODUCTO = B.COD_PRODUCTO
+        #                         AND A.COD_CHASIS = B.COD_CHASIS
+        #                         AND A.COD_MOTOR = B.COD_MOTOR
+        #                         AND A.EMPRESA = B.EMPRESA
+        #                                 """
+        #
+        # cursor = cursor.execute(sql, [cod_motor])
+        # columns = [col[0] for col in cursor.description]
+        # results = cursor.fetchall()
+        # data = [dict(zip(columns, row)) for row in results]
+        # if not data:
+        #     sql = """
+        #                             SELECT A.*
+        #                             FROM stock.st_prod_orden_d a, ST_PROD_PACKING_LIST B
+        #                             WHERE A.empresa = 20
+        #                                 AND A.cod_motor = REPLACE(:cod_motor, ' ')
+        #                                 AND fecha_fin IS NOT NULL
+        #                                 AND fecha_inicio IS NOT NULL
+        #                                 AND A.COD_PRODUCTO = B.COD_PRODUCTO
+        #                                 AND A.COD_CHASIS = B.COD_CHASIS
+        #                                 AND A.COD_MOTOR = B.COD_MOTOR
+        #                                 AND A.EMPRESA = B.EMPRESA
+        #                                         """
+        #
+        #     cursor = cursor.execute(sql, [cod_motor])
+        #     columns = [col[0] for col in cursor.description]
+        #     results = cursor.fetchall()
+        #     data = [dict(zip(columns, row)) for row in results]
+        #
+        # cursor.close()
+        #
+        # cod_orden = data[0]['COD_ORDEN']
+        # secuencia = data[0]['SECUENCIA']
+        # secuencia1 = data[0]['SECUENCIA1']
+        # fecha_inicio = data[0]['FECHA_INICIO']
+        # fecha_fin = data[0]['FECHA_FIN']
+        # cod_producto_x = data[0]['COD_PRODUCTO']
+        # cod_chasis = data[0]['COD_CHASIS']
 
         ###############################validar si existen series mas antiguas para liberar##################################################################################
 
