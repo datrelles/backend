@@ -283,3 +283,310 @@ def get_pedidos_get():
         finally:
             if db1: db1.close()
 
+
+@bplog.route('/info_moto', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def info_moto():
+    data = request.json
+    cod_comprobante = data.get('cod_comprobante')
+    tipo_comprobante = data.get('tipo_comprobante')
+    cod_producto = data.get('cod_producto')
+    empresa = data.get('empresa')
+    cod_bodega = data.get('cod_bodega')
+    current_identification = data.get('current_identification')
+    cod_motor = data.get('cod_motor')
+
+    if cod_bodega == 1:
+        bodega_actual = cod_bodega
+        bodega_contra = 25
+    else:
+        bodega_actual = 25
+        bodega_contra = cod_bodega
+
+    try:
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cursor = db1.cursor()
+
+
+        sql = """
+                        select count(*) as x
+                          from  
+                            st_prod_packing_list a,
+                            st_inventario_serie b,
+                            producto p 
+                          where a.cod_motor=b.numero_serie 
+                          and a.cod_producto = b.cod_producto  
+                          and a.empresa=b.empresa 
+                          and a.cod_producto=p.cod_producto 
+                          and a.empresa=p.empresa 
+                          and replace(a.cod_motor,' ') =replace(:cod_motor,' ') 
+                          and b.cod_bodega= :bodega_actual  
+                          and exists 
+                            (select * from sta_movimiento x 
+                                where a.cod_producto=x.cod_producto 
+                                and x.cod_comprobante=:cod_comprobante 
+                                and x.tipo_comprobante=:tipo_comprobante 
+                                and x.empresa=a.empresa 
+                            )  
+                                    """
+
+        cursor = cursor.execute(sql, [cod_motor, cod_comprobante, tipo_comprobante, bodega_actual])
+        columns = [col[0] for col in cursor.description]
+        results = cursor.fetchall()
+        data = [dict(zip(columns, row)) for row in results]
+        x = data[0]['X']
+
+        if x == 0:
+            sql = """
+                                    select count(*) as x
+                                      from  
+                                        st_prod_packing_list a,
+                                        st_inventario_serie b,
+                                        producto p 
+                                      where a.cod_motor=b.numero_serie 
+                                      and a.cod_producto = b.cod_producto  
+                                      and a.empresa=b.empresa 
+                                      and a.cod_producto=p.cod_producto 
+                                      and a.empresa=p.empresa 
+                                      and replace(a.cod_motor,' ') =replace(:cod_motor,' ') 
+                                      and b.cod_bodega in (:bodega_contra, 5)
+                                      and exists 
+                                        (select * from sta_movimiento x 
+                                            where a.cod_producto=x.cod_producto 
+                                            and x.cod_comprobante=:cod_comprobante 
+                                            and x.tipo_comprobante=:tipo_comprobante 
+                                            and x.empresa=a.empresa 
+                                        )  
+                                                """
+
+            cursor = cursor.execute(sql, [cod_motor, cod_comprobante, tipo_comprobante, bodega_contra])
+            columns = [col[0] for col in cursor.description]
+            results = cursor.fetchall()
+            data = [dict(zip(columns, row)) for row in results]
+            y = data[0]['X']
+            if y == 0:
+                return jsonify({"error": 'SERIE NO EXISTE EN B1, A3 ni N2'}), 500
+
+        cursor.close()
+    #######################################Consulta motor y consulta motor pt####################################################
+        # cursor = db1.cursor()
+        #
+        # sql = """
+        #                     SELECT A.*
+        #                     FROM stock.st_prod_orden_d a, ST_PROD_PACKING_LIST B
+        #                     WHERE A.empresa = 20
+        #                         AND A.cod_motor = REPLACE(:cod_motor, ' ')
+        #                         AND fecha_fin IS NULL
+        #                         AND fecha_inicio IS NOT NULL
+        #                         AND A.COD_PRODUCTO = B.COD_PRODUCTO
+        #                         AND A.COD_CHASIS = B.COD_CHASIS
+        #                         AND A.COD_MOTOR = B.COD_MOTOR
+        #                         AND A.EMPRESA = B.EMPRESA
+        #                                 """
+        #
+        # cursor = cursor.execute(sql, [cod_motor])
+        # columns = [col[0] for col in cursor.description]
+        # results = cursor.fetchall()
+        # data = [dict(zip(columns, row)) for row in results]
+        # if not data:
+        #     sql = """
+        #                             SELECT A.*
+        #                             FROM stock.st_prod_orden_d a, ST_PROD_PACKING_LIST B
+        #                             WHERE A.empresa = 20
+        #                                 AND A.cod_motor = REPLACE(:cod_motor, ' ')
+        #                                 AND fecha_fin IS NOT NULL
+        #                                 AND fecha_inicio IS NOT NULL
+        #                                 AND A.COD_PRODUCTO = B.COD_PRODUCTO
+        #                                 AND A.COD_CHASIS = B.COD_CHASIS
+        #                                 AND A.COD_MOTOR = B.COD_MOTOR
+        #                                 AND A.EMPRESA = B.EMPRESA
+        #                                         """
+        #
+        #     cursor = cursor.execute(sql, [cod_motor])
+        #     columns = [col[0] for col in cursor.description]
+        #     results = cursor.fetchall()
+        #     data = [dict(zip(columns, row)) for row in results]
+        #
+        # cursor.close()
+        #
+        # cod_orden = data[0]['COD_ORDEN']
+        # secuencia = data[0]['SECUENCIA']
+        # secuencia1 = data[0]['SECUENCIA1']
+        # fecha_inicio = data[0]['FECHA_INICIO']
+        # fecha_fin = data[0]['FECHA_FIN']
+        # cod_producto_x = data[0]['COD_PRODUCTO']
+        # cod_chasis = data[0]['COD_CHASIS']
+
+        ###############################validar si existen series mas antiguas para liberar##################################################################################
+
+        cursor = db1.cursor()
+
+        sql = """
+                                select a.*
+                                from stock.st_producto_serie a, st_inventario_serie b
+                                where a.empresa=20
+                                and   a.cod_producto=b.cod_producto
+                                and a.numero_serie=b.numero_serie
+                                and a.empresa=b.empresa
+                                and   a.numero_serie=:cod_motor
+                                and b.cod_bodega=5
+                                            """
+
+        cursor = cursor.execute(sql, [cod_motor])
+        columns = [col[0] for col in cursor.description]
+        results = cursor.fetchall()
+        data = [dict(zip(columns, row)) for row in results]
+        cod_prod = data[0]['COD_PRODUCTO']
+        cursor.close()
+
+        cursor = db1.cursor()
+
+        sql = """
+                                    select TRUNC(months_between(sysdate, a.fecha)) as X
+                                    from st_serie_movimiento a
+                                    where a.empresa = 20
+                                    and   a.cod_producto = :cod_prod
+                                    and   a.numero_serie = :cod_motor
+                                    and   a.cod_bodega = 5
+                                    and   a.es_anulado='0'
+                                    and   a.debito_credito=1
+                                    order by a.fecha asc
+                                                """
+
+        cursor = cursor.execute(sql, [cod_prod, cod_motor])
+        columns = [col[0] for col in cursor.description]
+        results = cursor.fetchall()
+        data = [dict(zip(columns, row)) for row in results]
+        v_meses = data[0]['X']
+        cursor.close()
+
+        cursor = db1.cursor()
+
+        sql = """
+                        select  
+                                count(*) as y
+                        from (
+                            select a.cod_bodega, a.cod_producto, a.numero_serie, TRUNC(months_between(sysdate,ks_inventario_serie.obt_fecha_produccion_sb(20 ,a.numero_serie ,5 ))) meses , b.cod_estado_producto
+                            from 
+                                st_inventario_serie  a
+                                ,st_producto_serie b
+                            where a.empresa=b.empresa
+                            and a.cod_producto=b.cod_producto
+                            AND b.cod_estado_producto = 'A'
+                            and a.numero_serie=b.numero_serie
+                            and a.cod_producto=:cod_prod
+                            and a.cod_bodega=5
+                            and a.empresa=20
+                            and not exists
+                                  (select '+'
+                                  from st_producto_excepcion_edad p
+                                  where a.cod_bodega=p.cod_bodega
+                                  and p.cod_producto=A.cod_producto
+                                  and a.empresa=p.empresa
+                                  and p.es_activo=1
+                                  and trunc(sysdate) between p.fecha_inicio and p.fecha_final
+                                  and nvl(:current_identification,nvl(p.ruc_cliente,'x'))=p.ruc_cliente
+                                  )
+                            )where meses> :v_meses         
+                                                """
+
+        cursor = cursor.execute(sql, [cod_prod, current_identification, v_meses])
+        columns = [col[0] for col in cursor.description]
+        results = cursor.fetchall()
+        data = [dict(zip(columns, row)) for row in results]
+        v_series_antiguas = data[0]['Y']
+        cursor.close()
+
+        cursor = db1.cursor()
+
+        sql = """
+                            select  
+                                    count(*) as y
+                            from (
+                                select a.cod_bodega, a.cod_producto, a.numero_serie, TRUNC(months_between(sysdate,ks_inventario_serie.obt_fecha_produccion_sb(20 ,a.numero_serie ,5 ))) meses , b.cod_estado_producto
+                                from 
+                                    st_inventario_serie  a
+                                    ,st_producto_serie b
+                                where a.empresa=b.empresa
+                                and a.cod_producto=b.cod_producto
+                                AND b.cod_estado_producto = 'A'
+                                and a.numero_serie=b.numero_serie
+                                and a.cod_producto=:cod_producto 
+                                and a.cod_bodega=:cod_bodega 
+                                and a.empresa=20
+                                and not exists
+                                      (select '+'
+                                      from st_producto_excepcion_edad p
+                                      where a.cod_bodega=p.cod_bodega
+                                      and p.cod_producto=A.cod_producto
+                                      and a.empresa=p.empresa
+                                      and p.es_activo=1
+                                      and trunc(sysdate) between p.fecha_inicio and p.fecha_final
+                                      and nvl(:current_identification,nvl(p.ruc_cliente,'x'))=p.ruc_cliente
+                                      )
+                                )where meses> :v_meses         
+                                                    """
+
+        cursor = cursor.execute(sql, [cod_producto, cod_bodega, current_identification, v_meses])
+        columns = [col[0] for col in cursor.description]
+        results = cursor.fetchall()
+        data = [dict(zip(columns, row)) for row in results]
+        v_series_antiguas_2 = data[0]['Y']
+        cursor.close()
+        v_series_antiguas_3 = v_series_antiguas + v_series_antiguas_2
+
+        if cod_bodega != 1:
+            cursor = db1.cursor()
+
+            sql = """
+                                    select  
+                                            count(*) as y
+                                    from (
+                                        select a.cod_bodega, a.cod_producto, a.numero_serie, TRUNC(months_between(sysdate,ks_inventario_serie.obt_fecha_produccion_sb(20 ,a.numero_serie ,5 ))) meses , b.cod_estado_producto
+                                        from 
+                                            st_inventario_serie  a
+                                            ,st_producto_serie b
+                                        where a.empresa=b.empresa
+                                        and a.cod_producto=b.cod_producto
+                                        AND b.cod_estado_producto = 'A'
+                                        and a.numero_serie=b.numero_serie
+                                        and a.cod_producto=:cod_producto 
+                                        and a.cod_bodega=:cod_bodega 
+                                        and a.empresa=20
+                                        and not exists
+                                              (select '+'
+                                              from st_producto_excepcion_edad p
+                                              where a.cod_bodega=p.cod_bodega
+                                              and p.cod_producto=A.cod_producto
+                                              and a.empresa=p.empresa
+                                              and p.es_activo=1
+                                              and trunc(sysdate) between p.fecha_inicio and p.fecha_final
+                                              and nvl(:current_identification,nvl(p.ruc_cliente,'x'))=p.ruc_cliente
+                                              )
+                                        )where meses> :v_meses         
+                                                            """
+
+            cursor = cursor.execute(sql, [cod_producto, '1', current_identification, v_meses])
+            columns = [col[0] for col in cursor.description]
+            results = cursor.fetchall()
+            data = [dict(zip(columns, row)) for row in results]
+            v_series_antiguas_4 = data[0]['Y']
+            cursor.close()
+            v_series_antiguas_5 = v_series_antiguas_3 + v_series_antiguas_4
+
+        if int(v_series_antiguas_5) > 0:
+            return jsonify({"error": 'Existen ' + v_series_antiguas_5 + ' serie(s) mas antigua(s) que la actual. Utilice esa(s) primero.'}), 500
+
+        with db1.cursor() as cur:
+            cur.callproc(
+                "STOCK.ks_prod_orden_d_proceso.genera_ip_trans",
+                [empresa, cod_comprobante, tipo_comprobante, cod_motor, cod_bodega]
+            )
+        db1.commit()
+        db1.close()
+        return jsonify({"ok": "Serie asignada correctamente"}), 200
+
+    except cx_Oracle.DatabaseError as e:
+        error, = e.args
+        return jsonify({"error": error.message}), 500
