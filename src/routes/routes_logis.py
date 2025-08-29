@@ -22,6 +22,52 @@ def parse_date(date_string):
     if date_string:
         return datetime.strptime(date_string, '%d/%m/%Y').date()
     return None
+# --- Utilidades de parseo ----------------------------------------------------
+
+DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y")
+
+def parse_date(s: str):
+    if not s:
+        return None
+    s = s.strip()
+    for fmt in DATE_FORMATS:
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    # Si no coincide ningún formato, levanta error controlado
+    raise ValueError(f"Formato de fecha inválido: '{s}'. Usa YYYY-MM-DD o DD/MM/YYYY.")
+
+def parse_int(s: str):
+    if s is None or s == "":
+        return None
+    try:
+        return int(s)
+    except ValueError:
+        raise ValueError(f"Valor entero inválido: '{s}'")
+
+def parse_str(s: str):
+    if s is None:
+        return None
+    s = s.strip()
+    return s if s != "" else None
+
+def parse_order(field: str, default_field="COD_PEDIDO"):
+    # Permite solo un conjunto mínimo “seguro” de columnas para ordenar (ajusta a tus columnas reales)
+    allowed = {
+        "COD_PEDIDO", "FECHA_PEDIDO", "COD_PERSONA_CLI", "COD_PERSONA_VEN",
+        "ESTADO", "COD_AGENCIA", "EMPRESA"
+    }
+    f = (field or default_field).upper().strip()
+    return f if f in allowed else default_field
+
+def parse_order_dir(val: str, default_dir="DESC"):
+    v = (val or default_dir).upper().strip()
+    return "ASC" if v == "ASC" else "DESC"
+
+
+
+
 @bplog.route('/pedidos', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -121,6 +167,122 @@ def get_listado_pedido():
     except cx_Oracle.DatabaseError as e:
         error, = e.args
         return jsonify({"error": error.message}), 500
+
+@bplog.route('/pedidos_get', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_pedidos_get():
+    """
+    GET /pedidos?pd_fecha_inicial=2025-08-01&pd_fecha_final=2025-08-21&pedido=12345&pn_empresa=20&pn_cod_agencia=3
+    Parámetros aceptados (todos opcionales salvo los que tu SP requiera):
+      - pd_fecha_inicial, pd_fecha_final  (YYYY-MM-DD o DD/MM/YYYY)
+      - pedido                           -> pv_cod_pedido
+      - pv_comprobante_manual
+      - pv_cod_persona_ven
+      - pv_nombre_persona_ven
+      - pv_cod_persona_cli
+      - cliente                          -> pv_nombre_persona_cli
+      - pv_estado
+      - pn_cod_agencia                   (int)
+      - pn_empresa                       (int)
+      - pv_cod_tipo_pedido
+      - pn_cod_bodega_despacho           (int)
+      - p_orden                          (validado contra lista segura)
+      - p_tipo_orden                     (ASC|DESC)
+      - bodega_consignacion              -> pv_bodega_envia
+      - direccion                        -> pv_direccion
+      - orden                            -> pv_cod_orden
+    """
+    args = request.args
+
+    try:
+        pd_fecha_inicial = parse_date(args.get('pd_fecha_inicial'))
+        pd_fecha_final   = parse_date(args.get('pd_fecha_final'))
+
+        pv_cod_pedido            = parse_str(args.get('pedido'))
+        pv_comprobante_manual    = parse_str(args.get('pv_comprobante_manual'))
+        pv_cod_persona_ven       = parse_str(args.get('pv_cod_persona_ven'))
+        pv_nombre_persona_ven    = parse_str(args.get('pv_nombre_persona_ven'))
+        pv_cod_persona_cli       = parse_str(args.get('pv_cod_persona_cli'))
+        pv_nombre_persona_cli    = parse_str(args.get('cliente'))  # alias que ya usabas
+        pv_estado                = parse_str(args.get('pv_estado'))
+
+        pn_cod_agencia           = parse_int(args.get('pn_cod_agencia'))
+        pn_empresa               = parse_int(args.get('pn_empresa'))
+
+        pv_cod_tipo_pedido       = parse_str(args.get('pv_cod_tipo_pedido'))
+        pn_cod_bodega_despacho   = parse_int(args.get('pn_cod_bodega_despacho'))
+
+        p_orden                  = parse_order(args.get('p_orden'), default_field="COD_PEDIDO")
+        p_tipo_orden             = parse_order_dir(args.get('p_tipo_orden'), default_dir="DESC")
+
+        pv_bodega_envia          = parse_str(args.get('bodega_consignacion'))
+        pv_direccion             = parse_str(args.get('direccion'))
+        pv_cod_orden             = parse_str(args.get('orden'))
+
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+
+    db1 = None
+    cursor = None
+    try:
+        # Conexión Oracle
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cursor = db1.cursor()
+
+        # Cursor de salida del paquete/procedimiento
+        result_rc_listado_pedidos = cursor.var(cx_Oracle.CURSOR)
+
+        # Llamada al procedimiento tal como lo tenías, con mismos parámetros/orden
+        cursor.callproc(
+            'jaher.PK_RC_LISTADO_PEDIDOSMA.slct_rc_listado_pedidos_bod',
+            [
+                result_rc_listado_pedidos,
+                pd_fecha_inicial,
+                pd_fecha_final,
+                pv_cod_pedido,
+                pv_comprobante_manual,
+                pv_cod_persona_ven,
+                pv_nombre_persona_ven,
+                pv_cod_persona_cli,
+                pv_nombre_persona_cli,
+                pv_estado,
+                pn_cod_agencia,
+                pn_empresa,
+                pv_cod_tipo_pedido,
+                pn_cod_bodega_despacho,
+                p_orden,
+                p_tipo_orden,
+                pv_bodega_envia,
+                pv_direccion,
+                pv_cod_orden
+            ]
+        )
+
+        # Procesar el cursor de salida
+        result = []
+        cursor_output = result_rc_listado_pedidos.getvalue()
+        columns = [col[0] for col in cursor_output.description]
+
+        for row in cursor_output:
+            row_dict = dict(zip(columns, row))
+            # Formato de FECHA_PEDIDO (si existe)
+            if row_dict.get('FECHA_PEDIDO'):
+                row_dict['FECHA_PEDIDO'] = datetime.strftime(row_dict['FECHA_PEDIDO'], "%d/%m/%Y")
+            result.append(row_dict)
+
+        return jsonify(result)
+
+    except cx_Oracle.DatabaseError as e:
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+
+    finally:
+        try:
+            if cursor: cursor.close()
+        finally:
+            if db1: db1.close()
+
 
 @bplog.route('/info_moto', methods=['POST'])
 @jwt_required()
