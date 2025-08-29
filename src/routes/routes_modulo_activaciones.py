@@ -102,6 +102,10 @@ def get_direcciones_por_promotor_y_cliente(cod_promotor, cod_cliente):
         st_cliente_direccion_guias.cod_direccion == st_promotor_tienda.cod_direccion_guia))
     direcciones = query.filter(st_promotor_tienda.cod_promotor == cod_promotor,
                                st_promotor_tienda.cod_cliente == cod_cliente).all()
+    if not direcciones:
+        mensaje = 'El promotor {} no está vinculado a ninguna tienda del cliente {}'.format(cod_promotor, cod_cliente)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 403
     return jsonify(st_cliente_direccion_guias.to_list(direcciones, ["cliente", "cliente_hor", "bodega"]))
 
 
