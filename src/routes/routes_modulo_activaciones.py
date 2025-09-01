@@ -14,7 +14,7 @@ from src.models.catalogos_bench import Marca, Segmento
 from src.models.clientes import cliente_hor, Cliente
 from src.models.modulo_activaciones import st_activacion, st_cliente_direccion_guias, rh_empleados, st_promotor_tienda, \
     ad_usuarios, st_encuesta, st_form_promotoria, st_mod_seg_frm_prom, st_mar_seg_frm_prom, st_bodega_consignacion, \
-    st_estado_activacion
+    st_estado_activacion, st_opcion_pregunta
 from src.models.modulo_formulas import validar_empresa
 from src.models.proveedores import TgModeloItem, Proveedor
 from src.models.users import Empresa, Usuario, tg_rol_usuario
@@ -460,6 +460,21 @@ def post_encuesta(empresa, data):
     return jsonify({'mensaje': mensaje}), 201
 
 
+@activaciones_b.route("/preguntas/<cod_pregunta>/opciones", methods=["GET"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("consultar las opciones de la pregunta de la encuesta")
+def get_opciones_pregunta_encuesta(cod_pregunta):
+    cod_pregunta = validar_number('cod_pregunta', cod_pregunta, 3)
+    query = st_opcion_pregunta.query()
+    opciones = query.filter(st_opcion_pregunta.cod_pregunta == cod_pregunta).all()
+    if not opciones:
+        mensaje = 'Opciones de la pregunta {} inexistentes'.format(cod_pregunta)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    return jsonify(st_opcion_pregunta.to_list(opciones))
+
+
 @activaciones_b.route("/catalogo-segmentos", methods=["GET"])
 @jwt_required()
 @cross_origin()
@@ -518,9 +533,9 @@ def get_segmentos():
 def get_marcas():
     segmento = validar_varchar('segmento', request.args.get("segmento"), 70, False)
     query = db.session.query(Marca)
-    marcas = query.filter(Marca.estado_marca == 1).join(Segmento, (Segmento.codigo_marca == Marca.codigo_marca))
+    marcas = query.filter(Marca.estado_marca == 1)
     if segmento:
-        marcas = marcas.filter(Segmento.nombre_segmento.like("%{}%".format(segmento)))
+        marcas = marcas.join(Segmento, (Segmento.codigo_marca == Marca.codigo_marca)).filter(Segmento.nombre_segmento.like("%{}%".format(segmento)))
     marcas = marcas.all()
     result = [{"codigo_marca": marca.codigo_marca, "nombre_marca": marca.nombre_marca} for marca in marcas]
     return jsonify(result)

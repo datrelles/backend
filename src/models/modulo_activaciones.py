@@ -499,6 +499,31 @@ class st_encuesta(custom_base):
         return validar_escala(key, value)
 
 
+class st_opcion_pregunta(custom_base):
+    __tablename__ = 'st_opcion_pregunta'
+    __table_args__ = ({'schema': schema_name})
+
+    cod_pregunta = Column(NUMBER(precision=3), primary_key=True)
+    orden = Column(NUMBER(precision=3), primary_key=True)
+    opcion = Column(VARCHAR(100), nullable=False)
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+    audit_usuario_mod = Column(VARCHAR(30))
+    audit_fecha_mod = Column(DateTime)
+
+    @validates('cod_pregunta')
+    def validar_cod_pregunta(self, key, value):
+        return validar_number(key, value, 3)
+
+    @validates('orden')
+    def validar_orden(self, key, value):
+        return validar_number(key, value, 3)
+
+    @validates('opcion')
+    def validar_opcion(self, key, value):
+        return validar_varchar(key, value, 100)
+
+
 class st_form_promotoria(custom_base):
     __tablename__ = 'st_form_promotoria'
     __table_args__ = (
