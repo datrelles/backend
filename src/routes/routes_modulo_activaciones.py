@@ -9,6 +9,7 @@ from sqlalchemy import text, and_
 
 from src.decorators import validate_json, handle_exceptions
 from src.config.database import db
+from src.enums.validation import tipo_estado_activacion
 from src.exceptions import validation_error
 from src.models.catalogos_bench import Marca, Segmento
 from src.models.clientes import cliente_hor, Cliente
@@ -272,21 +273,21 @@ def put_activacion(cod_activacion, data):
         mensaje = 'Activación {} inexistente'.format(cod_activacion)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    estado = data.pop('estado', None)
+    estado = data.pop('estado', None)  #
     data = {'cod_cliente': activacion.cod_cliente, 'cod_tienda': activacion.cod_tienda,
-            'cod_proveedor': activacion.cod_proveedor,
-            'cod_modelo_act': activacion.cod_modelo_act,
+            'cod_proveedor': activacion.cod_proveedor, 'cod_modelo_act': activacion.cod_modelo_act,
             'cod_item_act': activacion.cod_item_act,
-            'hora_inicio': activacion.hora_inicio,
-            'hora_fin': activacion.hora_fin,
+            'hora_inicio': activacion.hora_inicio, 'hora_fin': activacion.hora_fin,
             'fecha_act': activacion.fecha_act.strftime("%Y-%m-%d"),
-            'num_exhi_motos': activacion.num_exhi_motos,
-            **data,
-            'empresa': activacion.empresa,
-            'cod_promotor': activacion.cod_promotor}
+            'num_exhi_motos': activacion.num_exhi_motos, **data, 'audit_usuario_ing': activacion.audit_usuario_ing,
+            'empresa': activacion.empresa, 'cod_promotor': activacion.cod_promotor}
     st_activacion(**data)
     if estado:
-        estado = st_estado_activacion(**estado, cod_activacion=cod_activacion)
+        if activacion.estado == tipo_estado_activacion.APROBADA.value:
+            mensaje = 'No se puede actualizar el estado de una activación aprobada'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 409
+        estado = st_estado_activacion(audit_usuario_ing=get_jwt_identity(), **estado, cod_activacion=cod_activacion)
         activacion.estado = estado.estado
         db.session.add(estado)
     if not db.session.get(Cliente, (data['empresa'], data['cod_cliente'])):
