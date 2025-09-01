@@ -67,8 +67,8 @@ def get_procesos(empresa):
 @handle_exceptions("registrar el proceso")
 def post_proceso(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
-    data = {'empresa': empresa, **data}
-    proceso = st_proceso(audit_usuario_ing=get_jwt_identity(), **data)
+    data = {'empresa': empresa, **data, 'audit_usuario_ing': get_jwt_identity()}
+    proceso = st_proceso(**data)
     if not db.session.get(Empresa, data['empresa']):
         mensaje = 'Empresa {} inexistente'.format(data['empresa'])
         logger.error(mensaje)
@@ -182,8 +182,8 @@ def get_formulas_proceso(empresa):
 @handle_exceptions("registrar la fórmula")
 def post_formula_proceso(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
-    data = {'empresa': empresa, **data}
-    formula = st_formula_proceso(audit_usuario_ing=get_jwt_identity(), **data)
+    data = {'empresa': empresa, **data, 'audit_usuario_ing': get_jwt_identity()}
+    formula = st_formula_proceso(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -305,8 +305,8 @@ def get_parametros_proceso(empresa):
 @handle_exceptions("registrar el parámetro")
 def post_parametro_proceso(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
-    data = {'empresa': empresa, **data}
-    parametro = st_parametro_proceso(audit_usuario_ing=get_jwt_identity(), **data)
+    data = {'empresa': empresa, **data, 'audit_usuario_ing': get_jwt_identity()}
+    parametro = st_parametro_proceso(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -415,8 +415,9 @@ def post_parametro_por_proceso(empresa, cod_proceso, cod_parametro, data):
     empresa = validar_number('empresa', empresa, 2)
     cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
     cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
-    data = {'empresa': empresa, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro, **data}
-    parametro_x_proceso = st_parametro_por_proceso(audit_usuario_ing=get_jwt_identity(), **data)
+    data = {'empresa': empresa, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro, **data,
+            'audit_usuario_ing': get_jwt_identity()}
+    parametro_x_proceso = st_parametro_por_proceso(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -582,7 +583,8 @@ def post_factor_calculo_parametro(empresa, cod_proceso, cod_parametro, data):
     empresa = validar_number('empresa', empresa, 2)
     cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
     cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
-    data = {'empresa': empresa, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro, **data}
+    data = {'empresa': empresa, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro, **data,
+            'audit_usuario_ing': get_jwt_identity()}
     st_factor_calculo_parametro(**data)
     if not db.session.get(Empresa, data['empresa']):
         mensaje = 'Empresa {} inexistente'.format(data['empresa'])
@@ -672,7 +674,7 @@ def post_factor_calculo_parametro(empresa, cod_proceso, cod_parametro, data):
             mensaje = 'Tipo de factor inválido, solo se aceptan: {}'.format(', '.join(tipo_factor.values()))
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-    db.session.add(st_factor_calculo_parametro(audit_usuario_ing=get_jwt_identity(), **data))
+    db.session.add(st_factor_calculo_parametro(**data))
     db.session.commit()
     mensaje = 'Se registró el factor de cálculo (proceso: {}, parámetro: {}, orden: {})'.format(data['cod_proceso'],
                                                                                                 data['cod_parametro'],
@@ -804,8 +806,8 @@ def get_funciones_por_modulo(empresa, cod_modulo):
 @handle_exceptions("registrar la función")
 def post_funcion(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
-    data = {'empresa': empresa, **data}
-    funcion = st_funcion(audit_usuario_ing=get_jwt_identity(), **data)
+    data = {'empresa': empresa, **data, 'audit_usuario_ing': get_jwt_identity()}
+    funcion = st_funcion(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -947,7 +949,7 @@ def get_parametros_funcion(empresa, cod_funcion):
 def post_parametro_funcion(empresa, cod_funcion, data):
     empresa = validar_number('empresa', empresa, 2)
     cod_funcion = validar_cod('cod_funcion', cod_funcion)
-    data = {'empresa': empresa, 'cod_funcion': cod_funcion, **data}
+    data = {'empresa': empresa, 'cod_funcion': cod_funcion, **data, 'audit_usuario_ing': get_jwt_identity()}
     st_parametro_funcion(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
@@ -994,7 +996,7 @@ def post_parametro_funcion(empresa, cod_funcion, data):
         mensaje = 'El parámetro debe tener secuencia {}'.format(secuencia_actual)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
-    parametro = st_parametro_funcion(audit_usuario_ing=get_jwt_identity(), **data)
+    parametro = st_parametro_funcion(**data)
     db.session.add(parametro)
     db.session.commit()
     mensaje = 'Se registró el parámetro {}'.format(data['secuencia'])
@@ -1232,8 +1234,8 @@ def get_clientes(empresa):
 @handle_exceptions("registrar el cliente")
 def post_cliente(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
-    data = {'empresa': empresa, **data}
-    cliente = st_cliente_procesos(audit_usuario_ing=get_jwt_identity(), **data)
+    data = {'empresa': empresa, **data, 'audit_usuario_ing': get_jwt_identity()}
+    cliente = st_cliente_procesos(**data)
     if not db.session.get(Empresa, data['empresa']):
         mensaje = 'Empresa {} inexistente'.format(data['empresa'])
         logger.error(mensaje)
@@ -1421,7 +1423,7 @@ def get_versiones_proyecciones(empresa):
 @handle_exceptions("crear la versión de la proyección")
 def post_version_proyeccion(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
-    data = {'empresa': empresa, **data}
+    data = {'empresa': empresa, **data, 'audit_usuario_ing': get_jwt_identity()}
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -1432,7 +1434,7 @@ def post_version_proyeccion(empresa, data):
         mensaje = 'Ya existe una versión con el nombre {}'.format(nombre)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
-    version = st_version_proyeccion(audit_usuario_ing=get_jwt_identity(), **data)
+    version = st_version_proyeccion(**data)
     db.session.add(version)
     db.session.commit()
     mensaje = 'Se registró la versión {}'.format(version.cod_version)
@@ -1745,8 +1747,9 @@ def post_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes, data):
     cod_modelo = validar_varchar('cod_modelo', cod_modelo, 20)
     anio = validar_number('anio', anio, 4)
     mes = validar_mes('mes', mes)
-    data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_modelo': cod_modelo, 'anio': anio, 'mes': mes, **data}
-    presupuesto = st_presupuesto_motos_pro(audit_usuario_ing=get_jwt_identity(), **data)
+    data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_modelo': cod_modelo, 'anio': anio, 'mes': mes, **data,
+            'audit_usuario_ing': get_jwt_identity()}
+    presupuesto = st_presupuesto_motos_pro(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -1893,8 +1896,8 @@ def post_presupuesto_tipo_cli(empresa, cod_tipo_cliente, cod_modelo, anio, mes, 
     anio = validar_number('anio', anio, 4)
     mes = validar_mes('mes', mes)
     data = {'empresa': empresa, 'cod_tipo_cliente': cod_tipo_cliente, 'cod_modelo': cod_modelo, 'anio': anio,
-            'mes': mes, **data}
-    presupuesto = st_presupuesto_motos_tipo_cli_pro(audit_usuario_ing=get_jwt_identity(), **data)
+            'mes': mes, **data, 'audit_usuario_ing': get_jwt_identity()}
+    presupuesto = st_presupuesto_motos_tipo_cli_pro(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)

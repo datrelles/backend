@@ -5,6 +5,8 @@ import logging
 from werkzeug.exceptions import BadRequest
 from src.config.database import db
 from sqlalchemy.exc import SQLAlchemyError
+
+from src.decorators import validate_json, handle_exceptions
 from src.exceptions import validation_error
 from src.validations import validar_varchar, validar_number
 from src.models.users import Empresa
@@ -51,12 +53,14 @@ def get_cabecera_consignacion(empresa, cod_cliente):
 @importaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/cabecera-consignacion", methods=["POST"])
 @jwt_required()
 @cross_origin()
-def post_cabecera_consignacion(empresa, cod_cliente):
+@validate_json()
+@handle_exceptions("registrar la cabecera de consignación")
+def post_cabecera_consignacion(empresa, cod_cliente, data):
     try:
         empresa = validar_number('empresa', empresa, 2)
         cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
-        data = {'empresa': empresa, 'cod_cliente': cod_cliente, **request.get_json()}
-        cabecera = st_cabecera_consignacion(audit_usuario_ing=get_jwt_identity(), **data)
+        data = {'empresa': empresa, 'cod_cliente': cod_cliente, **data, 'audit_usuario_ing': get_jwt_identity()}
+        cabecera = st_cabecera_consignacion(**data)
         if db.session.get(st_cabecera_consignacion, (empresa, cod_cliente)):
             mensaje = 'Ya existe una cabecera de consignación para el cliente {}'.format(cod_cliente)
             logger.error(mensaje)
