@@ -1,7 +1,7 @@
 from functools import reduce
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from flask_cors import cross_origin
 import logging
 
@@ -214,7 +214,7 @@ def get_activaciones(empresa):
 def post_activacion(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
     data = {'empresa': empresa, **data}
-    activacion = st_activacion(**data)
+    activacion = st_activacion(audit_usuario_ing=get_jwt_identity(), **data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -328,7 +328,7 @@ def put_activacion(cod_activacion, data):
     activacion.hora_fin = data['hora_fin']
     activacion.total_minutos = calcular_diferencia_horas_en_minutos(activacion.hora_inicio, activacion.hora_fin)
     activacion.num_exhi_motos = data['num_exhi_motos']
-    activacion.audit_usuario_mod = text('user')
+    activacion.audit_usuario_mod = get_jwt_identity()
     activacion.audit_fecha_mod = text('sysdate')
     db.session.commit()
     mensaje = 'Se actualizó la activación {}'.format(activacion.cod_activacion)
@@ -408,7 +408,7 @@ def get_encuestas(empresa):
 def post_encuesta(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
     data = {'empresa': empresa, **data}
-    encuesta = st_encuesta(**data)
+    encuesta = st_encuesta(audit_usuario_ing=get_jwt_identity(), **data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -483,14 +483,14 @@ def get_opciones_pregunta_encuesta(cod_pregunta):
 @handle_exceptions("registrar una opción de la pregunta de la encuesta")
 def post_opcion_pregunta_encuesta(cod_pregunta, data):
     cod_pregunta = validar_number('cod_pregunta', cod_pregunta, 3)
-    data = {**data, "cod_pregunta": cod_pregunta}
+    data = {"audit_usuario_ing": get_jwt_identity(), **data, "cod_pregunta": cod_pregunta}
     st_opcion_pregunta(**data)
     opcion = db.session.get(st_opcion_pregunta, (cod_pregunta, data['orden']))
     if opcion:
         mensaje = 'Ya existe una opción con orden {} para la pregunta {}'.format(data['orden'], cod_pregunta)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
-    opcion = st_opcion_pregunta(**data)
+    opcion = st_opcion_pregunta(audit_usuario_ing=get_jwt_identity(), **data)
     db.session.add(opcion)
     db.session.commit()
     mensaje = 'Se registró la opción con orden {} para la pregunta {}'.format(data['orden'], cod_pregunta)
@@ -513,7 +513,7 @@ def put_opcion_pregunta_encuesta(cod_pregunta, orden, data):
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     opcion.opcion = data['opcion']
-    opcion.audit_usuario_mod = text('user')
+    opcion.audit_usuario_mod = get_jwt_identity()
     opcion.audit_fecha_mod = text('sysdate')
     db.session.commit()
     mensaje = 'Se actualizó la opción con orden {} para la pregunta {}'.format(orden, cod_pregunta)
@@ -720,7 +720,7 @@ def post_form_promotoria(empresa, data):
         raise validation_error(no_requeridos=['total_motos_piso'])
     data['total_motos_shi'] = 0
     data['total_motos_piso'] = 0
-    formulario = st_form_promotoria(**data)
+    formulario = st_form_promotoria(audit_usuario_ing=get_jwt_identity(), **data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -760,11 +760,15 @@ def post_form_promotoria(empresa, data):
     db.session.flush()
     db.session.refresh(formulario)
     if modelos_segmento:
-        formulario.modelos_segmento = [st_mod_seg_frm_prom(**{**item, "cod_form": formulario.cod_form}) for item in
-                                       modelos_segmento]
+        formulario.modelos_segmento = [
+            st_mod_seg_frm_prom(audit_usuario_ing=get_jwt_identity(), **{**item, "cod_form": formulario.cod_form}) for
+            item in
+            modelos_segmento]
     if marcas_segmento:
-        formulario.marcas_segmento = [st_mar_seg_frm_prom(**{**item, "cod_form": formulario.cod_form}) for item in
-                                      marcas_segmento]
+        formulario.marcas_segmento = [
+            st_mar_seg_frm_prom(audit_usuario_ing=get_jwt_identity(), **{**item, "cod_form": formulario.cod_form}) for
+            item in
+            marcas_segmento]
     db.session.commit()
     mensaje = 'Se registró el formulario {}'.format(formulario.cod_form)
     logger.info(mensaje)

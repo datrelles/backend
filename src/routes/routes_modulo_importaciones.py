@@ -1,5 +1,5 @@
 from flask import request, Blueprint, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from flask_cors import cross_origin
 import logging
 from werkzeug.exceptions import BadRequest
@@ -56,7 +56,7 @@ def post_cabecera_consignacion(empresa, cod_cliente):
         empresa = validar_number('empresa', empresa, 2)
         cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
         data = {'empresa': empresa, 'cod_cliente': cod_cliente, **request.get_json()}
-        cabecera = st_cabecera_consignacion(**data)
+        cabecera = st_cabecera_consignacion(audit_usuario_ing=get_jwt_identity(), **data)
         if db.session.get(st_cabecera_consignacion, (empresa, cod_cliente)):
             mensaje = 'Ya existe una cabecera de consignación para el cliente {}'.format(cod_cliente)
             logger.error(mensaje)

@@ -1,6 +1,6 @@
 from functools import reduce
 from flask import request, Blueprint, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from flask_cors import cross_origin
 import logging
 
@@ -68,7 +68,7 @@ def get_procesos(empresa):
 def post_proceso(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
     data = {'empresa': empresa, **data}
-    proceso = st_proceso(**data)
+    proceso = st_proceso(audit_usuario_ing=get_jwt_identity(), **data)
     if not db.session.get(Empresa, data['empresa']):
         mensaje = 'Empresa {} inexistente'.format(data['empresa'])
         logger.error(mensaje)
@@ -106,7 +106,7 @@ def put_proceso(empresa, cod_proceso, data):
     proceso.nombre = data['nombre']
     if data.get('estado') is not None:
         proceso.estado = data['estado']
-    proceso.audit_usuario_mod = text('user')
+    proceso.audit_usuario_mod = get_jwt_identity()
     proceso.audit_fecha_mod = text('sysdate')
     db.session.commit()
     mensaje = 'Se actualizó el proceso {}'.format(cod_proceso)
@@ -183,7 +183,7 @@ def get_formulas_proceso(empresa):
 def post_formula_proceso(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
     data = {'empresa': empresa, **data}
-    formula = st_formula_proceso(**data)
+    formula = st_formula_proceso(audit_usuario_ing=get_jwt_identity(), **data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -224,7 +224,7 @@ def put_formula_proceso(empresa, cod_formula, data):
     if data.get('estado') is not None:
         formula.estado = data['estado']
     formula.definicion = data['definicion']
-    formula.audit_usuario_mod = text('user')
+    formula.audit_usuario_mod = get_jwt_identity()
     formula.audit_fecha_mod = text('sysdate')
     db.session.commit()
     mensaje = 'Se actualizó la fórmula {}'.format(cod_formula)
@@ -306,7 +306,7 @@ def get_parametros_proceso(empresa):
 def post_parametro_proceso(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
     data = {'empresa': empresa, **data}
-    parametro = st_parametro_proceso(**data)
+    parametro = st_parametro_proceso(audit_usuario_ing=get_jwt_identity(), **data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -346,7 +346,7 @@ def put_parametro_proceso(empresa, cod_parametro, data):
     parametro.descripcion = data.get('descripcion')
     if data.get('estado') is not None:
         parametro.estado = data['estado']
-    parametro.audit_usuario_mod = text('user')
+    parametro.audit_usuario_mod = get_jwt_identity()
     parametro.audit_fecha_mod = text('sysdate')
     db.session.commit()
     mensaje = 'Se actualizó el parámetro {}'.format(cod_parametro)
@@ -415,7 +415,7 @@ def post_parametro_por_proceso(empresa, cod_proceso, cod_parametro, data):
     cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
     cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
     data = {'empresa': empresa, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro, **data}
-    parametro_x_proceso = st_parametro_por_proceso(**data)
+    parametro_x_proceso = st_parametro_por_proceso(audit_usuario_ing=get_jwt_identity(), **data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -494,7 +494,7 @@ def put_parametro_por_proceso(empresa, cod_proceso, cod_parametro, data):
             return jsonify({'mensaje': mensaje}), 400
     parametro_x_proceso.cod_formula = cod_formula
     parametro_x_proceso.orden_imprime = data['orden_imprime']
-    parametro_x_proceso.audit_usuario_mod = text('user')
+    parametro_x_proceso.audit_usuario_mod = get_jwt_identity()
     parametro_x_proceso.audit_fecha_mod = text('sysdate')
     db.session.commit()
     mensaje = 'Se actualizó el parámetro {} vinculado al proceso {}'.format(cod_parametro, cod_proceso)
@@ -670,7 +670,7 @@ def post_factor_calculo_parametro(empresa, cod_proceso, cod_parametro, data):
             mensaje = 'Tipo de factor inválido, solo se aceptan: {}'.format(', '.join(tipo_factor.values()))
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
-    db.session.add(st_factor_calculo_parametro(**data))
+    db.session.add(st_factor_calculo_parametro(audit_usuario_ing=get_jwt_identity(), **data))
     db.session.commit()
     mensaje = 'Se registró el factor de cálculo (proceso: {}, parámetro: {}, orden: {})'.format(data['cod_proceso'],
                                                                                                 data['cod_parametro'],
@@ -803,7 +803,7 @@ def get_funciones_por_modulo(empresa, cod_modulo):
 def post_funcion(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
     data = {'empresa': empresa, **data}
-    funcion = st_funcion(**data)
+    funcion = st_funcion(audit_usuario_ing=get_jwt_identity(), **data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -855,7 +855,7 @@ def put_funcion(empresa, cod_funcion, data):
         funcion.estado = data['estado']
     funcion.tipo_retorno = data['tipo_retorno']
     funcion.descripcion = data.get('descripcion')
-    funcion.audit_usuario_mod = text('user')
+    funcion.audit_usuario_mod = get_jwt_identity()
     funcion.audit_fecha_mod = text('sysdate')
     db.session.commit()
     mensaje = 'Se actualizó la función {}'.format(data['cod_funcion'])
@@ -992,7 +992,7 @@ def post_parametro_funcion(empresa, cod_funcion, data):
         mensaje = 'El parámetro debe tener secuencia {}'.format(secuencia_actual)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
-    parametro = st_parametro_funcion(**data)
+    parametro = st_parametro_funcion(audit_usuario_ing=get_jwt_identity(), **data)
     db.session.add(parametro)
     db.session.commit()
     mensaje = 'Se registró el parámetro {}'.format(data['secuencia'])
@@ -1050,7 +1050,7 @@ def put_parametro_funcion(empresa, cod_funcion, secuencia, data):
             parametro.variable = data.get('variable')
             parametro.numero = None
             parametro.texto = None
-    parametro.audit_usuario_mod = text('user')
+    parametro.audit_usuario_mod = get_jwt_identity()
     parametro.audit_fecha_mod = text('sysdate')
     db.session.commit()
     mensaje = 'Se actualizó el parámetro {}'.format(secuencia)
@@ -1230,7 +1230,7 @@ def get_clientes(empresa):
 def post_cliente(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
     data = {'empresa': empresa, **data}
-    cliente = st_cliente_procesos(**data)
+    cliente = st_cliente_procesos(audit_usuario_ing=get_jwt_identity(), **data)
     if not db.session.get(Empresa, data['empresa']):
         mensaje = 'Empresa {} inexistente'.format(data['empresa'])
         logger.error(mensaje)
@@ -1286,7 +1286,7 @@ def put_cliente(empresa, cod_cliente, data):
         cliente.nombre_agrupacion = nombre_agrupacion
     else:
         cliente.nombre_agrupacion = None
-    cliente.audit_usuario_mod = text('user')
+    cliente.audit_usuario_mod = get_jwt_identity()
     cliente.audit_fecha_mod = text('sysdate')
     db.session.commit()
     mensaje = 'Se actualizó el cliente {}'.format(cod_cliente)
@@ -1429,7 +1429,7 @@ def post_version_proyeccion(empresa, data):
         mensaje = 'Ya existe una versión con el nombre {}'.format(nombre)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
-    version = st_version_proyeccion(**data)
+    version = st_version_proyeccion(audit_usuario_ing=get_jwt_identity(), **data)
     db.session.add(version)
     db.session.commit()
     mensaje = 'Se registró la versión {}'.format(version.cod_version)
@@ -1740,7 +1740,7 @@ def post_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes, data):
     anio = validar_number('anio', anio, 4)
     mes = validar_mes('mes', mes)
     data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_modelo': cod_modelo, 'anio': anio, 'mes': mes, **data}
-    presupuesto = st_presupuesto_motos_pro(**data)
+    presupuesto = st_presupuesto_motos_pro(audit_usuario_ing=get_jwt_identity(), **data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -1814,7 +1814,7 @@ def put_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes, data):
         return jsonify({'mensaje': mensaje}), 404
     presupuesto.cod_linea = None if cod_linea == "" else cod_linea
     presupuesto.cod_tipo_linea = None if cod_tipo_linea == "" else cod_tipo_linea
-    presupuesto.audit_usuario_mod = text('user')
+    presupuesto.audit_usuario_mod = get_jwt_identity()
     presupuesto.audit_fecha_mod = text('sysdate')
     db.session.commit()
     mensaje = 'Se actualizó el presupuesto'
@@ -1887,7 +1887,7 @@ def post_presupuesto_tipo_cli(empresa, cod_tipo_cliente, cod_modelo, anio, mes, 
     mes = validar_mes('mes', mes)
     data = {'empresa': empresa, 'cod_tipo_cliente': cod_tipo_cliente, 'cod_modelo': cod_modelo, 'anio': anio,
             'mes': mes, **data}
-    presupuesto = st_presupuesto_motos_tipo_cli_pro(**data)
+    presupuesto = st_presupuesto_motos_tipo_cli_pro(audit_usuario_ing=get_jwt_identity(), **data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -1934,7 +1934,7 @@ def put_presupuesto_tipo_cli(empresa, cod_tipo_cliente, cod_modelo, anio, mes, d
         return jsonify({'mensaje': mensaje}), 404
     presupuesto.unidades = data['unidades']
     presupuesto.sell_out = data.get('sell_out')
-    presupuesto.audit_usuario_mod = text('user')
+    presupuesto.audit_usuario_mod = get_jwt_identity()
     presupuesto.audit_fecha_mod = text('sysdate')
     db.session.commit()
     mensaje = 'Se actualizó el presupuesto'
