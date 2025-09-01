@@ -92,8 +92,6 @@ def post_proceso(empresa, data):
 def put_proceso(empresa, cod_proceso, data):
     empresa = validar_number('empresa', empresa, 2)
     cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
-    data = {'empresa': empresa, 'cod_proceso': cod_proceso, **data}
-    st_proceso(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -103,6 +101,8 @@ def put_proceso(empresa, cod_proceso, data):
         mensaje = 'No existe un proceso con el código {}'.format(cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
+    data = {'empresa': empresa, 'cod_proceso': cod_proceso, **data, 'audit_usuario_ing': proceso.audit_usuario_ing}
+    st_proceso(**data)
     proceso.nombre = data['nombre']
     if data.get('estado') is not None:
         proceso.estado = data['estado']
@@ -207,8 +207,6 @@ def post_formula_proceso(empresa, data):
 def put_formula_proceso(empresa, cod_formula, data):
     empresa = validar_number('empresa', empresa, 2)
     cod_formula = validar_varchar('cod_formula', cod_formula, 8)
-    data = {'empresa': empresa, 'cod_formula': cod_formula, **data}
-    st_formula_proceso(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -218,6 +216,8 @@ def put_formula_proceso(empresa, cod_formula, data):
         mensaje = 'Fórmula {} inexistente'.format(cod_formula)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
+    data = {'empresa': empresa, 'cod_formula': cod_formula, **data, 'audit_usuario_ing': formula.audit_usuario_ing}
+    st_formula_proceso(**data)
     formula.nombre = data['nombre']
     formula.tipo_retorno = data['tipo_retorno']
     formula.descripcion = data.get('descripcion')
@@ -330,8 +330,6 @@ def post_parametro_proceso(empresa, data):
 def put_parametro_proceso(empresa, cod_parametro, data):
     empresa = validar_number('empresa', empresa, 2)
     cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
-    data = {'empresa': empresa, 'cod_parametro': cod_parametro, **data}
-    st_parametro_proceso(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -341,6 +339,9 @@ def put_parametro_proceso(empresa, cod_parametro, data):
         mensaje = 'No existe un parámetro con el código {}'.format(cod_parametro)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
+    data = {'empresa': empresa, 'cod_parametro': cod_parametro, **data,
+            'audit_usuario_ing': parametro.audit_usuario_ing}
+    st_parametro_proceso(**data)
     parametro.nombre = data['nombre']
     parametro.color = data['color']
     parametro.descripcion = data.get('descripcion')
@@ -448,8 +449,6 @@ def put_parametro_por_proceso(empresa, cod_proceso, cod_parametro, data):
     empresa = validar_number('empresa', empresa, 2)
     cod_proceso = validar_varchar('cod_proceso', cod_proceso, 8)
     cod_parametro = validar_varchar('cod_parametro', cod_parametro, 8)
-    data = {'empresa': empresa, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro, **data}
-    st_parametro_por_proceso(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -468,6 +467,9 @@ def put_parametro_por_proceso(empresa, cod_proceso, cod_parametro, data):
         mensaje = 'El parámetro {} no está vinculado al proceso {}'.format(cod_parametro, cod_proceso)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
+    data = {'empresa': empresa, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro, **data,
+            'audit_usuario_ing': parametro_x_proceso.audit_usuario_ing}
+    st_parametro_por_proceso(**data)
     parametro_x_proceso.orden_calculo = data.get('orden_calculo')
     if data.get('estado') is not None:
         parametro_x_proceso.estado = data['estado']
@@ -831,8 +833,6 @@ def post_funcion(empresa, data):
 def put_funcion(empresa, cod_funcion, data):
     empresa = validar_number('empresa', empresa, 2)
     cod_funcion = validar_varchar('cod_funcion', cod_funcion, 8)
-    data = {'empresa': empresa, 'cod_funcion': cod_funcion, **data}
-    st_funcion(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -849,6 +849,8 @@ def put_funcion(empresa, cod_funcion, data):
             mensaje = 'Módulo {} inexistente'.format(data['cod_modulo'])
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
+    data = {'empresa': empresa, 'cod_funcion': cod_funcion, **data, 'audit_usuario_ing': funcion.audit_usuario_ing}
+    st_funcion(**data)
     funcion.nombre = data['nombre']
     funcion.nombre_base_datos = data['nombre_base_datos']
     if data.get('estado') is not None:
@@ -1009,8 +1011,6 @@ def put_parametro_funcion(empresa, cod_funcion, secuencia, data):
     empresa = validar_number('empresa', empresa, 2)
     cod_funcion = validar_varchar('cod_funcion', cod_funcion, 8)
     secuencia = validar_number('secuencia', secuencia, 10)
-    data = {'empresa': empresa, 'cod_funcion': cod_funcion, 'secuencia': secuencia, **data}
-    st_parametro_funcion(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -1024,6 +1024,9 @@ def put_parametro_funcion(empresa, cod_funcion, secuencia, data):
         mensaje = 'Parámetro {} inexistente'.format(secuencia)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
+    data = {'empresa': empresa, 'cod_funcion': cod_funcion, 'secuencia': secuencia, **data,
+            'audit_usuario_ing': parametro.audit_usuario_ing}
+    st_parametro_funcion(**data)
     parametro.tipo_parametro = data['tipo_parametro']
     match (data['tipo_parametro']):
         case tipo_parametro.NUMERO.value:
@@ -1262,8 +1265,6 @@ def post_cliente(empresa, data):
 def put_cliente(empresa, cod_cliente, data):
     empresa = validar_number('empresa', empresa, 2)
     cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
-    data = {'empresa': empresa, 'cod_cliente': cod_cliente, **data}
-    st_cliente_procesos(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -1273,6 +1274,8 @@ def put_cliente(empresa, cod_cliente, data):
         mensaje = 'No existe un cliente con el código {}'.format(cod_cliente)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
+    data = {'empresa': empresa, 'cod_cliente': cod_cliente, **data, 'audit_usuario_ing': cliente.audit_usuario_ing}
+    st_cliente_procesos(**data)
     cliente.cod_modelo = data['cod_modelo']
     cliente.tipo_cliente = data['tipo_cliente']
     cliente.nombre_imprime = data['nombre_imprime']
@@ -1625,11 +1628,6 @@ def put_proyeccion(empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_
     cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
     anio = validar_number('anio', anio, 4)
     mes = validar_mes('mes', mes)
-    data = {'empresa': empresa, 'cod_version': cod_version, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro,
-            'cod_modelo_comercial': cod_modelo_comercial, 'cod_marca': cod_marca, 'cod_cliente': cod_cliente,
-            'anio': anio, 'mes': mes,
-            **data}
-    st_proyeccion_ppp(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -1661,6 +1659,11 @@ def put_proyeccion(empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_
                                                                                              anio, mes)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
+    data = {'empresa': empresa, 'cod_version': cod_version, 'cod_proceso': cod_proceso, 'cod_parametro': cod_parametro,
+            'cod_modelo_comercial': cod_modelo_comercial, 'cod_marca': cod_marca, 'cod_cliente': cod_cliente,
+            'anio': anio, 'mes': mes,
+            **data, 'audit_usuario_ing': proyeccion.audit_usuario_ing}
+    st_proyeccion_ppp(**data)
     if data.get('numero') is None and data.get('texto') is None and data.get('fecha') is None:
         mensaje = 'Se requiere el valor de actualización de la proyección'
         logger.error(mensaje)
@@ -1676,6 +1679,9 @@ def put_proyeccion(empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_
         paquete_funcion_bd.PROCESOS.value, empresa, cod_version, cod_proceso, cod_parametro, cod_modelo_comercial,
         cod_marca, cod_cliente, anio, mes, valor)
     custom_base.execute_sql(sql, es_escalar=False)
+    proyeccion.audit_usuario_mod = get_jwt_identity()
+    proyeccion.audit_fecha_mod = text('sysdate')
+    db.session.commit()
     mensaje = 'Se actualizó la proyección con el valor {}'.format(valor)
     logger.info(mensaje)
     return '', 204
@@ -1785,8 +1791,6 @@ def put_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes, data):
     cod_modelo = validar_varchar('cod_modelo', cod_modelo, 20)
     anio = validar_number('anio', anio, 4)
     mes = validar_mes('mes', mes)
-    data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_modelo': cod_modelo, 'anio': anio, 'mes': mes, **data}
-    st_presupuesto_motos_pro(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -1801,6 +1805,9 @@ def put_presupuesto(empresa, cod_cliente, cod_modelo, anio, mes, data):
                                                                                                anio, mes)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
+    data = {'empresa': empresa, 'cod_cliente': cod_cliente, 'cod_modelo': cod_modelo, 'anio': anio, 'mes': mes, **data,
+            'audit_usuario_ing': presupuesto.audit_usuario_ing}
+    st_presupuesto_motos_pro(**data)
     presupuesto.unidades = data['unidades']
     presupuesto.sell_out = data.get('sell_out')
     cod_linea, cod_tipo_linea = data.get('cod_linea'), data.get('cod_tipo_linea')
@@ -1893,9 +1900,9 @@ def post_presupuesto_tipo_cli(empresa, cod_tipo_cliente, cod_modelo, anio, mes, 
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     if db.session.get(st_presupuesto_motos_tipo_cli_pro, (empresa, cod_tipo_cliente, cod_modelo, anio, mes)):
-        mensaje = 'El presupuesto del tipo cliente {}, modelo {}, año {} y mes {mes} ya existe'.format(cod_tipo_cliente,
-                                                                                                       cod_modelo, anio,
-                                                                                                       mes)
+        mensaje = 'El presupuesto del tipo cliente {}, modelo {}, año {} y mes {} ya existe'.format(cod_tipo_cliente,
+                                                                                                    cod_modelo, anio,
+                                                                                                    mes)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     db.session.add(presupuesto)
@@ -1918,9 +1925,6 @@ def put_presupuesto_tipo_cli(empresa, cod_tipo_cliente, cod_modelo, anio, mes, d
     cod_modelo = validar_varchar('cod_modelo', cod_modelo, 20)
     anio = validar_number('anio', anio, 4)
     mes = validar_mes('mes', mes)
-    data = {'empresa': empresa, 'cod_tipo_cliente': cod_tipo_cliente, 'cod_modelo': cod_modelo, 'anio': anio,
-            'mes': mes, **data}
-    st_presupuesto_motos_tipo_cli_pro(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
         logger.error(mensaje)
@@ -1932,6 +1936,9 @@ def put_presupuesto_tipo_cli(empresa, cod_tipo_cliente, cod_modelo, anio, mes, d
                                                                                                     mes)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
+    data = {'empresa': empresa, 'cod_tipo_cliente': cod_tipo_cliente, 'cod_modelo': cod_modelo, 'anio': anio,
+            'mes': mes, **data, 'audit_usuario_ing': presupuesto.audit_usuario_ing}
+    st_presupuesto_motos_tipo_cli_pro(**data)
     presupuesto.unidades = data['unidades']
     presupuesto.sell_out = data.get('sell_out')
     presupuesto.audit_usuario_mod = get_jwt_identity()

@@ -507,12 +507,13 @@ def post_opcion_pregunta_encuesta(cod_pregunta, data):
 def put_opcion_pregunta_encuesta(cod_pregunta, orden, data):
     cod_pregunta = validar_number('cod_pregunta', cod_pregunta, 3)
     orden = validar_number('orden', orden, 3)
-    data = {**data, "cod_pregunta": cod_pregunta, "orden": orden}
     opcion = db.session.get(st_opcion_pregunta, (cod_pregunta, orden))
     if not opcion:
         mensaje = 'No existe una opción con orden {} para la pregunta {}'.format(orden, cod_pregunta)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
+    data = {**data, "cod_pregunta": cod_pregunta, "orden": orden, 'audit_usuario_ing': opcion.audit_usuario_ing}
+    st_opcion_pregunta(**data)
     opcion.opcion = data['opcion']
     opcion.audit_usuario_mod = get_jwt_identity()
     opcion.audit_fecha_mod = text('sysdate')
