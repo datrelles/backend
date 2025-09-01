@@ -23,6 +23,13 @@ class tipo_estado(CustomEnum):
     INACTIVO = 0
 
 
+class tipo_estado_activacion(CustomEnum):
+    PENDIENTE = 0
+    PRE_APROBADA = 1
+    APROBADA = 2
+    RECHAZADA = 3
+
+
 class tipo_factor(CustomEnum):
     PARAMETRO = 'PAR'
     NUMERO = 'NUM'

@@ -13,7 +13,8 @@ from src.exceptions import validation_error
 from src.models.catalogos_bench import Marca, Segmento
 from src.models.clientes import cliente_hor, Cliente
 from src.models.modulo_activaciones import st_activacion, st_cliente_direccion_guias, rh_empleados, st_promotor_tienda, \
-    ad_usuarios, st_encuesta, st_form_promotoria, st_mod_seg_frm_prom, st_mar_seg_frm_prom, st_bodega_consignacion
+    ad_usuarios, st_encuesta, st_form_promotoria, st_mod_seg_frm_prom, st_mar_seg_frm_prom, st_bodega_consignacion, \
+    st_estado_activacion
 from src.models.modulo_formulas import validar_empresa
 from src.models.proveedores import TgModeloItem, Proveedor
 from src.models.users import Empresa, Usuario, tg_rol_usuario
@@ -165,7 +166,7 @@ def get_tipos_activacion(empresa):
 @jwt_required()
 @cross_origin()
 @handle_exceptions("consultar las activaciones")
-def get_activaciones_por_promotor(empresa):
+def get_activaciones(empresa):
     empresa = validar_number('empresa', empresa, 2)
     cod_promotor = validar_varchar('cod_promotor', request.args.get('cod_promotor'), 20, False)
     cod_cliente = validar_varchar('cod_cliente', request.args.get("cod_cliente"), 14, False)
@@ -201,7 +202,8 @@ def get_activaciones_por_promotor(empresa):
         activaciones = activaciones.filter(st_activacion.fecha_act.between(fecha_inicio, fecha_fin))
     activaciones = activaciones.all()
     return jsonify(
-        st_activacion.to_list(activaciones, ["promotor", "cliente", "cliente_hor", "tienda", "bodega", "proveedor"]))
+        st_activacion.to_list(activaciones,
+                              ["promotor", "cliente", "cliente_hor", "tienda", "bodega", "proveedor", "estados"]))
 
 
 @activaciones_b.route("/empresas/<empresa>/activaciones", methods=["POST"])
@@ -270,13 +272,27 @@ def put_activacion(cod_activacion, data):
         mensaje = 'Activación {} inexistente'.format(cod_activacion)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    data = {**data, 'empresa': activacion.empresa, 'cod_promotor': activacion.cod_promotor}
+    estado = data.pop('estado', None)
+    data = {'cod_cliente': activacion.cod_cliente, 'cod_tienda': activacion.cod_tienda,
+            'cod_proveedor': activacion.cod_proveedor,
+            'cod_modelo_act': activacion.cod_modelo_act,
+            'cod_item_act': activacion.cod_item_act,
+            'hora_inicio': activacion.hora_inicio,
+            'hora_fin': activacion.hora_fin,
+            'fecha_act': activacion.fecha_act.strftime("%Y-%m-%d"),
+            'num_exhi_motos': activacion.num_exhi_motos,
+            **data,
+            'empresa': activacion.empresa,
+            'cod_promotor': activacion.cod_promotor}
     st_activacion(**data)
+    if estado:
+        estado = st_estado_activacion(**estado, cod_activacion=cod_activacion)
+        activacion.estado = estado.estado
+        db.session.add(estado)
     if not db.session.get(Cliente, (data['empresa'], data['cod_cliente'])):
         mensaje = 'Cliente {} inexistente'.format(data['cod_cliente'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-
     tienda = db.session.get(st_cliente_direccion_guias, (data['empresa'], data['cod_cliente'], data['cod_tienda']))
     if not tienda:
         mensaje = 'Tienda {} inexistente'.format(data['cod_tienda'])

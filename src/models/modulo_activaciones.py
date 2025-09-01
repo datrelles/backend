@@ -3,6 +3,7 @@ from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.orm import declarative_base, validates, relationship, foreign
 from src.config.database import db
 from src.enums import tipo_estado
+from src.enums.validation import tipo_estado_activacion
 from src.models.clientes import Cliente, cliente_hor
 from src.models.custom_base import custom_base
 from src.models.proveedores import Proveedor
@@ -19,6 +20,11 @@ def validar_empresa(clave, valor):
 
 def validar_estado(clave, valor, es_requerido=True):
     return validar_number(clave, valor, 1, es_requerido=es_requerido, valores_permitidos=tipo_estado.values())
+
+
+def validar_estado_activacion(clave, valor, es_requerido=True):
+    return validar_number(clave, valor, 1, es_requerido=es_requerido,
+                          valores_permitidos=tipo_estado_activacion.values())
 
 
 def validar_escala(clave, valor, es_requerido=True, inicio=1, fin=5):
@@ -227,6 +233,8 @@ class st_activacion(custom_base):
     )
     cod_modelo_act = Column(VARCHAR(8))
     cod_item_act = Column(VARCHAR(3))
+    estado = Column(NUMBER(precision=1), server_default=text("0"))
+    estados = relationship("st_estado_activacion", order_by="st_estado_activacion.cod_estado_act")
     hora_inicio = Column(VARCHAR(5), nullable=False)
     hora_fin = Column(VARCHAR(5), nullable=False)
     fecha_act = Column(DateTime, nullable=False)
@@ -269,6 +277,10 @@ class st_activacion(custom_base):
     def validar_cod_item_act(self, key, value):
         return validar_varchar(key, value, 3)
 
+    @validates('estado')
+    def validar_estado(self, key, value):
+        return validar_estado_activacion(key, value)
+
     @validates('hora_inicio')
     def validar_hora_inicio(self, key, value):
         return validar_hora(key, value)
@@ -284,6 +296,34 @@ class st_activacion(custom_base):
     @validates('num_exhi_motos')
     def validar_num_exhi_motos(self, key, value):
         return validar_number(key, value, 3, 0)
+
+
+class st_estado_activacion(custom_base):
+    __tablename__ = 'st_estado_activacion'
+    __table_args__ = (
+        ForeignKeyConstraint(['cod_activacion'],
+                             ['{}.st_activacion.cod_activacion'.format(schema_name)]),
+        {'schema': schema_name}
+    )
+
+    cod_estado_act = Column(NUMBER(precision=22), primary_key=True, server_default=FetchedValue())
+    cod_activacion = Column(NUMBER(precision=22), nullable=False)
+    estado = Column(NUMBER(precision=1), nullable=False)
+    observacion = Column(VARCHAR(200))
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False, server_default=text("user"))
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+
+    @validates('cod_activacion')
+    def validar_cod_activacion(self, key, value):
+        return validar_number(key, value, 22)
+
+    @validates('estado')
+    def validar_estado(self, key, value):
+        return validar_estado_activacion(key, value)
+
+    @validates('observacion')
+    def validar_observacion(self, key, value):
+        return validar_observacion(key, value, longitud=200)
 
 
 class st_encuesta(custom_base):
