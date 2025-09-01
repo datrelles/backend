@@ -273,7 +273,7 @@ def put_activacion(cod_activacion, data):
         mensaje = 'Activación {} inexistente'.format(cod_activacion)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
-    estado = data.pop('estado', None)  #
+    estado = data.pop('estado', None)
     data = {'cod_cliente': activacion.cod_cliente, 'cod_tienda': activacion.cod_tienda,
             'cod_proveedor': activacion.cod_proveedor, 'cod_modelo_act': activacion.cod_modelo_act,
             'cod_item_act': activacion.cod_item_act,
