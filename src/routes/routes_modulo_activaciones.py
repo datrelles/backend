@@ -467,12 +467,77 @@ def post_encuesta(empresa, data):
 def get_opciones_pregunta_encuesta(cod_pregunta):
     cod_pregunta = validar_number('cod_pregunta', cod_pregunta, 3)
     query = st_opcion_pregunta.query()
-    opciones = query.filter(st_opcion_pregunta.cod_pregunta == cod_pregunta).all()
+    opciones = query.filter(st_opcion_pregunta.cod_pregunta == cod_pregunta).order_by(st_opcion_pregunta.cod_pregunta,
+                                                                                      st_opcion_pregunta.orden).all()
     if not opciones:
-        mensaje = 'Opciones de la pregunta {} inexistentes'.format(cod_pregunta)
+        mensaje = 'No hay opciones disponibles para la pregunta {}'.format(cod_pregunta)
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 404
     return jsonify(st_opcion_pregunta.to_list(opciones))
+
+
+@activaciones_b.route("/preguntas/<cod_pregunta>/opciones", methods=["POST"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("registrar una opción de la pregunta de la encuesta")
+def post_opcion_pregunta_encuesta(cod_pregunta, data):
+    cod_pregunta = validar_number('cod_pregunta', cod_pregunta, 3)
+    data = {**data, "cod_pregunta": cod_pregunta}
+    st_opcion_pregunta(**data)
+    opcion = db.session.get(st_opcion_pregunta, (cod_pregunta, data['orden']))
+    if opcion:
+        mensaje = 'Ya existe una opción con orden {} para la pregunta {}'.format(data['orden'], cod_pregunta)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 409
+    opcion = st_opcion_pregunta(**data)
+    db.session.add(opcion)
+    db.session.commit()
+    mensaje = 'Se registró la opción con orden {} para la pregunta {}'.format(data['orden'], cod_pregunta)
+    logger.info(mensaje)
+    return jsonify({'mensaje': mensaje}), 201
+
+
+@activaciones_b.route("/preguntas/<cod_pregunta>/opciones/<orden>", methods=["PUT"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("registrar una opción de la pregunta de la encuesta")
+def put_opcion_pregunta_encuesta(cod_pregunta, orden, data):
+    cod_pregunta = validar_number('cod_pregunta', cod_pregunta, 3)
+    orden = validar_number('orden', orden, 3)
+    data = {**data, "cod_pregunta": cod_pregunta, "orden": orden}
+    opcion = db.session.get(st_opcion_pregunta, (cod_pregunta, orden))
+    if not opcion:
+        mensaje = 'No existe una opción con orden {} para la pregunta {}'.format(orden, cod_pregunta)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    opcion.opcion = data['opcion']
+    opcion.audit_usuario_mod = text('user')
+    opcion.audit_fecha_mod = text('sysdate')
+    db.session.commit()
+    mensaje = 'Se actualizó la opción con orden {} para la pregunta {}'.format(orden, cod_pregunta)
+    logger.info(mensaje)
+    return '', 204
+
+
+@activaciones_b.route("/preguntas/<cod_pregunta>/opciones/<orden>", methods=["DELETE"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("eliminar una opción de la pregunta de la encuesta")
+def delete_opcion_pregunta_encuesta(cod_pregunta, orden):
+    cod_pregunta = validar_number('cod_pregunta', cod_pregunta, 3)
+    orden = validar_number('orden', orden, 3)
+    opcion = db.session.get(st_opcion_pregunta, (cod_pregunta, orden))
+    if not opcion:
+        mensaje = 'No existe una opción con orden {} para la pregunta {}'.format(orden, cod_pregunta)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    db.session.delete(opcion)
+    db.session.commit()
+    mensaje = 'Se eliminó la opción con orden {} para la pregunta {}'.format(orden, cod_pregunta)
+    logger.info(mensaje)
+    return '', 204
 
 
 @activaciones_b.route("/catalogo-segmentos", methods=["GET"])
@@ -535,7 +600,8 @@ def get_marcas():
     query = db.session.query(Marca)
     marcas = query.filter(Marca.estado_marca == 1)
     if segmento:
-        marcas = marcas.join(Segmento, (Segmento.codigo_marca == Marca.codigo_marca)).filter(Segmento.nombre_segmento.like("%{}%".format(segmento)))
+        marcas = marcas.join(Segmento, (Segmento.codigo_marca == Marca.codigo_marca)).filter(
+            Segmento.nombre_segmento.like("%{}%".format(segmento)))
     marcas = marcas.all()
     result = [{"codigo_marca": marca.codigo_marca, "nombre_marca": marca.nombre_marca} for marca in marcas]
     return jsonify(result)
