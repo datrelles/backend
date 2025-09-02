@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 from flask import request, jsonify
 import cx_Oracle
 
+class AgenteNoEncontrado(Exception):
+    pass
+
 def parse_date(date_string):
     if date_string:
         return datetime.strptime(date_string, '%d/%m/%Y').date()
@@ -285,11 +288,10 @@ def get_pedidos_get():
 
 
 @bplog.route('/info_moto', methods=['POST'])
-@jwt_required()
+# @jwt_required()
 @cross_origin()
 def info_moto():
     data = request.json or {}
-
     cod_comprobante = data.get('cod_comprobante')
     tipo_comprobante = data.get('tipo_comprobante')
     cod_producto = data.get('cod_producto')
@@ -328,7 +330,6 @@ def info_moto():
                 row = cur.fetchone()
                 return int(row[0]) if row and row[0] is not None else 0
 
-        # x: ¿está la serie en la bodega_actual y aparece en el comprobante?
         sql_x = """
             select count(*) as x
             from st_prod_packing_list a, st_inventario_serie b, producto p
@@ -355,7 +356,7 @@ def info_moto():
         })
 
         if x != 0:
-###################################################################################################
+#################################PROCESO BODEGA INTERNA##################################################################
             with db1.cursor() as cur:
                 cur.execute("""
                     select a.*
@@ -370,8 +371,7 @@ def info_moto():
                 row = cur.fetchone()
                 if not row:
                     return jsonify({"error": "Serie no encontrada en bodega 5"}), 404
-                # asumir columnas en orden; mejor usa nombres si mapeas
-                # si necesitas exactamente COD_PRODUCTO por nombre:
+
                 colnames = [d[0] for d in cur.description]
                 cod_prod = row[colnames.index('COD_PRODUCTO')]
 
@@ -450,54 +450,218 @@ def info_moto():
                 return jsonify({
                     "error": f"Existen {v_series_antiguas_5} serie(s) más antigua(s) que la actual. Utilice esa(s) primero."
                 }), 409
-            def obtener_siguiente_secuencia(db1, *, empresa, cod_comprobante, tipo_comprobante) -> int:
+
+#######################################CAMBIA ESTADO#############################################################
+            def consulta_producto_serie(db1, *, empresa, cod_producto, cod_serie):
                 sql = """
-                                select nvl(max(secuencia),0)+1 as next_seq
-                                  from sta_transferencia x
-                                 where x.cod_comprobante = :cod_comprobante
-                                   and x.cod_tipo_comprobante = :tipo_comprobante
-                                   and x.empresa = :empresa
+                                SELECT *
+                                  FROM stock.st_producto_serie
+                                 WHERE empresa = :empresa
+                                   AND cod_producto = :cod_producto
+                                   AND numero_serie = :cod_serie
                             """
                 with db1.cursor() as cur:
                     cur.execute(sql, {
-                        "cod_comprobante": cod_comprobante,
-                        "tipo_comprobante": tipo_comprobante,
-                        "empresa": empresa
+                        "empresa": empresa,
+                        "cod_producto": cod_producto,
+                        "cod_serie": cod_serie
                     })
                     row = cur.fetchone()
-                    # Si la tabla estuviera vacía, NVL(MAX(...),0)+1 ya devuelve 1
-                    return int(row[0]) if row and row[0] is not None else 1
+
+                    if row:
+                        columns = [col[0].lower() for col in cur.description]
+                        return dict(zip(columns, row))
+                    else:
+                        return None
+
+            reg_producto_serie = consulta_producto_serie(db1, empresa=empresa, cod_producto=cod_producto,
+                cod_serie=cod_motor)
+            if reg_producto_serie["cod_estado_producto"] != 'L':
+                def _obtener_agente_y_useridc(db1):
+
+                    sql = """
+                        SELECT b.cod_vendedor, a.useridc_anterior
+                          FROM ad_usuarios a
+                          JOIN st_vendedor b
+                            ON a.identificacion = REPLACE(b.cedula, '-')
+                         WHERE a.codigo_usuario = USER
+                           AND b.activo = 'S'
+                    """
+                    with db1.cursor() as cur:
+                        cur.execute(sql)
+                        row = cur.fetchone()
+                        if not row:
+                            return jsonify({"error": "No existe Código de Agente para el usuario actual (USER)."}), 500
+
+                        return {"cod_agente": row[0], "useridc": row[1]}
+
+                def ejecutar_transferencia_y_comprobantes(
+                        db1,
+                        *,
+                        empresa: int,
+                        reg_producto_serie: dict,
+                        estado_nuevo: str,
+                        numero_agencia: int,
+                        tipo_comprobante: str,
+                        cod_comprobante: str,
+                        # Parámetros “_g” usados por tus procedimientos finales
+                        empresa_g: int,
+                        cod_tipo_comprobante_g: str,
+                        cod_comprobante_g: str,
+                ):
+
+                    # Validación mínima del registro requerido
+                    for k in ("cod_producto", "numero_serie", "cod_estado_producto"):
+                        if k not in reg_producto_serie:
+                            raise ValueError(f"Falta la clave requerida '{k}' en reg_producto_serie")
+
+                    try:
+                        datos_agente = _obtener_agente_y_useridc(db1)
+                        v_cod_agente = datos_agente["cod_agente"]
+                        v_useridc = datos_agente["useridc"]
+
+                        with db1.cursor() as cur:
+
+                            v_tipo_comprobante = cur.var(str)  # Si es VARCHAR2
+                            v_cod_comprobante = cur.var(str)
+                            v_cod_tipo_comprobante_g = cur.var(str)  # Si es VARCHAR2
+                            v_cod_comprobante_g = cur.var(str)
+
+                            cur.callproc(
+                                "KS_TRANSFERENCIA.CAMBIO_ESTADO",
+                                [
+                                    empresa,
+                                    reg_producto_serie["cod_producto"],
+                                    reg_producto_serie["numero_serie"],
+                                    reg_producto_serie["cod_estado_producto"],
+                                    estado_nuevo,
+                                    numero_agencia,
+                                    v_tipo_comprobante, #out
+                                    v_cod_comprobante, #out
+                                ],
+                            )
+                            v_tipo_comprobante = v_tipo_comprobante.getvalue()
+                            v_cod_comprobante = v_cod_comprobante.getvalue()
 
 
-            secuencia = obtener_siguiente_secuencia(
-                db1,
-                empresa=empresa,
-                cod_comprobante=cod_comprobante,
-                tipo_comprobante=tipo_comprobante
-            )
+                            cur.callproc(
+                                "KSA_COMPROBANTE.GRABA_TS",
+                                [
+                                    empresa,
+                                    v_tipo_comprobante,
+                                    v_cod_comprobante,
+                                    "VEN",
+                                    v_cod_agente,
+                                    numero_agencia,
+                                    v_useridc,
+                                    empresa_g,  #out
+                                    v_cod_tipo_comprobante_g,  #out
+                                    v_cod_comprobante_g,  #out
+                                ],
+                            )
 
-            with db1.cursor() as cur:
-                cur.execute("""
-                    insert into STA_TRANSFERENCIA (
-                        COD_COMPROBANTE, COD_TIPO_COMPROBANTE, EMPRESA, SECUENCIA,
-                        COD_PRODUCTO, COD_UNIDAD, CANTIDAD, ES_SERIE, NUMERO_SERIE,
-                        COD_ESTADO_PRODUCTO, COD_ESTADO_PRODUCTO_ING, ES_TRANSFERENCIA_ESTADO
-                    ) values (
-                        :cod_comprobante, :tipo_comprobante, :empresa, :secuencia,
-                        :cod_producto, 'U', 1, 1, :numero_serie, 'L', 'L', 0
+                            v_cod_tipo_comprobante_g = v_cod_tipo_comprobante_g.getvalue()
+                            v_cod_comprobante_g = v_cod_comprobante_g.getvalue()
+
+                            cur.callproc(
+                                "KSA_COMPROBANTE.GRABA_NE",
+                                [
+                                    empresa,
+                                    v_cod_tipo_comprobante_g,
+                                    v_cod_comprobante_g,
+                                    empresa_g,
+                                    v_tipo_comprobante,
+                                    v_cod_comprobante,
+                                ],
+                            )
+                            print("graba_ne")
+                        # Todo ok, confirmamos
+                        db1.commit()
+
+                        return {
+                            "ok": True,
+                            "mensaje": "Transferencia y comprobantes procesados correctamente.",
+                            "cod_agente": v_cod_agente,
+                            "useridc": v_useridc,
+                            "tipo_comprobante": tipo_comprobante,
+                            "cod_comprobante": cod_comprobante,
+                            "cod_tipo_comprobante_g": cod_tipo_comprobante_g,
+                            "cod_comprobante_g": cod_comprobante_g,
+                        }
+
+                    except AgenteNoEncontrado as e:
+                        db1.rollback()
+                        return {
+                            "ok": False,
+                            "mensaje": str(e),
+                            "codigo": "AGENTE_NO_ENCONTRADO",
+                        }
+                    except Exception as e:
+                        db1.rollback()
+                        raise
+
+                resultado = ejecutar_transferencia_y_comprobantes(
+                    db1,
+                    empresa=empresa,
+                    reg_producto_serie=reg_producto_serie,
+                    estado_nuevo='L',
+                    numero_agencia=cod_bodega,
+                    tipo_comprobante=tipo_comprobante,
+                    cod_comprobante=cod_comprobante,
+                    empresa_g=empresa,
+                    cod_tipo_comprobante_g=tipo_comprobante,
+                    cod_comprobante_g=cod_comprobante,
+                )
+                if resultado["ok"]:
+                    def obtener_siguiente_secuencia(db1, *, empresa, cod_comprobante, tipo_comprobante) -> int:
+                        sql = """
+                                        select nvl(max(secuencia),0)+1 as next_seq
+                                          from sta_transferencia x
+                                         where x.cod_comprobante = :cod_comprobante
+                                           and x.cod_tipo_comprobante = :tipo_comprobante
+                                           and x.empresa = :empresa
+                                    """
+                        with db1.cursor() as cur:
+                            cur.execute(sql, {
+                                "cod_comprobante": cod_comprobante,
+                                "tipo_comprobante": tipo_comprobante,
+                                "empresa": empresa
+                            })
+                            row = cur.fetchone()
+                            return int(row[0]) if row and row[0] is not None else 1
+
+                    secuencia = obtener_siguiente_secuencia(
+                        db1,
+                        empresa=empresa,
+                        cod_comprobante=cod_comprobante,
+                        tipo_comprobante=tipo_comprobante
                     )
-                """, {
-                    "cod_comprobante": cod_comprobante,
-                    "tipo_comprobante": tipo_comprobante,
-                    "empresa": empresa,
-                    "secuencia": secuencia,
-                    "cod_producto": cod_prod,     # o el que corresponda en tu flujo
-                    "numero_serie": cod_motor
-                })
-            db1.commit()
 
-            return jsonify({"ok": "Proceso de bodega interna"}), 200
-###################################################################################################
+                    with db1.cursor() as cur:
+                        cur.execute("""
+                            insert into STA_TRANSFERENCIA (
+                                COD_COMPROBANTE, COD_TIPO_COMPROBANTE, EMPRESA, SECUENCIA,
+                                COD_PRODUCTO, COD_UNIDAD, CANTIDAD, ES_SERIE, NUMERO_SERIE,
+                                COD_ESTADO_PRODUCTO, COD_ESTADO_PRODUCTO_ING, ES_TRANSFERENCIA_ESTADO
+                            ) values (
+                                :cod_comprobante, :tipo_comprobante, :empresa, :secuencia,
+                                :cod_producto, 'U', 1, 1, :numero_serie, 'L', 'L', 0
+                            )
+                        """, {
+                            "cod_comprobante": cod_comprobante,
+                            "tipo_comprobante": tipo_comprobante,
+                            "empresa": empresa,
+                            "secuencia": secuencia,
+                            "cod_producto": cod_prod,
+                            "numero_serie": cod_motor
+                        })
+                    db1.commit()
+
+                    return jsonify({"ok": "Proceso de bodega interna"}), 200
+                else:
+                    jsonify({"error": "Serie actual ya está asignada previamente"}), 500
+
+#####################################PROCESO BODEGA B1##############################################################
 
         # y: ¿está en bodega_contra o en 5?
         sql_y = """
