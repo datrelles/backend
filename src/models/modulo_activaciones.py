@@ -383,6 +383,9 @@ class st_encuesta(custom_base):
         viewonly=True,
         uselist=False
     )
+    respuestas_multiples = relationship(
+        "st_respuesta_multiple", order_by="st_respuesta_multiple.cod_pregunta"#[, "st_respuesta_multiple.opcion"]
+    )
     limp_orden = Column(NUMBER(1), nullable=False)
     pop_actual = Column(NUMBER(1), nullable=False)
     pop_actual_obs = Column(VARCHAR(500))
@@ -395,6 +398,7 @@ class st_encuesta(custom_base):
     conoc_portaf = Column(NUMBER(1), nullable=False)
     conoc_prod = Column(NUMBER(1), nullable=False)
     conoc_garan = Column(NUMBER(1), nullable=False)
+    existe_promo = Column(NUMBER(1), nullable=False)
     conoc_promo = Column(NUMBER(1))
     confor_shine = Column(NUMBER(1))
     confor_compe = Column(NUMBER(1))
@@ -497,6 +501,24 @@ class st_encuesta(custom_base):
     @validates('ubi_talleres')
     def validar_ubi_talleres(self, key, value):
         return validar_escala(key, value)
+
+
+class st_respuesta_multiple(custom_base):
+    __tablename__ = 'st_respuesta_multiple'
+    __table_args__ = (
+        ForeignKeyConstraint(['cod_encuesta'],
+                             ['{}.st_encuesta.cod_encuesta'.format(schema_name)]),
+        ForeignKeyConstraint(['cod_pregunta', 'opcion'],
+                             ['{}.st_opcion_pregunta.cod_pregunta'.format(schema_name),
+                              '{}.st_opcion_pregunta.orden'.format(schema_name)]),
+        {'schema': schema_name}
+    )
+
+    cod_encuesta = Column(NUMBER(precision=22), primary_key=True)
+    cod_pregunta = Column(NUMBER(precision=3), primary_key=True)
+    opcion = Column(NUMBER(precision=3), primary_key=True)
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False)
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
 
 
 class st_opcion_pregunta(custom_base):

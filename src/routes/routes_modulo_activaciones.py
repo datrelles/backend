@@ -15,7 +15,7 @@ from src.models.catalogos_bench import Marca, Segmento
 from src.models.clientes import cliente_hor, Cliente
 from src.models.modulo_activaciones import st_activacion, st_cliente_direccion_guias, rh_empleados, st_promotor_tienda, \
     ad_usuarios, st_encuesta, st_form_promotoria, st_mod_seg_frm_prom, st_mar_seg_frm_prom, st_bodega_consignacion, \
-    st_estado_activacion, st_opcion_pregunta
+    st_estado_activacion, st_opcion_pregunta, st_respuesta_multiple
 from src.models.modulo_formulas import validar_empresa
 from src.models.proveedores import TgModeloItem, Proveedor
 from src.models.users import Empresa, Usuario, tg_rol_usuario
@@ -398,7 +398,8 @@ def get_encuestas(empresa):
         encuestas = encuestas.filter(st_encuesta.audit_fecha_ing.between(fecha_inicio, fecha_fin))
     encuestas = encuestas.all()
     return jsonify(
-        st_encuesta.to_list(encuestas, ["promotor", "cliente", "cliente_hor", "tienda", "bodega"]))
+        st_encuesta.to_list(encuestas,
+                            ["promotor", "cliente", "cliente_hor", "tienda", "bodega", "respuestas_multiples"]))
 
 
 @activaciones_b.route("/empresas/<empresa>/encuestas", methods=["POST"])
@@ -408,6 +409,7 @@ def get_encuestas(empresa):
 @handle_exceptions("registrar la encuesta")
 def post_encuesta(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
+    opcion_multiple = data.pop('opcion_multiple', None)
     data = {'empresa': empresa, **data, 'audit_usuario_ing': get_jwt_identity()}
     encuesta = st_encuesta(**data)
     if not db.session.get(Empresa, empresa):
@@ -455,6 +457,10 @@ def post_encuesta(empresa, data):
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     db.session.add(encuesta)
+    db.session.flush()
+    for opc in opcion_multiple:
+        opc = {**opc, 'cod_encuesta': encuesta.cod_encuesta, 'audit_usuario_ing': get_jwt_identity()}
+        db.session.add(st_respuesta_multiple(**opc))
     db.session.commit()
     mensaje = 'Se registró la encuesta {}'.format(encuesta.cod_encuesta)
     logger.info(mensaje)
