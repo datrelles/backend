@@ -288,6 +288,10 @@ def put_activacion(cod_activacion, data):
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
         estado = st_estado_activacion(**estado, cod_activacion=cod_activacion)
+        if estado.estado == activacion.estado:
+            mensaje = 'No se puede actualizar el estado de una activación con el mismo valor actual'
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 409
         activacion.estado = estado.estado
         db.session.add(estado)
     if not db.session.get(Cliente, (data['empresa'], data['cod_cliente'])):
@@ -410,7 +414,7 @@ def get_encuestas(empresa):
 def post_encuesta(empresa, data):
     empresa = validar_number('empresa', empresa, 2)
     opcion_multiple = data.pop('opcion_multiple', None)
-    data = {'empresa': empresa, **data, 'audit_usuario_ing': get_jwt_identity()}
+    data = {**data, 'empresa': empresa, 'audit_usuario_ing': get_jwt_identity()}
     encuesta = st_encuesta(**data)
     if not db.session.get(Empresa, empresa):
         mensaje = 'Empresa {} inexistente'.format(empresa)
@@ -446,14 +450,6 @@ def post_encuesta(empresa, data):
         return jsonify({'mensaje': mensaje}), 404
     if rol.cod_rol != 'PROM_RET' and data.get('prec_vis_corr'):
         mensaje = "Solo los promotores de retail pueden responder a la pregunta de 'precios visibles y correctos'"
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 409
-    if data.get('estado_publi') != 0 and data.get('estado_publi_obs'):
-        mensaje = "Solo si la respuesta del estado de publicidad de la marca es no, debe existir observación al respecto"
-        logger.error(mensaje)
-        return jsonify({'mensaje': mensaje}), 409
-    if data.get('confor_compe') is None and data.get('confor_compe_obs'):
-        mensaje = "Si la conformidad del incentivo actual de la competencia no aplica, no debe existir observación al respecto"
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 409
     db.session.add(encuesta)

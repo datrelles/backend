@@ -35,7 +35,7 @@ def validar_number(clave, valor, digitos_enteros, digitos_decimales=0, es_requer
         if valor is None or valor == '':
             return None
     try:
-        valor = float(valor) if '.' in str(valor) else int(valor)
+        valor = float(valor) if '.' in str(valor) and float(valor) % 1 != 0 else int(valor)
     except Exception as e:
         raise validation_error(campo=clave, categoria=categoria_excepcion.TIPO.value)
     if es_positivo and valor < 0:

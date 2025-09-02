@@ -384,25 +384,25 @@ class st_encuesta(custom_base):
         uselist=False
     )
     respuestas_multiples = relationship(
-        "st_respuesta_multiple", order_by="st_respuesta_multiple.cod_pregunta"#[, "st_respuesta_multiple.opcion"]
+        "st_respuesta_multiple", order_by="st_respuesta_multiple.cod_pregunta"
     )
     limp_orden = Column(NUMBER(1), nullable=False)
     pop_actual = Column(NUMBER(1), nullable=False)
-    pop_actual_obs = Column(VARCHAR(500))
     pop_sufic = Column(NUMBER(3), nullable=False)
     prec_vis_corr = Column(NUMBER(1))
     motos_desper = Column(NUMBER(1), nullable=False)
-    motos_desper_obs = Column(VARCHAR(500))
+    motos_falt = Column(NUMBER(1), nullable=False)
+    motos_bat = Column(NUMBER(1), nullable=False)
     estado_publi = Column(NUMBER(1))
-    estado_publi_obs = Column(VARCHAR(500))
     conoc_portaf = Column(NUMBER(1), nullable=False)
     conoc_prod = Column(NUMBER(1), nullable=False)
     conoc_garan = Column(NUMBER(1), nullable=False)
     existe_promo = Column(NUMBER(1), nullable=False)
     conoc_promo = Column(NUMBER(1))
-    confor_shine = Column(NUMBER(1))
-    confor_compe = Column(NUMBER(1))
-    confor_compe_obs = Column(VARCHAR(500))
+    confor_shine_j = Column(NUMBER(1))
+    confor_shine_v = Column(NUMBER(1))
+    confor_compe_j = Column(NUMBER(1))
+    confor_compe_v = Column(NUMBER(1))
     conoc_shibot = Column(NUMBER(1), nullable=False)
     ubi_talleres = Column(NUMBER(1), nullable=False)
     audit_usuario_ing = Column(VARCHAR(30), nullable=False)
@@ -438,10 +438,6 @@ class st_encuesta(custom_base):
     def validar_pop_actual(self, key, value):
         return validar_estado(key, value)
 
-    @validates('pop_actual_obs')
-    def validar_pop_actual_obs(self, key, value):
-        return validar_observacion(key, value)
-
     @validates('pop_sufic')
     def validar_pop_sufic(self, key, value):
         return validar_number(key, value, 3, valores_permitidos=range(101))
@@ -454,17 +450,17 @@ class st_encuesta(custom_base):
     def validar_motos_desper(self, key, value):
         return validar_estado(key, value)
 
-    @validates('motos_desper_obs')
-    def validar_motos_desper_obs(self, key, value):
-        return validar_observacion(key, value)
+    @validates('motos_falt')
+    def validar_motos_falt(self, key, value):
+        return validar_estado(key, value)
+
+    @validates('motos_bat')
+    def validar_motos_bat(self, key, value):
+        return validar_estado(key, value)
 
     @validates('estado_publi')
     def validar_estado_publi(self, key, value):
         return validar_estado(key, value, es_requerido=False)
-
-    @validates('estado_publi_obs')
-    def validar_estado_publi_obs(self, key, value):
-        return validar_observacion(key, value)
 
     @validates('conoc_portaf')
     def validar_conoc_portaf(self, key, value):
@@ -482,17 +478,21 @@ class st_encuesta(custom_base):
     def validar_conoc_promo(self, key, value):
         return validar_estado(key, value, es_requerido=False)
 
-    @validates('confor_shine')
-    def validar_confor_shine(self, key, value):
+    @validates('confor_shine_j')
+    def validar_confor_shine_j(self, key, value):
         return validar_escala(key, value, es_requerido=False)
 
-    @validates('confor_compe')
-    def validar_confor_compe(self, key, value):
+    @validates('confor_shine_v')
+    def validar_confor_shine_v(self, key, value):
         return validar_escala(key, value, es_requerido=False)
 
-    @validates('confor_compe_obs')
-    def validar_confor_compe_obs(self, key, value):
-        return validar_observacion(key, value)
+    @validates('confor_compe_j')
+    def validar_confor_compe_j(self, key, value):
+        return validar_escala(key, value, es_requerido=False)
+
+    @validates('confor_compe_v')
+    def validar_confor_compe_v(self, key, value):
+        return validar_escala(key, value, es_requerido=False)
 
     @validates('conoc_shibot')
     def validar_conoc_shibot(self, key, value):
@@ -500,25 +500,7 @@ class st_encuesta(custom_base):
 
     @validates('ubi_talleres')
     def validar_ubi_talleres(self, key, value):
-        return validar_escala(key, value)
-
-
-class st_respuesta_multiple(custom_base):
-    __tablename__ = 'st_respuesta_multiple'
-    __table_args__ = (
-        ForeignKeyConstraint(['cod_encuesta'],
-                             ['{}.st_encuesta.cod_encuesta'.format(schema_name)]),
-        ForeignKeyConstraint(['cod_pregunta', 'opcion'],
-                             ['{}.st_opcion_pregunta.cod_pregunta'.format(schema_name),
-                              '{}.st_opcion_pregunta.orden'.format(schema_name)]),
-        {'schema': schema_name}
-    )
-
-    cod_encuesta = Column(NUMBER(precision=22), primary_key=True)
-    cod_pregunta = Column(NUMBER(precision=3), primary_key=True)
-    opcion = Column(NUMBER(precision=3), primary_key=True)
-    audit_usuario_ing = Column(VARCHAR(30), nullable=False)
-    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+        return validar_estado(key, value)
 
 
 class st_opcion_pregunta(custom_base):
@@ -544,6 +526,46 @@ class st_opcion_pregunta(custom_base):
     @validates('opcion')
     def validar_opcion(self, key, value):
         return validar_varchar(key, value, 100)
+
+
+class st_respuesta_multiple(custom_base):
+    __tablename__ = 'st_respuesta_multiple'
+    __table_args__ = (
+        ForeignKeyConstraint(['cod_encuesta'],
+                             ['{}.st_encuesta.cod_encuesta'.format(schema_name)]),
+        ForeignKeyConstraint(['cod_pregunta', 'opcion'],
+                             ['{}.st_opcion_pregunta.cod_pregunta'.format(schema_name),
+                              '{}.st_opcion_pregunta.orden'.format(schema_name)]),
+        {'schema': schema_name}
+    )
+
+    cod_encuesta = Column(NUMBER(precision=22), primary_key=True)
+    cod_pregunta = Column(NUMBER(precision=3), primary_key=True)
+    opcion = Column(NUMBER(precision=3), primary_key=True)
+    texto = Column(VARCHAR(100))
+    numero = Column(NUMBER(8, 2))
+    audit_usuario_ing = Column(VARCHAR(30), nullable=False)
+    audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
+
+    @validates('cod_encuesta')
+    def validar_cod_encuesta(self, key, value):
+        return validar_number(key, value, 22)
+
+    @validates('cod_pregunta')
+    def validar_cod_pregunta(self, key, value):
+        return validar_number(key, value, 3)
+
+    @validates('opcion')
+    def validar_opcion(self, key, value):
+        return validar_number(key, value, 3)
+
+    @validates('texto')
+    def validar_texto(self, key, value):
+        return validar_varchar(key, value, 100, False)
+
+    @validates('numero')
+    def validar_numero(self, key, value):
+        return validar_number(key, value, 8, 2, False)
 
 
 class st_form_promotoria(custom_base):
