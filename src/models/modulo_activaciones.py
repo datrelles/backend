@@ -474,6 +474,10 @@ class st_encuesta(custom_base):
     def validar_conoc_garan(self, key, value):
         return validar_escala(key, value)
 
+    @validates('existe_promo')
+    def validar_existe_promo(self, key, value):
+        return validar_estado(key, value, es_requerido=False)
+
     @validates('conoc_promo')
     def validar_conoc_promo(self, key, value):
         return validar_estado(key, value, es_requerido=False)
