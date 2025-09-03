@@ -1,10 +1,11 @@
 from functools import reduce
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from flask_cors import cross_origin
 import logging
 
+from flask_mail import Message
 from sqlalchemy import text, and_
 
 from src.decorators import validate_json, handle_exceptions
@@ -657,6 +658,77 @@ def get_info_tiendas(empresa, cod_cliente):
     tiendas = query.filter(st_cliente_direccion_guias.empresa == empresa,
                            st_cliente_direccion_guias.cod_cliente == cod_cliente)
     return jsonify(st_cliente_direccion_guias.to_list(tiendas, ['cliente', 'cliente_hor', 'bodega']))
+
+
+@activaciones_b.route("/empresas/<empresa>/clientes/<cod_cliente>/tiendas/<cod_tienda>/notificaciones",
+                      methods=["POST"])
+@jwt_required()
+@cross_origin()
+@handle_exceptions("notificar inconsistencia de la tienda")
+def post_notificacion_tienda(empresa, cod_cliente, cod_tienda):
+    empresa = validar_number('empresa', empresa, 2)
+    cod_cliente = validar_varchar('cod_cliente', cod_cliente, 14)
+    cod_tienda = validar_number('cod_tienda', cod_tienda, 3)
+    if not db.session.get(Empresa, empresa):
+        mensaje = 'Empresa {} inexistente'.format(empresa)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(Cliente, (empresa, cod_cliente)):
+        mensaje = 'Cliente {} inexistente'.format(cod_cliente)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    tienda = db.session.get(st_cliente_direccion_guias, (empresa, cod_cliente, cod_tienda))
+    if not tienda:
+        mensaje = 'Tienda {} inexistente'.format(cod_tienda)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if tienda and not tienda.nombre:
+        bodega = st_bodega_consignacion.query().filter(st_bodega_consignacion.empresa == tienda.empresa,
+                                                       st_bodega_consignacion.ruc_cliente == tienda.cod_cliente,
+                                                       st_bodega_consignacion.cod_direccion == tienda.cod_direccion).first()
+        if not bodega:
+            recipients = ["notificaciones.tiendas@massline.com.ec"]
+            subject = "Notificación de inconsistencia en tienda"
+            body = f"""Estimado/a,
+
+            La tienda con la siguiente información:
+            - Código: {cod_tienda}
+            - Código cliente {cod_cliente}
+            - Ciudad: {tienda.ciudad}
+            - Dirección: {tienda.direccion}
+
+            No tiene nombre asignado, ni bodega de consignación vinculada.
+
+            Por favor, proceda con la corrección respectiva para poder utilizar la tienda en los procesos que requieren que esta novedad sea solventada.
+
+
+            Atentamente,
+            El Equipo de Massline
+            sistemas@massline.com.ec
+            """
+
+            def send_mail(recipients, subject, body):
+                mail = current_app.extensions.get("mail")
+                sender_email = "sms@massline.com.ec"
+                try:
+                    msg = Message(subject, sender=sender_email, recipients=recipients)
+                    msg.body = body
+                    mail.send(msg)
+                    return True
+                except Exception as ex:
+                    print("Error al enviar correo:", ex)
+                    return False
+
+            if not send_mail(recipients, subject, body):
+                mensaje = 'No se pudo notificar la inconsistencia de la tienda {}'.format(cod_tienda)
+                logger.error(mensaje)
+                return jsonify({'mensaje': mensaje}), 500
+            mensaje = 'Se envió la notificación de la tienda {}'.format(cod_tienda)
+            logger.info(mensaje)
+            return jsonify({'mensaje': mensaje}), 201
+    mensaje = 'Solo se puede notificar a una tienda que no tenga asignado un nombre, ni bodega de consignación vinculada'
+    logger.info(mensaje)
+    return jsonify({'mensaje': mensaje}), 409
 
 
 @activaciones_b.route("/empresas/<empresa>/formularios-promotoria", methods=["GET"])
