@@ -397,7 +397,7 @@ class st_encuesta(custom_base):
     conoc_portaf = Column(NUMBER(1), nullable=False)
     conoc_prod = Column(NUMBER(1), nullable=False)
     conoc_garan = Column(NUMBER(1), nullable=False)
-    existe_promo = Column(NUMBER(1), nullable=False)
+    existe_promo = Column(NUMBER(1))
     conoc_promo = Column(NUMBER(1))
     confor_shine_j = Column(NUMBER(1))
     confor_shine_v = Column(NUMBER(1))
