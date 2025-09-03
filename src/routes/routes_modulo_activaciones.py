@@ -776,8 +776,9 @@ def get_forms_promotoria(empresa):
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
         formularios = formularios.filter(st_form_promotoria.audit_fecha_ing.between(fecha_inicio, fecha_fin))
-    return jsonify(st_form_promotoria.to_list(formularios, ['cliente', 'cliente_hor', 'tienda', 'info_tienda', 'bodega',
-                                                            'modelos_segmento', 'marcas_segmento']))
+    return jsonify(st_form_promotoria.to_list(formularios,
+                                              ['promotor', 'cliente', 'cliente_hor', 'tienda', 'info_tienda', 'bodega',
+                                               'modelos_segmento', 'marcas_segmento']))
 
 
 @activaciones_b.route("/empresas/<empresa>/formularios-promotoria", methods=["POST"])
