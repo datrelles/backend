@@ -917,3 +917,82 @@ def revertir_transferencia():
                 db1.close()
         except Exception:
             pass
+
+@bplog.route('/transferencias', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_transferencias():
+    """
+    GET /transferencias?cod_comprobante=...&cod_tipo_comprobante=...&empresa=...&cod_producto=...
+    Retorna las filas de STA_TRANSFERENCIA que coinciden con los parámetros.
+    """
+    try:
+        cod_comprobante = request.args.get('cod_comprobante', type=str)
+        cod_tipo_comprobante = request.args.get('cod_tipo_comprobante', type=str)
+        empresa = request.args.get('empresa', type=int)
+        cod_producto = request.args.get('cod_producto', type=str)  # <-- opcional
+
+        # Validación de parámetros obligatorios
+        missing = []
+        if not cod_comprobante:
+            missing.append("cod_comprobante")
+        if not cod_tipo_comprobante:
+            missing.append("cod_tipo_comprobante")
+        if empresa is None:
+            missing.append("empresa")
+
+        if missing:
+            return jsonify({"error": f"Faltan parámetros: {', '.join(missing)}"}), 400
+
+        # Conexión y consulta
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cursor = db1.cursor()
+
+        sql = """
+            SELECT
+                COD_COMPROBANTE,
+                COD_TIPO_COMPROBANTE,
+                EMPRESA,
+                SECUENCIA,
+                COD_PRODUCTO,
+                COD_UNIDAD,
+                CANTIDAD,
+                ES_SERIE,
+                NUMERO_SERIE,
+                COD_ESTADO_PRODUCTO,
+                COD_ESTADO_PRODUCTO_ING,
+                ES_TRANSFERENCIA_ESTADO,
+                FECHA_ADICION
+            FROM STA_TRANSFERENCIA
+            WHERE COD_COMPROBANTE = :cod_comprobante
+              AND COD_TIPO_COMPROBANTE = :cod_tipo_comprobante
+              AND EMPRESA = :empresa
+        """
+
+        params = {
+            "cod_comprobante": cod_comprobante,
+            "cod_tipo_comprobante": cod_tipo_comprobante,
+            "empresa": empresa
+        }
+
+        if cod_producto:  # se agrega filtro extra si llega
+            sql += " AND COD_PRODUCTO = :cod_producto"
+            params["cod_producto"] = cod_producto
+
+        sql += " ORDER BY SECUENCIA"
+
+        cursor.execute(sql, params)
+        columns = [col[0] for col in cursor.description]
+        results = cursor.fetchall()
+        data = [dict(zip(columns, row)) for row in results]
+
+        cursor.close()
+        db1.close()
+
+        return jsonify(data), 200
+
+    except cx_Oracle.DatabaseError as e:
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
