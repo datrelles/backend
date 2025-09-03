@@ -1791,41 +1791,6 @@ def generate_combo():
         cod_comprobante = result_var.getvalue()
         cur.close()
 
-        ############################################CREACION DE LOTE PARA FORMULA######################################################################
-
-        # query = """
-        #                             DECLARE
-        #                               v_cod_empresa           FLOAT := :1;
-        #                               v_cod_agencia           FLOAT := :2;
-        #                               v_tipo_comprobante_lote  VARCHAR2(50) := :3;
-        #                               v_tipo_lote             VARCHAR2(3) := :4;
-        #                               v_result                VARCHAR2(50);
-        #                             BEGIN
-        #                               v_result := ks_lote.asigna_codigo(p_empresa => v_cod_empresa,
-        #                                                                           p_cod_agencia => v_cod_agencia,
-        #                                                                           p_tipo_comprobante_lote => v_tipo_comprobante_lote,
-        #                                                                           p_fecha => sysdate,
-        #                                                                           P_TIPO_LOTE => v_tipo_lote);
-        #                             :5 := v_result;
-        #                             END;
-        #                             """
-        # cur = db1.cursor()
-        # result_var = cur.var(cx_Oracle.STRING)
-        # cur.execute(query, (empresa, cod_agencia, 'LT', 'IN', result_var))
-        # cod_comprobante_lote_formula = result_var.getvalue()
-        # cur.close()
-        # db1.commit()
-        #
-        # query = StLote.query()
-        # if empresa:
-        #     query = query.filter(StLote.empresa == empresa)
-        # if cod_agencia:
-        #     query = query.filter(StLote.cod_agencia == cod_agencia)
-        # if cod_comprobante_lote_formula:
-        #     query = query.filter(StLote.cod_comprobante == cod_comprobante_lote_formula)
-        #
-        # result = query.all()
-
         lote = StLote(
             empresa=empresa,
             tipo_comprobante='IC',
@@ -3329,6 +3294,20 @@ def generate_despiece():
         cod_comprobante = result_var.getvalue()
         cur.close()
 
+        lote = StLote(
+            empresa=empresa,
+            tipo_comprobante='IC',
+            cod_comprobante=cod_comprobante,
+            fecha=date.today(),
+            descripcion='Lote para despiezado de combos',
+            tipo_lote='IN',
+            cod_agencia=cod_agencia,
+            usuario_aud=usuario,
+            fecha_aud=date.today()
+        )
+        db.session.add(lote)
+        db.session.commit()
+
         ########################################################OBTENCION DE COSTO VALORADO DE FORMULA####################################################
 
         query = """
@@ -3678,8 +3657,8 @@ def generate_despiece():
                         cod_estado_proceso=None,
                         transportador=None,
                         placa=None,
-                        tipo_comprobante_lote='LT',
-                        cod_comprobante_lote=cod_comprobante_lote,
+                        tipo_comprobante_lote='IC',
+                        cod_comprobante_lote=cod_comprobante,
                         cod_comprobante_ingreso=None,
                         tipo_comprobante_ingreso=None,
                         tipo_identificacion_transporta=None,
@@ -3699,8 +3678,8 @@ def generate_despiece():
                         es_serie=0,
                         cod_estado_producto=None,
                         ubicacion_bodega=None,
-                        cod_tipo_lote='LT',
-                        cod_comprobante_lote=cod_comprobante_lote,
+                        cod_tipo_lote='IC',
+                        cod_comprobante_lote=cod_comprobante,
                         cod_estado_producto_ing=None,
                         cantidad_pedida=None
                     )
@@ -3784,8 +3763,8 @@ def generate_despiece():
                 cod_promocion=None,
                 ubicacion_bodega=None,
                 cantidad_promocion=None,
-                tipo_comprobante_lote=tipo_comprobante_lote,
-                cod_comprobante_lote=cod_comprobante_lote,
+                tipo_comprobante_lote='IC',
+                cod_comprobante_lote=cod_comprobante,
                 descuento_regalo=None,
                 precio_unitario_xml=None,
                 descuento_xml=None,
@@ -4010,7 +3989,7 @@ def generate_despiece():
 
 
 @bpcustom.route('/create_lote', methods=['POST'])
-#@jwt_required()
+@jwt_required()
 @cross_origin()
 def create_lote():
     db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
