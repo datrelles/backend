@@ -42,6 +42,7 @@ from src.routes.routes_com import bpcom
 from src.routes.module_contabilidad import rmc
 from src.routes.warranty_module.warranty_module_routes import rmwa
 from src.routes.module_order.module_order_routes import rmor
+from src.routes.module_order_rep.module_order_rep_routes import rmorep
 from src.routes.email_alert import aem, execute_send_alert_emails_for_role
 from src.routes.benchmarking.catalog_benchmarking import bench
 from src.routes.images.s3_upload import s3
@@ -49,6 +50,7 @@ from src.routes.module_order.pdf_upload import pdf_s3
 from src.routes.routes_modulo_formulas import formulas_b
 from src.routes.routes_modulo_importaciones import importaciones_b
 from src.routes.routes_modulo_activaciones import activaciones_b
+
 
 ###################################################
 
@@ -98,6 +100,7 @@ app.register_blueprint(aem, url_prefix="/alert_email")
 app.register_blueprint(rmc, url_prefix="/cont")
 app.register_blueprint(rmwa, url_prefix="/warranty")
 app.register_blueprint(rmor, url_prefix="/order_mot")
+app.register_blueprint(rmorep, url_prefix="/order_rep")
 app.register_blueprint(net, url_prefix="/net")
 app.register_blueprint(bench, url_prefix="/bench")
 app.register_blueprint(s3, url_prefix="/s3")
