@@ -428,7 +428,7 @@ def get_pedidos_get():
 
 
 @bplog.route('/info_moto', methods=['POST'])
-# @jwt_required()
+@jwt_required()
 @cross_origin()
 def info_moto():
     data = request.json or {}
