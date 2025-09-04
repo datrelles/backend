@@ -1,6 +1,7 @@
 from src.exceptions import validation_error
 from src.enums import categoria_excepcion
 from datetime import datetime
+import re
 
 
 def validar_varchar(clave, valor, longitud, es_requerido=True, valores_permitidos=None):
@@ -51,3 +52,33 @@ def validar_hora(clave, valor, es_requerido=True, formato="%H:%M", devuelve_stri
         return valor if devuelve_string else nuevo_valor
     except Exception:
         raise validation_error(campo=clave, categoria=categoria_excepcion.TIPO.value)
+
+
+def validar_celular(clave, valor, es_requerido=True):
+    patron = r'^09\d{8}$'
+    if es_requerido:
+        if valor is None:
+            raise validation_error(campo=clave, categoria=categoria_excepcion.FALTANTE.value)
+        if valor == '':
+            raise validation_error(campo=clave, categoria=categoria_excepcion.VACIO.value)
+    else:
+        if valor == '' or valor is None:
+            return None
+    if not re.fullmatch(patron, valor):
+        raise validation_error(campo=clave, mensaje="El campo {} no tiene formato de celular".format(clave))
+    return valor
+
+
+def validar_correo(clave, valor, es_requerido=True):
+    patron = r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+    if es_requerido:
+        if valor is None:
+            raise validation_error(campo=clave, categoria=categoria_excepcion.FALTANTE.value)
+        if valor == '':
+            raise validation_error(campo=clave, categoria=categoria_excepcion.VACIO.value)
+    else:
+        if valor == '' or valor is None:
+            return None
+    if not re.fullmatch(patron, valor):
+        raise validation_error(campo=clave, mensaje="El campo {} no tiene formato de correo".format(clave))
+    return valor
