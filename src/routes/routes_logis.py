@@ -466,8 +466,6 @@ def info_moto():
                 db1,
                 *,
                 empresa: int,
-                cod_comprobante: str,
-                tipo_comprobante: str,
                 numero_serie: str
         ) -> bool:
             """
@@ -478,29 +476,50 @@ def info_moto():
             sql = """
                 SELECT COUNT(1)
                   FROM sta_transferencia x
-                 WHERE x.cod_comprobante      = :cod_comprobante
-                   AND x.cod_tipo_comprobante = :tipo_comprobante
+                 WHERE x.cod_tipo_comprobante in ('DG', 'CN') 
                    AND x.empresa              = :empresa
                    AND x.numero_serie         = :numero_serie
+                   AND x.fecha_adicion > sysdate -10
             """
             with db1.cursor() as cur:
                 cur.execute(sql, {
-                    "cod_comprobante": cod_comprobante,
-                    "tipo_comprobante": tipo_comprobante,
                     "empresa": empresa,
                     "numero_serie": numero_serie,
                 })
                 row = cur.fetchone()
                 return row and row[0] > 0
 
+        def obtener_cod_producto_por_motor(
+                db1,
+                *,
+                cod_motor: str
+        ) -> str:
+            """
+            Devuelve el cod_producto asociado a un cod_motor en st_prod_packing_list.
+            Si no existe, retorna None.
+            """
+            sql = """
+                SELECT s.cod_producto
+                  FROM st_prod_packing_list s
+                 WHERE s.cod_motor = :cod_motor
+            """
+            with db1.cursor() as cur:
+                cur.execute(sql, {"cod_motor": cod_motor})
+                row = cur.fetchone()
+                return row[0] if row else None
+
+
         if existe_transferencia_por_serie(
                 db1,
                 empresa=20,
-                cod_comprobante=cod_comprobante,
-                tipo_comprobante=tipo_comprobante,
                 numero_serie=cod_motor
         ):
             return jsonify({"error": "Serie previamente asignada"}), 500
+
+        print(obtener_cod_producto_por_motor(db1, cod_motor=cod_motor))
+
+        if obtener_cod_producto_por_motor(db1, cod_motor=cod_motor)!= cod_producto:
+            return jsonify({"error": "Serie no pertenece a Modelo Seleccionado"}), 500
         def fetch_one_count(sql, binds):
             with db1.cursor() as cur:
                 cur.execute(sql, binds)
