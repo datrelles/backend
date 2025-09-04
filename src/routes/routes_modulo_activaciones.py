@@ -288,6 +288,7 @@ def put_activacion(cod_activacion, data):
             mensaje = 'No se puede actualizar el estado de una activación aprobada'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 409
+        estado = {**estado, 'audit_usuario_ing': get_jwt_identity()}
         estado = st_estado_activacion(**estado, cod_activacion=cod_activacion)
         if estado.estado == activacion.estado:
             mensaje = 'No se puede actualizar el estado de una activación con el mismo valor actual'
