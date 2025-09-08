@@ -6,7 +6,7 @@ from flask_cors import cross_origin
 import logging
 
 from flask_mail import Message
-from sqlalchemy import text, and_
+from sqlalchemy import text, and_, delete
 
 from src.decorators import validate_json, handle_exceptions
 from src.config.database import db
@@ -851,5 +851,85 @@ def post_form_promotoria(empresa, data):
             marcas_segmento]
     db.session.commit()
     mensaje = 'Se registró el formulario {}'.format(formulario.cod_form)
+    logger.info(mensaje)
+    return jsonify({'mensaje': mensaje}), 201
+
+
+@activaciones_b.route("/formularios-promotoria/<cod_form>", methods=["PUT"])
+@jwt_required()
+@cross_origin()
+@validate_json()
+@handle_exceptions("actualizar el formulario de promotoría")
+def put_form_promotoria(cod_form, data):
+    cod_form = validar_number('cod_form', cod_form, 22)
+    formulario = db.session.get(st_form_promotoria, cod_form)
+    if not formulario:
+        mensaje = 'Formulario {} inexistente'.format(cod_form)
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    modelos_segmento = data.pop("modelos_segmento", [])
+    marcas_segmento = data.pop("marcas_segmento", [])
+    no_requeridos = []
+    if data.get('empresa') is not None:
+        no_requeridos.append('empresa')
+    if data.get('cod_promotor') is not None:
+        no_requeridos.append('cod_promotor')
+    if data.get('total_motos_shi') is not None:
+        no_requeridos.append('total_motos_shi')
+    if data.get('total_motos_piso') is not None:
+        no_requeridos.append('total_motos_piso')
+    if no_requeridos:
+        raise validation_error(no_requeridos=no_requeridos)
+    data = {**data, 'empresa': formulario.empresa, 'cod_promotor': formulario.cod_promotor,
+            'audit_usuario_ing': formulario.audit_usuario_ing, 'total_motos_shi': 0, 'total_motos_piso': 0}
+    st_form_promotoria(**data)
+    if not db.session.get(Cliente, (data['empresa'], data['cod_cliente'])):
+        mensaje = 'Cliente {} inexistente'.format(data['cod_cliente'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_cliente_direccion_guias, (data['empresa'], data['cod_cliente'], data['cod_tienda'])):
+        mensaje = 'Tienda {} inexistente'.format(data['cod_tienda'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if not db.session.get(st_promotor_tienda,
+                          (data['empresa'], data['cod_promotor'], data['cod_cliente'], data['cod_tienda'])):
+        mensaje = 'Promotor {} no vinculado a la tienda {}'.format(data['cod_promotor'], data['cod_tienda'])
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 403
+    for modelo in modelos_segmento:
+        if not db.session.get(Segmento, (
+                modelo['cod_segmento'], modelo['cod_linea'], modelo['cod_modelo_comercial'], modelo['cod_marca'])):
+            mensaje = 'Segmento {} inexistente'.format(modelo['cod_segmento'])
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+    for marca in marcas_segmento:
+        if not db.session.get(Marca, marca['cod_marca']):
+            mensaje = 'Marca {} inexistente'.format(marca['cod_marca'])
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+    db.session.execute(delete(st_mod_seg_frm_prom).where(st_mod_seg_frm_prom.cod_form == cod_form))
+    db.session.execute(delete(st_mar_seg_frm_prom).where(st_mar_seg_frm_prom.cod_form == cod_form))
+    formulario.cod_cliente = data['cod_cliente']
+    formulario.cod_tienda = data['cod_tienda']
+    formulario.total_vendedores = data['total_vendedores']
+    formulario.audit_usuario_mod = get_jwt_identity()
+    formulario.audit_fecha_mod = text('sysdate')
+    formulario.total_motos_shi = reduce(lambda total, item: total + item['cantidad'], modelos_segmento, 0)
+    formulario.total_motos_piso = formulario.total_motos_shi + reduce(lambda total, item: total + item['cantidad'],
+                                                                      marcas_segmento, 0)
+    if modelos_segmento:
+        formulario.modelos_segmento = [
+            st_mod_seg_frm_prom(**{**item, "cod_form": formulario.cod_form, 'audit_usuario_ing': get_jwt_identity()})
+            for
+            item in
+            modelos_segmento]
+    if marcas_segmento:
+        formulario.marcas_segmento = [
+            st_mar_seg_frm_prom(**{**item, "cod_form": formulario.cod_form, 'audit_usuario_ing': get_jwt_identity()})
+            for
+            item in
+            marcas_segmento]
+    db.session.commit()
+    mensaje = 'Se actualizó el formulario {}'.format(formulario.cod_form)
     logger.info(mensaje)
     return jsonify({'mensaje': mensaje}), 201
