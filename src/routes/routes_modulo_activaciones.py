@@ -695,8 +695,10 @@ def post_notificacion_tienda(empresa, cod_cliente, cod_tienda):
             La tienda con la siguiente información:
             - Código: {cod_tienda}
             - Código cliente {cod_cliente}
+            - Código zona ciudad {tienda.cod_zona_ciudad}
             - Ciudad: {tienda.ciudad}
             - Dirección: {tienda.direccion}
+            - Referencia: {tienda.direccion_larga}
 
             No tiene nombre asignado, ni bodega de consignación vinculada.
 
