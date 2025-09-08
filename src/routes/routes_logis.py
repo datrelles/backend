@@ -1015,3 +1015,114 @@ def get_transferencias():
         return jsonify({"error": error.message}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@bplog.route('/series_antiguas_por_serie', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def series_antiguas_por_serie():
+    """
+    GET /series_antiguas_por_serie?numero_serie=XY163FMLTA029358&empresa=20
+
+    Devuelve las filas (de bodegas 1, 25 y 5) cuya fecha de producción
+    resulta en una edad mayor que la edad de la serie actual (calculada
+    desde KS_INVENTARIO_SERIE.OBT_FECHA_PRODUCCION_SB_PT) y ordenadas
+    por edad_dias desc.
+    """
+    try:
+        numero_serie = request.args.get('numero_serie', type=str)
+        empresa = request.args.get('empresa', type=int, default=20)
+
+        if not numero_serie:
+            return jsonify({"error": "Falta parámetro: numero_serie"}), 400
+
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = db1.cursor()
+
+        sql = """
+            SELECT *
+              FROM (
+                    SELECT i.*,
+                           b.nombre,
+                           TRUNC(SYSDATE) -
+                           TRUNC(ks_inventario_serie.obt_fecha_produccion_sb_pt(
+                                    p_cod_empresa => i.empresa,
+                                    p_cod_motor   => i.numero_serie,
+                                    p_cod_bodega  => 5
+                                )) AS edad_dias,
+                           x.edad_dias AS edad_serie_actual
+                      FROM st_inventario_serie i,
+                           bodega b,
+                           (
+                                SELECT s.cod_producto,
+                                       s.empresa,
+                                       s.numero_serie,
+                                       TRUNC(SYSDATE) -
+                                       TRUNC(
+                                           NVL(
+                                               ks_inventario_serie.obt_fecha_produccion_sb_pt(
+                                                   p_cod_empresa => s.empresa,
+                                                   p_cod_motor   => s.numero_serie,
+                                                   p_cod_bodega  => 5
+                                               ),
+                                               ks_inventario_serie.obt_fecha_produccion_sb_pt(
+                                                   p_cod_empresa => s.empresa,
+                                                   p_cod_motor   => s.numero_serie,
+                                                   p_cod_bodega  => 3
+                                               )
+                                           )
+                                       ) AS edad_dias
+                                  FROM st_producto_serie s,
+                                       st_inventario_serie iv
+                                 WHERE s.numero_serie = :numero_serie
+                                   AND s.empresa      = :empresa
+                                   AND s.cantidad    != 0
+                                   AND s.empresa      = iv.empresa
+                                   AND iv.numero_serie= s.numero_serie
+                           ) x
+                     WHERE i.empresa = :empresa
+                       AND x.empresa = i.empresa
+                       AND x.cod_producto = i.cod_producto
+                       AND x.numero_serie <> i.numero_serie
+                       AND b.empresa = i.empresa
+                       AND b.bodega  = i.cod_bodega
+                       AND i.cod_bodega IN (1, 25, 5)
+                       AND TRUNC(SYSDATE) -
+                           TRUNC(ks_inventario_serie.obt_fecha_produccion_sb_pt(
+                                    p_cod_empresa => i.empresa,
+                                    p_cod_motor   => i.numero_serie,
+                                    p_cod_bodega  => 5
+                                )) > x.edad_dias
+                   ) sub
+             ORDER BY sub.edad_dias DESC
+        """
+
+        params = {
+            "numero_serie": numero_serie.strip(),
+            "empresa": int(empresa),
+        }
+
+        cur.execute(sql, params)
+        cols = [c[0] for c in cur.description]
+        rows = cur.fetchall()
+        data = [dict(zip(cols, r)) for r in rows]
+
+        cur.close()
+        db1.close()
+
+        return jsonify(data), 200
+
+    except cx_Oracle.DatabaseError as e:
+        try:
+            if db1:
+                db1.close()
+        except Exception:
+            pass
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+    except Exception as e:
+        try:
+            if db1:
+                db1.close()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
