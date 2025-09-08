@@ -1015,3 +1015,455 @@ def get_transferencias():
         return jsonify({"error": error.message}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@bplog.route('/series_antiguas_por_serie', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def series_antiguas_por_serie():
+    """
+    GET /series_antiguas_por_serie?numero_serie=XY163FMLTA029358&empresa=20
+
+    Devuelve las filas (de bodegas 1, 25 y 5) cuya fecha de producción
+    resulta en una edad mayor que la edad de la serie actual (calculada
+    desde KS_INVENTARIO_SERIE.OBT_FECHA_PRODUCCION_SB_PT) y ordenadas
+    por edad_dias desc.
+    """
+    try:
+        numero_serie = request.args.get('numero_serie', type=str)
+        empresa = request.args.get('empresa', type=int, default=20)
+
+        if not numero_serie:
+            return jsonify({"error": "Falta parámetro: numero_serie"}), 400
+
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = db1.cursor()
+
+        sql = """
+            SELECT *
+              FROM (
+                    SELECT i.*,
+                           b.nombre,
+                           TRUNC(SYSDATE) -
+                           TRUNC(ks_inventario_serie.obt_fecha_produccion_sb_pt(
+                                    p_cod_empresa => i.empresa,
+                                    p_cod_motor   => i.numero_serie,
+                                    p_cod_bodega  => 5
+                                )) AS edad_dias,
+                        x.fecha_produccion,
+                           x.edad_dias AS edad_serie_actual
+                      FROM st_inventario_serie i,
+                           bodega b,
+                           (
+                                SELECT s.cod_producto,
+                                       s.empresa,
+                                       s.numero_serie,
+                                       TRUNC(SYSDATE) -
+                                       TRUNC(
+                                           NVL(
+                                               ks_inventario_serie.obt_fecha_produccion_sb_pt(
+                                                   p_cod_empresa => s.empresa,
+                                                   p_cod_motor   => s.numero_serie,
+                                                   p_cod_bodega  => 5
+                                               ),
+                                               ks_inventario_serie.obt_fecha_produccion_sb_pt(
+                                                   p_cod_empresa => s.empresa,
+                                                   p_cod_motor   => s.numero_serie,
+                                                   p_cod_bodega  => 3
+                                               )
+                                           )
+                                       ) AS edad_dias,
+                                        ks_inventario_serie.obt_fecha_produccion_sb_pt(
+                                    p_cod_empresa => s.empresa,
+                                    p_cod_motor   => s.numero_serie,
+                                    p_cod_bodega  => 5
+                                ) fecha_produccion
+                                    
+                                  FROM st_producto_serie s,
+                                       st_inventario_serie iv
+                                 WHERE s.numero_serie = :numero_serie
+                                   AND s.empresa      = :empresa
+                                   AND s.cantidad    != 0
+                                   AND s.empresa      = iv.empresa
+                                   AND iv.numero_serie= s.numero_serie
+                           ) x
+                     WHERE i.empresa = :empresa
+                       AND x.empresa = i.empresa
+                       AND x.cod_producto = i.cod_producto
+                       AND x.numero_serie <> i.numero_serie
+                       AND b.empresa = i.empresa
+                       AND b.bodega  = i.cod_bodega
+                       AND i.cod_bodega IN (1, 25, 5)
+                       AND TRUNC(SYSDATE) -
+                           TRUNC(ks_inventario_serie.obt_fecha_produccion_sb_pt(
+                                    p_cod_empresa => i.empresa,
+                                    p_cod_motor   => i.numero_serie,
+                                    p_cod_bodega  => 5
+                                )) > x.edad_dias
+                   ) sub
+             ORDER BY sub.edad_dias DESC
+        """
+
+        params = {
+            "numero_serie": numero_serie.strip(),
+            "empresa": int(empresa),
+        }
+
+        cur.execute(sql, params)
+        cols = [c[0] for c in cur.description]
+        rows = cur.fetchall()
+        data = [dict(zip(cols, r)) for r in rows]
+
+        cur.close()
+        db1.close()
+
+        return jsonify(data), 200
+
+    except cx_Oracle.DatabaseError as e:
+        try:
+            if db1:
+                db1.close()
+        except Exception:
+            pass
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+    except Exception as e:
+        try:
+            if db1:
+                db1.close()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
+
+# ===============================================
+# STA_TRANS_COMENTARIOS_HANDHELD ENDPOINTS
+# ===============================================
+
+@bplog.route('/transferencias/comentarios/rango', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def comentarios_por_rango():
+    """
+    GET /transferencias/comentarios/rango?empresa=20&desde=2025-09-01&hasta=2025-09-08
+      [opcionales]
+        cod_comprobante=...
+        cod_tipo_comprobante=...
+        secuencia=...
+        cod_producto=...
+        numero_serie=...
+        usuario_creacion=...
+        origen=...
+        tipo_comentario=...
+        es_activo=0|1
+        buscar=texto  (LIKE sobre COMENTARIO)
+    Requiere: empresa, desde, hasta
+    """
+    db1 = None
+    try:
+        args = request.args
+
+        empresa = args.get('empresa', type=int)
+        desde_s = parse_str(args.get('desde'))
+        hasta_s = parse_str(args.get('hasta'))
+
+        missing = []
+        if empresa is None: missing.append("empresa")
+        if not desde_s:     missing.append("desde")
+        if not hasta_s:     missing.append("hasta")
+        if missing:
+            return jsonify({"error": f"Faltan parámetros: {', '.join(missing)}"}), 400
+
+        desde = parse_date(desde_s)
+        hasta = parse_date(hasta_s)
+
+        cod_comprobante      = parse_str(args.get('cod_comprobante'))
+        cod_tipo_comprobante = parse_str(args.get('cod_tipo_comprobante'))
+        secuencia            = args.get('secuencia', type=int)
+        cod_producto         = parse_str(args.get('cod_producto'))
+        numero_serie         = parse_str(args.get('numero_serie'))
+        usuario_creacion     = parse_str(args.get('usuario_creacion'))
+        origen               = parse_str(args.get('origen'))
+        tipo_comentario      = parse_str(args.get('tipo_comentario'))
+        es_activo            = args.get('es_activo', type=int)
+        buscar               = parse_str(args.get('buscar'))
+
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = db1.cursor()
+
+        sql = """
+            SELECT
+                COD_COMPROBANTE,
+                COD_TIPO_COMPROBANTE,
+                EMPRESA,
+                SECUENCIA,
+                COD_PRODUCTO,
+                SECUENCIA_COMENTARIO,
+                NUMERO_SERIE,
+                COMENTARIO,
+                USUARIO_CREACION,
+                FECHA_CREACION,
+                USUARIO_MODIFICACION,
+                FECHA_MODIFICACION,
+                ORIGEN,
+                TIPO_COMENTARIO,
+                ES_ACTIVO
+              FROM STA_TRANS_COMENTARIOS_HANDHELD
+             WHERE EMPRESA = :empresa
+               AND TRUNC(FECHA_CREACION) BETWEEN TRUNC(:desde) AND TRUNC(:hasta)
+        """
+        params = {"empresa": empresa, "desde": desde, "hasta": hasta}
+
+        if cod_comprobante:
+            sql += " AND COD_COMPROBANTE = :cod_comprobante"
+            params["cod_comprobante"] = cod_comprobante
+        if cod_tipo_comprobante:
+            sql += " AND COD_TIPO_COMPROBANTE = :cod_tipo_comprobante"
+            params["cod_tipo_comprobante"] = cod_tipo_comprobante
+        if secuencia is not None:
+            sql += " AND SECUENCIA = :secuencia"
+            params["secuencia"] = secuencia
+        if cod_producto:
+            sql += " AND COD_PRODUCTO = :cod_producto"
+            params["cod_producto"] = cod_producto
+        if numero_serie:
+            sql += " AND NUMERO_SERIE = :numero_serie"
+            params["numero_serie"] = numero_serie
+        if usuario_creacion:
+            sql += " AND USUARIO_CREACION = :usuario_creacion"
+            params["usuario_creacion"] = usuario_creacion
+        if origen:
+            sql += " AND ORIGEN = :origen"
+            params["origen"] = origen
+        if tipo_comentario:
+            sql += " AND TIPO_COMENTARIO = :tipo_comentario"
+            params["tipo_comentario"] = tipo_comentario
+        if es_activo in (0, 1):
+            sql += " AND ES_ACTIVO = :es_activo"
+            params["es_activo"] = es_activo
+        if buscar:
+            sql += " AND UPPER(COMENTARIO) LIKE UPPER(:buscar)"
+            params["buscar"] = f"%{buscar}%"
+
+        sql += " ORDER BY FECHA_CREACION DESC, COD_COMPROBANTE, SECUENCIA, SECUENCIA_COMENTARIO"
+
+        cur.execute(sql, params)
+        cols = [c[0] for c in cur.description]
+        data = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+        cur.close()
+        db1.close()
+        return jsonify(data), 200
+
+    except cx_Oracle.DatabaseError as e:
+        try:
+            if db1: db1.close()
+        except Exception:
+            pass
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+    except Exception as e:
+        try:
+            if db1: db1.close()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
+
+
+@bplog.route('/transferencias/comentarios', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def crear_comentario_transferencia():
+    """
+    POST /transferencias/comentarios
+    Body JSON (NO opcionales):
+      - cod_comprobante (str)
+      - cod_tipo_comprobante (str)
+      - empresa (int)
+      - secuencia (int)
+      - cod_producto (str)
+      - comentario (str)
+    Opcionales:
+      - secuencia_comentario (int)  -> si no llega, se calcula MAX+1
+      - numero_serie (str)
+      - usuario_creacion (str)      -> si no llega, usa USER de Oracle
+      - origen (str)
+      - tipo_comentario (str)
+      - es_activo (int: 0/1, default 1)
+    """
+    db1 = None
+    try:
+        body = request.get_json(silent=True) or {}
+
+        cod_comprobante      = parse_str(body.get('cod_comprobante'))
+        cod_tipo_comprobante = parse_str(body.get('cod_tipo_comprobante'))
+        empresa              = body.get('empresa', None)
+        secuencia            = body.get('secuencia', None)
+        cod_producto         = parse_str(body.get('cod_producto'))
+        comentario           = parse_str(body.get('comentario'))
+
+        missing = []
+        if not cod_comprobante:      missing.append("cod_comprobante")
+        if not cod_tipo_comprobante: missing.append("cod_tipo_comprobante")
+        if empresa is None:          missing.append("empresa")
+        if secuencia is None:        missing.append("secuencia")
+        if not cod_producto:         missing.append("cod_producto")
+        if not comentario:           missing.append("comentario")
+        if missing:
+            return jsonify({"error": f"Faltan campos requeridos: {', '.join(missing)}"}), 400
+
+        secuencia_comentario = body.get('secuencia_comentario', None)
+        numero_serie         = parse_str(body.get('numero_serie'))
+        usuario_creacion     = parse_str(body.get('usuario_creacion'))
+        origen               = parse_str(body.get('origen'))
+        tipo_comentario      = parse_str(body.get('tipo_comentario'))
+        es_activo            = body.get('es_activo', 1)
+
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+
+        # Usuario Oracle por defecto si no llega usuario_creacion
+        if not usuario_creacion:
+            with db1.cursor() as cur:
+                cur.execute("SELECT USER FROM dual")
+                usuario_creacion = cur.fetchone()[0]
+
+        # Si no llega secuencia_comentario, calcular MAX+1 por PK parcial
+        if secuencia_comentario is None:
+            with db1.cursor() as cur:
+                cur.execute("""
+                    SELECT NVL(MAX(SECUENCIA_COMENTARIO),0)+1
+                      FROM STA_TRANS_COMENTARIOS_HANDHELD
+                     WHERE COD_COMPROBANTE = :c
+                       AND COD_TIPO_COMPROBANTE = :t
+                       AND EMPRESA = :e
+                       AND SECUENCIA = :s
+                """, {"c": cod_comprobante, "t": cod_tipo_comprobante, "e": int(empresa), "s": int(secuencia)})
+                row = cur.fetchone()
+                secuencia_comentario = int(row[0]) if row and row[0] is not None else 1
+
+        with db1.cursor() as cur:
+            cur.execute("""
+                INSERT INTO STA_TRANS_COMENTARIOS_HANDHELD (
+                    COD_COMPROBANTE, COD_TIPO_COMPROBANTE, EMPRESA, SECUENCIA,
+                    COD_PRODUCTO, SECUENCIA_COMENTARIO, NUMERO_SERIE, COMENTARIO,
+                    USUARIO_CREACION, FECHA_CREACION, USUARIO_MODIFICACION, FECHA_MODIFICACION,
+                    ORIGEN, TIPO_COMENTARIO, ES_ACTIVO
+                ) VALUES (
+                    :cod_comprobante, :cod_tipo_comprobante, :empresa, :secuencia,
+                    :cod_producto, :secuencia_comentario, :numero_serie, :comentario,
+                    :usuario_creacion, SYSDATE, NULL, NULL,
+                    :origen, :tipo_comentario, :es_activo
+                )
+            """, {
+                "cod_comprobante": cod_comprobante,
+                "cod_tipo_comprobante": cod_tipo_comprobante,
+                "empresa": int(empresa),
+                "secuencia": int(secuencia),
+                "cod_producto": cod_producto,
+                "secuencia_comentario": int(secuencia_comentario),
+                "numero_serie": numero_serie,
+                "comentario": comentario,
+                "usuario_creacion": usuario_creacion,
+                "origen": origen,
+                "tipo_comentario": tipo_comentario,
+                "es_activo": int(es_activo) if es_activo in (0,1) else 1
+            })
+
+        db1.commit()
+
+        # Devolver el registro insertado
+        with db1.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    COD_COMPROBANTE, COD_TIPO_COMPROBANTE, EMPRESA, SECUENCIA,
+                    COD_PRODUCTO, SECUENCIA_COMENTARIO, NUMERO_SERIE, COMENTARIO,
+                    USUARIO_CREACION, FECHA_CREACION, USUARIO_MODIFICACION, FECHA_MODIFICACION,
+                    ORIGEN, TIPO_COMENTARIO, ES_ACTIVO
+                  FROM STA_TRANS_COMENTARIOS_HANDHELD
+                 WHERE COD_COMPROBANTE = :c
+                   AND COD_TIPO_COMPROBANTE = :t
+                   AND EMPRESA = :e
+                   AND SECUENCIA = :s
+                   AND SECUENCIA_COMENTARIO = :sc
+            """, {"c": cod_comprobante, "t": cod_tipo_comprobante, "e": int(empresa), "s": int(secuencia), "sc": int(secuencia_comentario)})
+            cols = [d[0] for d in cur.description]
+            row = cur.fetchone()
+            data = dict(zip(cols, row)) if row else None
+
+        return jsonify({"ok": True, "data": data}), 201
+
+    except cx_Oracle.DatabaseError as e:
+        if db1:
+            try: db1.rollback()
+            except Exception: pass
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+    except Exception as e:
+        if db1:
+            try: db1.rollback()
+            except Exception: pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if db1: db1.close()
+        except Exception:
+            pass
+
+
+@bplog.route('/transferencias/comentarios', methods=['DELETE'])
+@jwt_required()
+@cross_origin()
+def borrar_comentario_transferencia():
+    """
+    DELETE /transferencias/comentarios?cod_comprobante=...&cod_tipo_comprobante=...&empresa=...&secuencia=...&secuencia_comentario=...
+    Requiere: PK completa
+    """
+    db1 = None
+    try:
+        args = request.args
+
+        cod_comprobante      = parse_str(args.get('cod_comprobante'))
+        cod_tipo_comprobante = parse_str(args.get('cod_tipo_comprobante'))
+        empresa              = args.get('empresa', type=int)
+        secuencia            = args.get('secuencia', type=int)
+        secuencia_comentario = args.get('secuencia_comentario', type=int)
+
+        missing = []
+        if not cod_comprobante:      missing.append("cod_comprobante")
+        if not cod_tipo_comprobante: missing.append("cod_tipo_comprobante")
+        if empresa is None:          missing.append("empresa")
+        if secuencia is None:        missing.append("secuencia")
+        if secuencia_comentario is None: missing.append("secuencia_comentario")
+        if missing:
+            return jsonify({"error": f"Faltan parámetros: {', '.join(missing)}"}), 400
+
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        with db1.cursor() as cur:
+            cur.execute("""
+                DELETE FROM STA_TRANS_COMENTARIOS_HANDHELD
+                 WHERE COD_COMPROBANTE = :c
+                   AND COD_TIPO_COMPROBANTE = :t
+                   AND EMPRESA = :e
+                   AND SECUENCIA = :s
+                   AND SECUENCIA_COMENTARIO = :sc
+            """, {"c": cod_comprobante, "t": cod_tipo_comprobante, "e": int(empresa), "s": int(secuencia), "sc": int(secuencia_comentario)})
+            deleted = cur.rowcount
+
+        db1.commit()
+        return jsonify({"ok": True, "deleted": deleted}), 200
+
+    except cx_Oracle.DatabaseError as e:
+        if db1:
+            try: db1.rollback()
+            except Exception: pass
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+    except Exception as e:
+        if db1:
+            try: db1.rollback()
+            except Exception: pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if db1: db1.close()
+        except Exception:
+            pass
+
