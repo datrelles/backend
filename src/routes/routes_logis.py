@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request,  url_for
 import logging
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
@@ -10,6 +10,13 @@ from src import oracle
 from os import getenv
 import cx_Oracle
 from src.config.database import db, engine, session
+from src.models.asignacion_cupo import QueryParamsSchema, STReservaProducto, ALLOWED_ORDERING, reservas_schema, \
+    CreateReservaSchema, UpdateReservaSchema, ReservaSchema, map_integrity_error, validate_no_active_duplicate, validate_available_stock_before_create, validate_available_stock_before_update
+from marshmallow import ValidationError
+from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
+from sqlalchemy.exc import IntegrityError
+
+
 
 bplog = Blueprint('routes_log', __name__)
 
@@ -1467,3 +1474,189 @@ def borrar_comentario_transferencia():
         except Exception:
             pass
 
+query_params_schema = QueryParamsSchema()
+
+# ---------- Helpers ----------
+def apply_filters(q, params):
+    if "empresa" in params:
+        q = q.filter(STReservaProducto.empresa == params["empresa"])
+    if "cod_producto" in params:
+        # Exacto por defecto; si quieres LIKE prefijo, cambia aquí.
+        q = q.filter(STReservaProducto.cod_producto == params["cod_producto"])
+    if "cod_cliente" in params:
+        q = q.filter(STReservaProducto.cod_cliente == params["cod_cliente"])
+    if "cod_bodega" in params:
+        q = q.filter(STReservaProducto.cod_bodega == params["cod_bodega"])
+    # Fechas: si solo envían desde/hasta, aplico condición correspondiente sobre fecha_ini
+    if "fecha_desde" in params:
+        q = q.filter(STReservaProducto.fecha_ini >= params["fecha_desde"])
+    if "fecha_hasta" in params:
+        q = q.filter(STReservaProducto.fecha_ini <= params["fecha_hasta"])
+    return q
+
+def apply_ordering(q, ordering_param):
+    if not ordering_param:
+        # Por defecto: más reciente primero (fecha_ini DESC), luego cod_reserva DESC
+        return q.order_by(STReservaProducto.fecha_ini.desc(),
+                          STReservaProducto.cod_reserva.desc())
+    clauses = []
+    for token in ordering_param.split(","):
+        token = token.strip()
+        desc = token.startswith("-")
+        key = token.lstrip("-")
+        col = ALLOWED_ORDERING[key]
+        clauses.append(col.desc() if desc else col.asc())
+    return q.order_by(*clauses)
+
+def build_page_link(page, page_size):
+    if page < 1:
+        return None
+    # Reconstruyo URL con page y page_size
+    url = request.url
+    parsed = urlparse(url)
+    params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    params["page"] = str(page)
+    params["page_size"] = str(page_size)
+    new_qs = urlencode(params, doseq=True)
+    return urlunparse(parsed._replace(query=new_qs))
+
+# ---------- Endpoint ----------
+@bplog.route("/reservas", methods=["GET"])
+def list_reservas():
+    # Validar y normalizar query params
+    try:
+        # Nota: Marshmallow parsea fechas ISO automáticamente
+        params = query_params_schema.load(request.args)
+    except ValidationError as err:
+        return jsonify({"detail": "Parámetros inválidos.", "errors": err.messages}), 400
+
+    page = params.get("page", 1)
+    page_size = params.get("page_size", 20)
+
+    # Construcción de Query
+    q = db.session.query(STReservaProducto)
+    q = apply_filters(q, params)
+    q = apply_ordering(q, params.get("ordering"))
+
+    # count total (antes de paginar)
+    total = q.count()
+
+    # Paginación
+    items = q.offset((page - 1) * page_size).limit(page_size).all()
+
+    # Serialización
+    data = reservas_schema.dump(items)
+
+    # Enlaces estilo DRF
+    next_link = build_page_link(page + 1, page_size) if page * page_size < total else None
+    prev_link = build_page_link(page - 1, page_size) if page > 1 else None
+
+    return jsonify({
+        "count": total,
+        "next": next_link,
+        "previous": prev_link,
+        "results": data
+    })
+
+create_schema = CreateReservaSchema()
+update_schema = UpdateReservaSchema()
+out_schema = ReservaSchema()
+
+
+@bplog.route("/reservas", methods=["POST"])
+def create_reserva():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = create_schema.load(payload)
+        validate_no_active_duplicate(data)
+        validate_available_stock_before_create(data)
+    except Exception as e:
+        from marshmallow import ValidationError
+        if isinstance(e, ValidationError):
+            return jsonify({"detail": "Datos inválidos.", "errors": e.messages}), 400
+        raise
+
+    # Verificación explícita de duplicado por PK
+    if data.get("cod_reserva") is not None:
+        existing = db.session.get(
+            STReservaProducto, {"EMPRESA": data["empresa"], "COD_RESERVA": data["cod_reserva"]}
+        )
+        if existing:
+            return jsonify({"detail": "El registro ya existe."}), 409
+
+    obj = STReservaProducto(
+        empresa=data["empresa"],
+        cod_reserva=data.get("cod_reserva"),
+        cod_producto=data.get("cod_producto"),
+        cod_bodega=data.get("cod_bodega"),
+        cod_cliente=data.get("cod_cliente"),
+        fecha_ini=data.get("fecha_ini"),
+        fecha_fin=data.get("fecha_fin"),
+        observacion=data.get("observacion"),
+        es_inactivo=data.get("es_inactivo", 0),
+        cantidad=data.get("cantidad"),
+        cod_bodega_destino=data.get("cod_bodega_destino"),
+        cantidad_utilizada=data.get("cantidad_utilizada"),
+    )
+
+    db.session.add(obj)
+    try:
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    body = out_schema.dump(obj)
+    # Ubicación del recurso creada
+    location = url_for(
+        "routes_log.update_reserva",
+        empresa=int(obj.empresa),
+        cod_reserva=int(obj.cod_reserva),
+        _external=True,
+    )
+    return jsonify(body), 201, {"Location": location}
+
+@bplog.route("/reservas/<int:empresa>/<int:cod_reserva>", methods=["PUT"])
+def update_reserva(empresa: int, cod_reserva: int):
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = update_schema.load(payload)
+    except Exception as e:
+        from marshmallow import ValidationError
+        if isinstance(e, ValidationError):
+            return jsonify({"detail": "Datos inválidos.", "errors": e.messages}), 400
+        raise
+
+    # Evitar cambio de PK vía payload
+    if "empresa" in data and data["empresa"] != empresa:
+        return jsonify({"detail": "No se permite cambiar empresa en PUT."}), 400
+    if "cod_reserva" in data and data["cod_reserva"] != cod_reserva:
+        return jsonify({"detail": "No se permite cambiar cod_reserva en PUT."}), 400
+
+    obj = db.session.get(STReservaProducto, (cod_reserva, empresa))
+
+    if not obj:
+        return jsonify({"detail": "No encontrado."}), 404
+
+    validate_available_stock_before_update(obj, data)
+
+    # Actualización parcial estilo PATCH pero por PUT para practicidad
+    updatable_fields = [
+        "cod_producto", "cod_bodega", "cod_cliente",
+        "fecha_ini", "fecha_fin", "observacion",
+        "es_inactivo", "cantidad", "cod_bodega_destino",
+        "cantidad_utilizada"
+    ]
+    for f in updatable_fields:
+        if f in data:
+            setattr(obj, f, data[f])
+
+    try:
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    return jsonify(out_schema.dump(obj)), 200
