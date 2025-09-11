@@ -1310,7 +1310,7 @@ def crear_comentario_transferencia():
         if missing:
             return jsonify({"error": f"Faltan campos requeridos: {', '.join(missing)}"}), 400
 
-        secuencia_comentario = body.get('secuencia_comentario', None)
+        secuencia_comentario = None
         numero_serie         = parse_str(body.get('numero_serie'))
         usuario_creacion     = parse_str(body.get('usuario_creacion'))
         origen               = parse_str(body.get('origen'))
@@ -1334,11 +1334,11 @@ def crear_comentario_transferencia():
                      WHERE COD_COMPROBANTE = :c
                        AND COD_TIPO_COMPROBANTE = :t
                        AND EMPRESA = :e
-                       AND SECUENCIA = :s
-                """, {"c": cod_comprobante, "t": cod_tipo_comprobante, "e": int(empresa), "s": int(secuencia)})
+                """, {"c": cod_comprobante, "t": cod_tipo_comprobante, "e": int(empresa)})
                 row = cur.fetchone()
                 secuencia_comentario = int(row[0]) if row and row[0] is not None else 1
 
+        secuencia = secuencia_comentario
         with db1.cursor() as cur:
             cur.execute("""
                 INSERT INTO STA_TRANS_COMENTARIOS_HANDHELD (
@@ -1467,3 +1467,184 @@ def borrar_comentario_transferencia():
         except Exception:
             pass
 
+
+
+@bplog.route('/stock_productos_motos', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_stock_productos_motos():
+    """
+    GET /stock_productos_motos
+    Parámetros (opcionales, defaults):
+      - empresa               (int, default=20)
+      - bodegas               (csv de ints, default=5,1,25)
+      - aa                    (int, default=0)
+      - cod_tipo_inventario   (int, default=1)
+      - estado_producto       (str, default='A')                -> s.cod_estado_producto
+      - cod_item_cat          (str, default='T')
+      - cat_match             (str: 'exact'|'prefix', default='exact')
+      - cod_producto          (str, exacto)
+      - nombre_like           (str, LIKE %valor%, case-insensitive)
+      - only_positive         (0|1, default=1)                  -> HAVING SUM(cantidad)>0
+      - order_by              (COD_PRODUCTO|NOMBRE|COD_ITEM_CAT|STOCK, default=NOMBRE)
+      - order_dir             (ASC|DESC, default=ASC)
+      - limit                 (int, default=200; 0 = sin límite)
+      - offset                (int, default=0)
+    """
+    args = request.args
+
+    def _parse_int(v, default=None):
+        if v is None or str(v).strip() == '':
+            return default
+        return int(v)
+
+    def _parse_csv_ints(v, default):
+        if v is None or str(v).strip() == '':
+            return default
+        try:
+            return [int(x.strip()) for x in str(v).split(',') if x.strip() != '']
+        except ValueError:
+            raise ValueError("Parámetro 'bodegas' inválido. Use enteros separados por coma.")
+
+    def _parse_bool_01(v, default=1):
+        """Booleans como 0/1 en args."""
+        if v is None or str(v).strip() == '':
+            return default
+        iv = int(v)
+        if iv not in (0, 1):
+            raise ValueError("Parámetro booleano inválido. Use 0 ó 1.")
+        return iv
+
+    allowed_order = {
+        "COD_PRODUCTO": "COD_PRODUCTO",
+        "NOMBRE": "NOMBRE",
+        "COD_ITEM_CAT": "COD_ITEM_CAT",
+        "STOCK": "STOCK",
+    }
+
+    try:
+        empresa         = _parse_int(args.get('empresa'), 20)
+        bodegas         = _parse_csv_ints(args.get('bodegas'), [5, 1, 25])
+        aa              = _parse_int(args.get('aa'), 0)
+        cod_tipo_inv    = _parse_int(args.get('cod_tipo_inventario'), 1)
+        estado_producto = (args.get('estado_producto') or 'A').strip().upper()
+        cod_item_cat    = (args.get('cod_item_cat') or 'T').strip()
+        cat_match       = (args.get('cat_match') or 'exact').strip().lower()  # 'exact' | 'prefix'
+        cod_producto_f  = (args.get('cod_producto') or '').strip()
+        nombre_like     = (args.get('nombre_like') or '').strip()
+        only_positive   = _parse_bool_01(args.get('only_positive'), 1)
+        order_by        = allowed_order.get((args.get('order_by') or 'NOMBRE').strip().upper(), "NOMBRE")
+        order_dir       = "ASC" if (args.get('order_dir') or 'ASC').strip().upper() == "ASC" else "DESC"
+        limit           = max(0, _parse_int(args.get('limit'), 200))
+        offset          = max(0, _parse_int(args.get('offset'), 0))
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+
+    # Placeholders del IN (bodegas)
+    in_placeholders = []
+    binds = {
+        "empresa": empresa,
+        "aa": aa,
+        "cod_tipo_inv": cod_tipo_inv,
+        "estado_producto": estado_producto,
+        "cod_item_cat": cod_item_cat,
+    }
+    for i, b in enumerate(bodegas):
+        key = f"b{i}"
+        in_placeholders.append(f":{key}")
+        binds[key] = b
+    bodegas_in = ",".join(in_placeholders)
+
+    having_clause = "HAVING SUM(s.cantidad) > 0" if only_positive == 1 else ""
+
+    # Filtro de categoría
+    if cat_match == "prefix":
+        cat_filter = "d.cod_item_cat LIKE :cod_item_cat_like"
+        binds["cod_item_cat_like"] = f"{cod_item_cat}%"
+    else:
+        cat_filter = "d.cod_item_cat = :cod_item_cat"
+
+    # Filtros opcionales
+    where_extra = []
+    if cod_producto_f:
+        where_extra.append("d.cod_producto = :cod_producto_f")
+        binds["cod_producto_f"] = cod_producto_f
+    if nombre_like:
+        where_extra.append("UPPER(d.nombre) LIKE :nombre_like")
+        binds["nombre_like"] = f"%{nombre_like.upper()}%"
+
+    where_extra_sql = f" AND {' AND '.join(where_extra)}" if where_extra else ""
+
+    # Query base (sin paginar)
+    base_sql = f"""
+        WITH inv AS (
+          SELECT
+              s.empresa,
+              s.cod_producto,
+              SUM(s.cantidad) AS stock
+          FROM st_inventario s
+          WHERE s.empresa = :empresa
+            AND s.cod_bodega IN ({bodegas_in})
+            AND s.aa = :aa
+            AND s.cod_tipo_inventario = :cod_tipo_inv
+            AND s.cod_estado_producto = :estado_producto
+          GROUP BY s.empresa, s.cod_producto
+          {having_clause}
+        )
+        SELECT
+            i.cod_producto          AS COD_PRODUCTO,
+            d.nombre                AS NOMBRE,
+            d.cod_item_cat          AS COD_ITEM_CAT,
+            i.stock                 AS STOCK
+        FROM inv i
+        JOIN producto d
+          ON d.empresa = i.empresa
+         AND d.cod_producto = i.cod_producto
+        WHERE {cat_filter}
+        {where_extra_sql}
+        ORDER BY {order_by} {order_dir}
+    """
+
+    # Paginación con ROWNUM
+    # Si limit == 0 => sin paginar
+    if limit > 0:
+        max_row = offset + limit
+        binds["min_row"] = offset
+        binds["max_row"] = max_row
+
+        sql = f"""
+            SELECT * FROM (
+                SELECT q.*, ROWNUM rnum
+                FROM (
+                    {base_sql}
+                ) q
+                WHERE ROWNUM <= :max_row
+            )
+            WHERE rnum > :min_row
+        """
+    else:
+        sql = base_sql
+
+    db1 = None
+    cur = None
+    try:
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = db1.cursor()
+        cur.execute(sql, binds)
+        cols = [c[0] for c in cur.description]
+        rows = cur.fetchall()
+        data = [dict(zip(cols, r)) for r in rows]
+        return jsonify(data), 200
+    except cx_Oracle.DatabaseError as e:
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if cur: cur.close()
+        finally:
+            try:
+                if db1: db1.close()
+            except Exception:
+                pass
