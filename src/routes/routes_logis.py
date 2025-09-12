@@ -1303,7 +1303,7 @@ def crear_comentario_transferencia():
         cod_comprobante      = parse_str(body.get('cod_comprobante'))
         cod_tipo_comprobante = parse_str(body.get('cod_tipo_comprobante'))
         empresa              = body.get('empresa', None)
-        secuencia            = body.get('secuencia', None)
+        secuencia            = None
         cod_producto         = parse_str(body.get('cod_producto'))
         comentario           = parse_str(body.get('comentario'))
 
@@ -1311,13 +1311,12 @@ def crear_comentario_transferencia():
         if not cod_comprobante:      missing.append("cod_comprobante")
         if not cod_tipo_comprobante: missing.append("cod_tipo_comprobante")
         if empresa is None:          missing.append("empresa")
-        if secuencia is None:        missing.append("secuencia")
         if not cod_producto:         missing.append("cod_producto")
         if not comentario:           missing.append("comentario")
         if missing:
             return jsonify({"error": f"Faltan campos requeridos: {', '.join(missing)}"}), 400
 
-        secuencia_comentario = body.get('secuencia_comentario', None)
+        secuencia_comentario = None
         numero_serie         = parse_str(body.get('numero_serie'))
         usuario_creacion     = parse_str(body.get('usuario_creacion'))
         origen               = parse_str(body.get('origen'))
@@ -1341,10 +1340,11 @@ def crear_comentario_transferencia():
                      WHERE COD_COMPROBANTE = :c
                        AND COD_TIPO_COMPROBANTE = :t
                        AND EMPRESA = :e
-                       AND SECUENCIA = :s
-                """, {"c": cod_comprobante, "t": cod_tipo_comprobante, "e": int(empresa), "s": int(secuencia)})
+                """, {"c": cod_comprobante, "t": cod_tipo_comprobante, "e": int(empresa)})
                 row = cur.fetchone()
                 secuencia_comentario = int(row[0]) if row and row[0] is not None else 1
+
+        secuencia = secuencia_comentario
 
         with db1.cursor() as cur:
             cur.execute("""
