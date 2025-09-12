@@ -1573,7 +1573,7 @@ def create_reserva():
     except Exception as e:
         from marshmallow import ValidationError
         if isinstance(e, ValidationError):
-            return jsonify({"detail": "Datos inválidos.", "errors": e.messages}), 400
+            return jsonify({"detail": "Datos inválidos.", "errors": e.messages}), 200
         raise
 
     # Verificación explícita de duplicado por PK
@@ -1625,7 +1625,7 @@ def update_reserva(empresa: int, cod_reserva: int):
     except Exception as e:
         from marshmallow import ValidationError
         if isinstance(e, ValidationError):
-            return jsonify({"detail": "Datos inválidos.", "errors": e.messages}), 400
+            return jsonify({"detail": "Datos inválidos.", "errors": e.messages}), 200
         raise
 
     # Evitar cambio de PK vía payload
