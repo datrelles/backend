@@ -19,6 +19,7 @@ TENANT_ID = getenv("TENANT_ID")
 GROUP_ID = getenv("GROUP_ID")
 REPORT_ID = getenv("REPORT_ID")
 REPORT_ID_PROV = getenv("REPORT_ID_PROV")
+REPORT_ID_PROV_2 = getenv("REPORT_ID_PROV_2")
 
 
 if not all([CLIENT_ID, CLIENT_SECRET, TENANT_ID, GROUP_ID, REPORT_ID]):
@@ -119,6 +120,44 @@ def get_embed_token_prov(id):
         "expiration": embed.get("expiration"),
         "embedUrl": embed_url,
         "reportId": REPORT_ID_PROV,
+        "cedula_vendedor": user,
+        "generatedAt": datetime.now(timezone.utc).isoformat()
+    }), 200
+
+
+@bi.route('/embed-token-prov-2/<id>', methods=["POST"])
+@jwt_required()
+@cross_origin()
+def get_embed_token_prov_2(id):
+    user = id
+    access_token = get_service_principal_token()
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {access_token}"
+    }
+
+    payload = {
+        "accessLevel": "View"
+    }
+
+    url = f"https://api.powerbi.com/v1.0/myorg/groups/{GROUP_ID}/reports/{REPORT_ID_PROV_2}/GenerateToken"
+
+    resp = requests.post(url, headers=headers, json=payload, timeout=20)
+    if resp.status_code != 200:
+        logging.error("Power BI GenerateToken error %s: %s", resp.status_code, resp.text)
+        abort(resp.status_code, description="Fallo al generar embed token de Power BI.")
+
+    embed = resp.json()
+
+    embed_url = f"https://app.powerbi.com/reportEmbed?reportId={REPORT_ID_PROV_2}&groupId={GROUP_ID}"
+
+    return jsonify({
+        "token": embed.get("token"),
+        "tokenId": embed.get("tokenId"),
+        "expiration": embed.get("expiration"),
+        "embedUrl": embed_url,
+        "reportId": REPORT_ID_PROV_2,
         "cedula_vendedor": user,
         "generatedAt": datetime.now(timezone.utc).isoformat()
     }), 200
