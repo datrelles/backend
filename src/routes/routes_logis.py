@@ -1677,11 +1677,16 @@ def get_stock_productos_motos():
       - cat_match             (str: 'exact'|'prefix', default='exact')
       - cod_producto          (str, exacto)
       - nombre_like           (str, LIKE %valor%, case-insensitive)
-      - only_positive         (0|1, default=1)                  -> HAVING SUM(cantidad)>0
-      - order_by              (COD_PRODUCTO|NOMBRE|COD_ITEM_CAT|STOCK, default=NOMBRE)
+      - only_positive         (0|1, default=1)                  -> filtra por DISPONIBLE > 0
+      - order_by              (COD_PRODUCTO|NOMBRE|COD_ITEM_CAT|STOCK_TOTAL|RESERVADO_ACTIVO|DISPONIBLE, default=NOMBRE)
       - order_dir             (ASC|DESC, default=ASC)
       - limit                 (int, default=200; 0 = sin límite)
       - offset                (int, default=0)
+
+    Nota:
+      - Reservas activas: NVL(es_inactivo,0)=0 AND fecha_fin > SYSDATE.
+      - Se consideran reservas por bodega origen (r.cod_bodega IN bodegas).
+        Si necesitas destino, cambia RESERVA_BODEGA_FIELD a 'cod_bodega_destino' en el SQL.
     """
     args = request.args
 
@@ -1699,7 +1704,6 @@ def get_stock_productos_motos():
             raise ValueError("Parámetro 'bodegas' inválido. Use enteros separados por coma.")
 
     def _parse_bool_01(v, default=1):
-        """Booleans como 0/1 en args."""
         if v is None or str(v).strip() == '':
             return default
         iv = int(v)
@@ -1711,7 +1715,9 @@ def get_stock_productos_motos():
         "COD_PRODUCTO": "COD_PRODUCTO",
         "NOMBRE": "NOMBRE",
         "COD_ITEM_CAT": "COD_ITEM_CAT",
-        "STOCK": "STOCK",
+        "STOCK_TOTAL": "STOCK_TOTAL",
+        "RESERVADO_ACTIVO": "RESERVADO_ACTIVO",
+        "DISPONIBLE": "DISPONIBLE",
     }
 
     try:
@@ -1721,7 +1727,7 @@ def get_stock_productos_motos():
         cod_tipo_inv    = _parse_int(args.get('cod_tipo_inventario'), 1)
         estado_producto = (args.get('estado_producto') or 'A').strip().upper()
         cod_item_cat    = (args.get('cod_item_cat') or 'T').strip()
-        cat_match       = (args.get('cat_match') or 'exact').strip().lower()  # 'exact' | 'prefix'
+        cat_match       = (args.get('cat_match') or 'exact').strip().lower()  # 'exact'|'prefix'
         cod_producto_f  = (args.get('cod_producto') or '').strip()
         nombre_like     = (args.get('nombre_like') or '').strip()
         only_positive   = _parse_bool_01(args.get('only_positive'), 1)
@@ -1732,8 +1738,7 @@ def get_stock_productos_motos():
     except ValueError as ve:
         return jsonify({"error": str(ve)}), 400
 
-    # Placeholders del IN (bodegas)
-    in_placeholders = []
+    # Bindings compartidos
     binds = {
         "empresa": empresa,
         "aa": aa,
@@ -1741,13 +1746,22 @@ def get_stock_productos_motos():
         "estado_producto": estado_producto,
         "cod_item_cat": cod_item_cat,
     }
+
+    # IN list para bodegas de inventario
+    in_placeholders_stock = []
     for i, b in enumerate(bodegas):
         key = f"b{i}"
-        in_placeholders.append(f":{key}")
+        in_placeholders_stock.append(f":{key}")
         binds[key] = b
-    bodegas_in = ",".join(in_placeholders)
+    bodegas_in_stock = ",".join(in_placeholders_stock)
 
-    having_clause = "HAVING SUM(s.cantidad) > 0" if only_positive == 1 else ""
+    # IN list para bodegas de reservas (usar claves distintas para claridad)
+    in_placeholders_resv = []
+    for i, b in enumerate(bodegas):
+        key = f"rb{i}"
+        in_placeholders_resv.append(f":{key}")
+        binds[key] = b
+    bodegas_in_resv = ",".join(in_placeholders_resv)
 
     # Filtro de categoría
     if cat_match == "prefix":
@@ -1767,43 +1781,66 @@ def get_stock_productos_motos():
 
     where_extra_sql = f" AND {' AND '.join(where_extra)}" if where_extra else ""
 
-    # Query base (sin paginar)
+    # Importante: cuando only_positive=1 filtramos por DISPONIBLE > 0
+    only_positive_sql = "AND NVL(i.stock_total,0) > 0"   if only_positive == 1 else ""
+
+    # Campo de bodega a considerar para reservas (origen por defecto)
+    # Si deseas destino, cambia 'r.cod_bodega' -> 'r.cod_bodega_destino'
+    RESERVA_BODEGA_FIELD = "r.cod_bodega"
+
     base_sql = f"""
+        /* CTE de inventario total por producto */
         WITH inv AS (
-          SELECT
-              s.empresa,
-              s.cod_producto,
-              SUM(s.cantidad) AS stock
-          FROM st_inventario s
-          WHERE s.empresa = :empresa
-            AND s.cod_bodega IN ({bodegas_in})
-            AND s.aa = :aa
-            AND s.cod_tipo_inventario = :cod_tipo_inv
-            AND s.cod_estado_producto = :estado_producto
-          GROUP BY s.empresa, s.cod_producto
-          {having_clause}
+            SELECT
+                s.empresa,
+                s.cod_producto,
+                SUM(s.cantidad) AS stock_total
+            FROM st_inventario s
+            WHERE s.empresa = :empresa
+              AND s.cod_bodega IN ({bodegas_in_stock})
+              AND s.aa = :aa
+              AND s.cod_tipo_inventario = :cod_tipo_inv
+              AND s.cod_estado_producto = :estado_producto
+            GROUP BY s.empresa, s.cod_producto
+        ),
+        /* CTE de reservas activas por producto (remanente = cantidad - NVL(cantidad_utilizada,0)) */
+        resv AS (
+            SELECT
+                r.empresa,
+                r.cod_producto,
+                SUM(GREATEST(r.cantidad - NVL(r.cantidad_utilizada,0), 0)) AS reservado_activo
+            FROM ST_RESERVA_PRODUCTO r
+            WHERE r.empresa = :empresa
+              AND NVL(r.es_inactivo, 0) = 0
+              AND r.fecha_fin IS NOT NULL
+              AND r.fecha_fin > SYSDATE
+              AND {RESERVA_BODEGA_FIELD} IN ({bodegas_in_resv})
+            GROUP BY r.empresa, r.cod_producto
         )
         SELECT
-            i.cod_producto          AS COD_PRODUCTO,
-            d.nombre                AS NOMBRE,
-            d.cod_item_cat          AS COD_ITEM_CAT,
-            i.stock                 AS STOCK
+            i.cod_producto                  AS COD_PRODUCTO,
+            d.nombre                        AS NOMBRE,
+            d.cod_item_cat                  AS COD_ITEM_CAT,
+            NVL(i.stock_total, 0)           AS STOCK_TOTAL,
+            NVL(r.reservado_activo, 0)      AS RESERVADO_ACTIVO,
+            (NVL(i.stock_total,0) - NVL(r.reservado_activo,0)) AS DISPONIBLE
         FROM inv i
         JOIN producto d
           ON d.empresa = i.empresa
          AND d.cod_producto = i.cod_producto
+        LEFT JOIN resv r
+          ON r.empresa = i.empresa
+         AND r.cod_producto = i.cod_producto
         WHERE {cat_filter}
         {where_extra_sql}
+        {only_positive_sql}
         ORDER BY {order_by} {order_dir}
     """
 
-    # Paginación con ROWNUM
-    # Si limit == 0 => sin paginar
+    # Paginación Oracle (ROWNUM)
     if limit > 0:
-        max_row = offset + limit
         binds["min_row"] = offset
-        binds["max_row"] = max_row
-
+        binds["max_row"] = offset + limit
         sql = f"""
             SELECT * FROM (
                 SELECT q.*, ROWNUM rnum
