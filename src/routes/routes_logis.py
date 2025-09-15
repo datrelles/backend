@@ -11,7 +11,8 @@ from os import getenv
 import cx_Oracle
 from src.config.database import db, engine, session
 from src.models.asignacion_cupo import QueryParamsSchema, STReservaProducto, ALLOWED_ORDERING, reservas_schema, \
-    CreateReservaSchema, UpdateReservaSchema, ReservaSchema, map_integrity_error, validate_no_active_duplicate, validate_available_stock_before_create, validate_available_stock_before_update
+    CreateReservaSchema, UpdateReservaSchema, ReservaSchema, map_integrity_error, validate_no_active_duplicate, \
+    validate_available_stock_before_create, validate_available_stock_before_update, ajustar_cantidad_reserva
 from marshmallow import ValidationError
 from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
 from sqlalchemy.exc import IntegrityError
@@ -895,6 +896,14 @@ def info_moto():
                             "cod_producto": cod_prod,
                             "numero_serie": cod_motor
                         })
+
+
+            updated_qty = ajustar_cantidad_reserva(
+                empresa=empresa,
+                cod_bodega=cod_bodega,
+                cod_producto=cod_producto,
+                op="inc",
+            )
             db1.commit()
 
             return jsonify({"ok": "Proceso de bodega interna"}), 200
@@ -1024,6 +1033,12 @@ def info_moto():
                 [empresa, cod_comprobante, tipo_comprobante, cod_motor, cod_bodega]
             )
         db1.commit()
+        updated_qty = ajustar_cantidad_reserva(
+            empresa=empresa,
+            cod_bodega=cod_bodega,
+            cod_producto=cod_producto,
+            op="inc",
+        )
         return jsonify({"ok": "Serie asignada correctamente"}), 200
 
     except cx_Oracle.DatabaseError as e:
@@ -1097,6 +1112,12 @@ def revertir_transferencia():
                 estado_nuevo="A",
                 numero_agencia=int(numero_agencia),
                 empresa_g=int(empresa_g),
+            )
+            updated_qty = ajustar_cantidad_reserva(
+                empresa=empresa,
+                cod_bodega=int(numero_agencia),
+                cod_producto=cod_producto,
+                op="desc",
             )
             return jsonify({
                 "ok": True,
