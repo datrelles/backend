@@ -843,6 +843,12 @@ def info_moto():
                 [empresa, cod_comprobante, tipo_comprobante, cod_motor, cod_bodega]
             )
         db1.commit()
+        updated_qty = ajustar_cantidad_reserva(
+            empresa=empresa,
+            cod_bodega=cod_bodega,
+            cod_producto=cod_producto,
+            op="inc",
+        )
         return jsonify({"ok": "Serie asignada correctamente"}), 200
 
     except cx_Oracle.DatabaseError as e:
@@ -916,6 +922,12 @@ def revertir_transferencia():
                 estado_nuevo="A",
                 numero_agencia=int(numero_agencia),
                 empresa_g=int(empresa_g),
+            )
+            updated_qty = ajustar_cantidad_reserva(
+                empresa=empresa,
+                cod_bodega=int(numero_agencia),
+                cod_producto=cod_producto,
+                op="desc",
             )
             return jsonify({
                 "ok": True,
