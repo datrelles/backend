@@ -2,7 +2,7 @@
 from sqlalchemy import Column, DateTime, Index, VARCHAR, text, Sequence
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from src.config.database import db
 from decimal import Decimal
 from datetime import datetime
@@ -410,3 +410,60 @@ def validate_available_stock_before_update(obj, data):
                 f"Reservas activas de otros: {reservado_otros}"
             ]
         })
+
+def ajustar_cantidad_reserva(empresa: int, cod_bodega: int, cod_producto: str, op: str) -> dict:
+    """
+    Incrementa o decrementa en 1 la 'cantidad' de la reserva activa y vigente
+    que coincida con (empresa, cod_bodega, cod_producto).
+    """
+    out_schema = ReservaSchema()
+    delta = Decimal("1") if op == "inc" else Decimal("-1")
+
+    # 1) Selección y bloqueo de la fila objetivo
+    q = (db.session.query(STReservaProducto)
+         .filter(STReservaProducto.empresa == empresa)
+         .filter(STReservaProducto.cod_bodega_destino == cod_bodega)           # usar cod_bodega_destino si tu negocio lo requiere
+         .filter(STReservaProducto.cod_producto == cod_producto)
+         .filter(text("NVL(ES_INACTIVO,0) = 0"))
+         .filter(text("FECHA_FIN IS NOT NULL AND FECHA_FIN > SYSDATE")))
+
+    try:
+        obj = q.first()
+    except OperationalError:
+        # Fila bloqueada por otra transacción
+        raise ValidationError({"detail": ["La reserva está siendo modificada. Intente nuevamente."]})
+
+    if not obj:
+        raise ValidationError({"detail": ["No existe una reserva activa y vigente para el modelo seleccionado."]})
+
+    # 2) Calcular nueva cantidad
+    qty_current = Decimal(str(obj.cantidad))
+    qty_used = Decimal(str(obj.cantidad_utilizada))
+    qty_new = qty_used + delta
+
+    if qty_new > qty_current:
+        raise ValidationError({
+            "cantidad": [
+                "La reserva de este modelo para la bodega actual ya ha sido completada.",
+                f"cantidad_actual: {qty_current}",
+                f"cantidad_utilizada: {qty_used}"
+            ]
+        })
+
+    if qty_new < 0:
+        raise ValidationError({
+            "cantidad": [
+                "La cantidad resultante debe ser 0 o mayor.",
+                f"propuesta: {qty_new}"
+            ]
+        })
+
+    # 3) Validar disponibilidad con la lógica existente de UPDATE
+    # Solo pasamos los campos que cambian; el helper toma los demás del objeto
+    validate_available_stock_before_update(obj, {"cantidad_utilizada": qty_new})
+
+    # 4) Aplicar cambio y confirmar
+    obj.cantidad_utilizada = qty_new
+    db.session.commit()
+
+    return out_schema.dump(obj)
