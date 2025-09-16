@@ -226,6 +226,196 @@ def cambia_estado_y_graba(
         db1.rollback()
         raise
 
+
+# Requiere: oracle.connection, getenv, cx_Oracle ya importados en el archivo.
+
+def inventario_por_serie_info(
+    *,
+    empresa: int,
+    numero_serie: str,
+    bodegas_stock=None,         # lista[int], por defecto [5,1,25]
+    aa: int = 0,
+    cod_tipo_inventario: int = 1,
+    estado_producto: str = "A",
+    reserva_scope: str = "destino"   # "destino" -> r.cod_bodega_destino | "origen" -> r.cod_bodega
+) -> dict:
+    """
+    Calcula inventario y reservas para el cod_producto de una serie.
+
+    Devuelve:
+    {
+      "empresa": 20,
+      "numero_serie": "172FMNTZ419020",
+      "cod_producto": "MNI25XX000101",
+      "nombre": "...",
+      "stock_total": 9,
+      "reservado_activo_total": 4,
+      "disponible_total": 5,
+      "reservas_por_bodega": [
+        {"cod_bodega": 25, "reservado_activo": 4}
+      ]
+    }
+
+    Lanza:
+      - ValueError si faltan datos o la serie no existe.
+      - cx_Oracle.DatabaseError si falla la DB.
+    """
+    if not numero_serie or not str(numero_serie).strip():
+        raise ValueError("Falta parámetro: numero_serie")
+    if empresa is None:
+        raise ValueError("Falta parámetro: empresa")
+
+    bodegas_stock = bodegas_stock or [5, 1, 25]
+    estado_producto = (estado_producto or "A").strip().upper()
+    reserva_bodega_field = "r.cod_bodega_destino" if str(reserva_scope).lower() == "destino" else "r.cod_bodega"
+
+    db1 = None
+    cur = None
+    try:
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = db1.cursor()
+
+        # 1) Resolver cod_producto + nombre a partir de la serie
+        sql_resolver = """
+            SELECT p.cod_producto, d.nombre
+              FROM st_producto_serie p
+              JOIN producto d
+                ON d.empresa = p.empresa
+               AND d.cod_producto = p.cod_producto
+             WHERE p.empresa = :empresa
+               AND p.numero_serie = :numero_serie
+               AND p.cantidad != 0
+        """
+        binds_resolver = {"empresa": int(empresa), "numero_serie": str(numero_serie).strip()}
+        cur.execute(sql_resolver, binds_resolver)
+        row_prod = cur.fetchone()
+
+        if not row_prod:
+            sql_resolver_alt = """
+                SELECT i.cod_producto, d.nombre
+                  FROM st_inventario_serie i
+                  JOIN producto d
+                    ON d.empresa = i.empresa
+                   AND d.cod_producto = i.cod_producto
+                 WHERE i.empresa = :empresa
+                   AND i.numero_serie = :numero_serie
+            """
+            cur.execute(sql_resolver_alt, binds_resolver)
+            row_prod = cur.fetchone()
+
+        if not row_prod:
+            raise ValueError(f"Serie no encontrada o sin producto asociado: {numero_serie}")
+
+        cod_producto, nombre = row_prod[0], row_prod[1]
+
+        # Helper para IN-list con binds únicos
+        def _make_in_binds(prefix, values):
+            placeholders = []
+            bindmap = {}
+            for i, val in enumerate(values):
+                k = f"{prefix}{i}"
+                placeholders.append(f":{k}")
+                bindmap[k] = int(val)
+            return ",".join(placeholders), bindmap
+
+        stock_in_sql, stock_bindmap = _make_in_binds("sb_", bodegas_stock)
+        resv_in_sql,  resv_bindmap  = _make_in_binds("rb_", bodegas_stock)
+
+        # 2) Totales de stock, reservas y disponible
+        base_sql_totales = f"""
+            WITH inv AS (
+                SELECT s.empresa, s.cod_producto, SUM(s.cantidad) AS stock_total
+                  FROM st_inventario s
+                 WHERE s.empresa = :empresa
+                   AND s.cod_bodega IN ({stock_in_sql})
+                   AND s.aa = :aa
+                   AND s.cod_tipo_inventario = :cod_tipo_inv
+                   AND s.cod_estado_producto = :estado_producto
+                   AND s.cod_producto = :cod_producto
+                 GROUP BY s.empresa, s.cod_producto
+            ),
+            resv AS (
+                SELECT r.empresa, r.cod_producto,
+                       SUM(GREATEST(r.cantidad - NVL(r.cantidad_utilizada,0), 0)) AS reservado_activo
+                  FROM st_reserva_producto r
+                 WHERE r.empresa = :empresa
+                   AND r.cod_producto = :cod_producto
+                   AND NVL(r.es_inactivo, 0) = 0
+                   AND r.fecha_fin IS NOT NULL
+                   AND r.fecha_fin > SYSDATE
+                   AND {reserva_bodega_field} IN ({resv_in_sql})
+                 GROUP BY r.empresa, r.cod_producto
+            )
+            SELECT
+                NVL(i.stock_total, 0) AS stock_total,
+                NVL(r.reservado_activo, 0) AS reservado_activo_total,
+                (NVL(i.stock_total,0) - NVL(r.reservado_activo,0)) AS disponible_total
+              FROM inv i
+              FULL OUTER JOIN resv r
+                ON r.empresa = i.empresa
+               AND r.cod_producto = i.cod_producto
+        """
+        binds_tot = {
+            "empresa": int(empresa),
+            "aa": int(aa),
+            "cod_tipo_inv": int(cod_tipo_inventario),
+            "estado_producto": estado_producto,
+            "cod_producto": str(cod_producto),
+        }
+        binds_tot.update(stock_bindmap)
+        binds_tot.update(resv_bindmap)
+
+        cur.execute(base_sql_totales, binds_tot)
+        res_tot = cur.fetchone()
+        stock_total      = int(res_tot[0] or 0) if res_tot else 0
+        reservado_total  = int(res_tot[1] or 0) if res_tot else 0
+        disponible_total = int(res_tot[2] or 0) if res_tot else 0
+
+        # 3) Desglose de reservas por bodega
+        base_sql_resv_bod = f"""
+            SELECT {reserva_bodega_field} AS cod_bodega,
+                   SUM(GREATEST(r.cantidad - NVL(r.cantidad_utilizada,0), 0)) AS reservado_activo
+              FROM st_reserva_producto r
+             WHERE r.empresa = :empresa
+               AND r.cod_producto = :cod_producto
+               AND NVL(r.es_inactivo, 0) = 0
+               AND r.fecha_fin IS NOT NULL
+               AND r.fecha_fin > SYSDATE
+               AND {reserva_bodega_field} IN ({resv_in_sql})
+          GROUP BY {reserva_bodega_field}
+          ORDER BY {reserva_bodega_field}
+        """
+        binds_resv_bod = {
+            "empresa": int(empresa),
+            "cod_producto": str(cod_producto),
+            **resv_bindmap
+        }
+        cur.execute(base_sql_resv_bod, binds_resv_bod)
+        reservas_por_bodega = [
+            {"cod_bodega": int(r[0]), "reservado_activo": int(r[1] or 0)}
+            for r in cur.fetchall()
+        ]
+
+        return {
+            "empresa": int(empresa),
+            "numero_serie": str(numero_serie),
+            "cod_producto": str(cod_producto),
+            "nombre": nombre,
+            "stock_total": stock_total,
+            "reservado_activo_total": reservado_total,
+            "disponible_total": disponible_total,
+            "reservas_por_bodega": reservas_por_bodega
+        }
+
+    finally:
+        try:
+            if cur: cur.close()
+        finally:
+            try:
+                if db1: db1.close()
+            except Exception:
+                pass
+
 @bplog.route('/pedidos', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -1059,9 +1249,40 @@ def series_antiguas_por_serie():
     try:
         numero_serie = request.args.get('numero_serie', type=str)
         empresa = request.args.get('empresa', type=int, default=20)
+        bodega = request.args.get('bodega', type=int)
 
         if not numero_serie:
             return jsonify({"error": "Falta parámetro: numero_serie"}), 400
+        if bodega is None:
+            return jsonify({"error": "Falta parámetro: bodega"}), 400
+
+        inv = inventario_por_serie_info(
+            empresa=empresa,
+            numero_serie=numero_serie,
+            bodegas_stock=[5, 1, 25],  # o el set que definas
+            aa=0,
+            cod_tipo_inventario=1,
+            estado_producto="A",
+            reserva_scope="destino"  # "origen" si prefieres
+        )
+
+        if int(inv.get("disponible_total", 0)) <= 0:
+            # ¿existe reserva activa en la bodega indicada?
+            reservado_en_bodega = next(
+                (int(r.get("reservado_activo", 0)) for r in inv.get("reservas_por_bodega", [])
+                 if int(r.get("cod_bodega")) == int(bodega)),
+                0
+            )
+            if reservado_en_bodega <= 0:
+                return jsonify({
+                    "error": "No existe Disponibilida ni reserva",
+                    "detalle": {
+                        "empresa": empresa,
+                        "bodega": bodega,
+                        "numero_serie": numero_serie,
+                        "inventario": inv
+                    }
+                }), 409  # Conflict (puedes usar 422 si prefieres)
 
         db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur = db1.cursor()
@@ -1898,3 +2119,224 @@ def get_stock_productos_motos():
                 if db1: db1.close()
             except Exception:
                 pass
+
+@bplog.route('/inventario_por_serie', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def inventario_por_serie():
+    """
+    GET /inventario_por_serie?numero_serie=172FMNTZ419020&empresa=20
+      &bodegas=5,1,25&aa=0&cod_tipo_inventario=1&estado_producto=A
+      &reserva_scope=origen|destino&only_positive=0|1
+    """
+    args = request.args
+
+    def _parse_int(v, default=None):
+        if v is None or str(v).strip() == '':
+            return default
+        return int(v)
+
+    def _parse_csv_ints(v, default):
+        if v is None or str(v).strip() == '':
+            return default
+        try:
+            return [int(x.strip()) for x in str(v).split(',') if x.strip() != '']
+        except ValueError:
+            raise ValueError("Parámetro 'bodegas' inválido. Use enteros separados por coma.")
+
+    def _parse_bool_01(v, default=0):
+        if v is None or str(v).strip() == '':
+            return default
+        iv = int(v)
+        if iv not in (0, 1):
+            raise ValueError("Parámetro booleano inválido. Use 0 ó 1.")
+        return iv
+
+    try:
+        numero_serie    = (args.get('numero_serie') or '').strip()
+        if not numero_serie:
+            return jsonify({"error": "Falta parámetro: numero_serie"}), 400
+
+        empresa         = _parse_int(args.get('empresa'), 20)
+        bodegas         = _parse_csv_ints(args.get('bodegas'), [5, 1, 25])
+        aa              = _parse_int(args.get('aa'), 0)
+        cod_tipo_inv    = _parse_int(args.get('cod_tipo_inventario'), 1)
+        estado_producto = (args.get('estado_producto') or 'A').strip().upper()
+        reserva_scope   = (args.get('reserva_scope') or 'origen').strip().lower()  # origen|destino
+        only_positive   = _parse_bool_01(args.get('only_positive'), 0)
+
+        reserva_bodega_field = "r.cod_bodega_destino"
+
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = db1.cursor()
+
+        # 1) Resolver cod_producto (y nombre) desde la serie
+        sql_resolver = """
+            SELECT p.cod_producto, d.nombre
+              FROM st_producto_serie p
+              JOIN producto d
+                ON d.empresa = p.empresa
+               AND d.cod_producto = p.cod_producto
+             WHERE p.empresa = :empresa
+               AND p.numero_serie = :numero_serie
+               AND p.cantidad != 0
+        """
+        binds_resolver = {"empresa": empresa, "numero_serie": numero_serie}
+        cur.execute(sql_resolver, binds_resolver)
+        row_prod = cur.fetchone()
+
+        if not row_prod:
+            sql_resolver_alt = """
+                SELECT i.cod_producto, d.nombre
+                  FROM st_inventario_serie i
+                  JOIN producto d
+                    ON d.empresa = i.empresa
+                   AND d.cod_producto = i.cod_producto
+                 WHERE i.empresa = :empresa
+                   AND i.numero_serie = :numero_serie
+            """
+            cur.execute(sql_resolver_alt, binds_resolver)
+            row_prod = cur.fetchone()
+
+        if not row_prod:
+            cur.close(); db1.close()
+            return jsonify({"error": "Serie no encontrada o sin producto asociado", "numero_serie": numero_serie}), 404
+
+        cod_producto, nombre = row_prod[0], row_prod[1]
+
+        # --- Helpers para IN-lists con binds únicos por SQL ---
+        def make_in_binds(prefix, values):
+            placeholders = []
+            bindmap = {}
+            for i, val in enumerate(values):
+                k = f"{prefix}{i}"
+                placeholders.append(f":{k}")
+                bindmap[k] = int(val)
+            return ",".join(placeholders), bindmap
+
+        stock_in_sql, stock_bindmap = make_in_binds("sb_", bodegas)
+        resv_in_sql,  resv_bindmap  = make_in_binds("rb_", bodegas)
+
+        # 2) Totales (stock / reservas / disponible) para el cod_producto
+        base_sql_totales = f"""
+            WITH inv AS (
+                SELECT s.empresa, s.cod_producto, SUM(s.cantidad) AS stock_total
+                  FROM st_inventario s
+                 WHERE s.empresa = :empresa
+                   AND s.cod_bodega IN ({stock_in_sql})
+                   AND s.aa = :aa
+                   AND s.cod_tipo_inventario = :cod_tipo_inv
+                   AND s.cod_estado_producto = :estado_producto
+                   AND s.cod_producto = :cod_producto
+                 GROUP BY s.empresa, s.cod_producto
+            ),
+            resv AS (
+                SELECT r.empresa, r.cod_producto,
+                       SUM(GREATEST(r.cantidad - NVL(r.cantidad_utilizada,0), 0)) AS reservado_activo
+                  FROM st_reserva_producto r
+                 WHERE r.empresa = :empresa
+                   AND r.cod_producto = :cod_producto
+                   AND NVL(r.es_inactivo, 0) = 0
+                   AND r.fecha_fin IS NOT NULL
+                   AND r.fecha_fin > SYSDATE
+                   AND {reserva_bodega_field} IN ({resv_in_sql})
+                 GROUP BY r.empresa, r.cod_producto
+            )
+            SELECT
+                NVL(i.stock_total, 0) AS stock_total,
+                NVL(r.reservado_activo, 0) AS reservado_activo_total,
+                (NVL(i.stock_total,0) - NVL(r.reservado_activo,0)) AS disponible_total
+              FROM inv i
+              FULL OUTER JOIN resv r
+                ON r.empresa = i.empresa
+               AND r.cod_producto = i.cod_producto
+        """
+
+        binds_tot = {
+            "empresa": empresa,
+            "aa": aa,
+            "cod_tipo_inv": cod_tipo_inv,
+            "estado_producto": estado_producto,
+            "cod_producto": cod_producto,
+        }
+        binds_tot.update(stock_bindmap)
+        binds_tot.update(resv_bindmap)
+
+        cur.execute(base_sql_totales, binds_tot)
+        res_tot = cur.fetchone()
+        stock_total     = int(res_tot[0] or 0) if res_tot else 0
+        reservado_total = int(res_tot[1] or 0) if res_tot else 0
+        disponible_total= int(res_tot[2] or 0) if res_tot else 0
+
+        # 3) Desglose reservas por bodega
+        base_sql_resv_bod = f"""
+            SELECT {reserva_bodega_field} AS cod_bodega,
+                   SUM(GREATEST(r.cantidad - NVL(r.cantidad_utilizada,0), 0)) AS reservado_activo
+              FROM st_reserva_producto r
+             WHERE r.empresa = :empresa
+               AND r.cod_producto = :cod_producto
+               AND NVL(r.es_inactivo, 0) = 0
+               AND r.fecha_fin IS NOT NULL
+               AND r.fecha_fin > SYSDATE
+               AND {reserva_bodega_field} IN ({resv_in_sql})
+          GROUP BY {reserva_bodega_field}
+          ORDER BY {reserva_bodega_field}
+        """
+        binds_resv_bod = {
+            "empresa": empresa,
+            "cod_producto": cod_producto,
+            **resv_bindmap
+        }
+        cur.execute(base_sql_resv_bod, binds_resv_bod)
+        reservas_por_bodega = [
+            {"cod_bodega": int(r[0]), "reservado_activo": int(r[1] or 0)}
+            for r in cur.fetchall()
+        ]
+
+        cur.close(); db1.close()
+
+        if only_positive == 1 and disponible_total <= 0:
+            return jsonify({
+                "warning": "Sin disponible en las bodegas indicadas",
+                "empresa": empresa,
+                "numero_serie": numero_serie,
+                "cod_producto": cod_producto,
+                "nombre": nombre,
+                "stock_total": stock_total,
+                "reservado_activo_total": reservado_total,
+                "disponible_total": disponible_total,
+                "reservas_por_bodega": reservas_por_bodega
+            }), 200
+
+        return jsonify({
+            "empresa": empresa,
+            "numero_serie": numero_serie,
+            "cod_producto": cod_producto,
+            "nombre": nombre,
+            "stock_total": stock_total,
+            "reservado_activo_total": reservado_total,
+            "disponible_total": disponible_total,
+            "reservas_por_bodega": reservas_por_bodega
+        }), 200
+
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+    except cx_Oracle.DatabaseError as e:
+        try:
+            if 'cur' in locals() and cur: cur.close()
+        finally:
+            try:
+                if 'db1' in locals() and db1: db1.close()
+            except Exception:
+                pass
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+    except Exception as e:
+        try:
+            if 'cur' in locals() and cur: cur.close()
+        finally:
+            try:
+                if 'db1' in locals() and db1: db1.close()
+            except Exception:
+                pass
+        return jsonify({"error": str(e)}), 500
