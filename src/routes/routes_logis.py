@@ -1365,6 +1365,39 @@ def series_antiguas_por_serie():
         cur.close()
         db1.close()
 
+        # --- VALIDACIÓN EXTRA POR UNIDADES DE EDAD (justo antes de responder) ---
+        def _unidad_edad(dias):
+            try:
+                d = int(dias)
+            except (TypeError, ValueError):
+                return None
+            if d <= 30:
+                return 1
+            if d <= 60:
+                return 2
+            if d <= 90:
+                return 3
+            return 4  # > 90 días
+
+        if data:
+            # La edad actual viene repetida en cada fila como EDAD_SERIE_ACTUAL; tomamos la primera
+            edad_actual_dias = data[0].get("EDAD_SERIE_ACTUAL")
+            unidad_actual = _unidad_edad(edad_actual_dias)
+
+            # Unidad máxima entre las series candidatas (las que regresará el endpoint)
+            unidades_list = [
+                _unidad_edad(item.get("EDAD_DIAS"))
+                for item in data
+                if item.get("EDAD_DIAS") is not None
+            ]
+            unidad_max_lista = max(unidades_list) if unidades_list else None
+
+            # Si están en la misma unidad, no sugerimos lista (devolvemos [])
+            if unidad_actual is not None and unidad_max_lista is not None and unidad_actual == unidad_max_lista:
+                return jsonify([]), 200
+        # --- FIN VALIDACIÓN EXTRA ---
+
+
         return jsonify(data), 200
 
     except cx_Oracle.DatabaseError as e:
