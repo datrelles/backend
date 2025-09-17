@@ -411,7 +411,7 @@ def validate_available_stock_before_update(obj, data):
             ]
         })
 
-def ajustar_cantidad_reserva(empresa: int, cod_bodega: int, cod_producto: str, op: str) -> dict:
+def ajustar_cantidad_reserva_old(empresa: int, cod_bodega: int, cod_producto: str, op: str) -> dict:
     """
     Incrementa o decrementa en 1 la 'cantidad' de la reserva activa y vigente
     que coincida con (empresa, cod_bodega, cod_producto).
@@ -464,6 +464,61 @@ def ajustar_cantidad_reserva(empresa: int, cod_bodega: int, cod_producto: str, o
 
     # 4) Aplicar cambio y confirmar
     obj.cantidad_utilizada = qty_new
+    db.session.commit()
+
+    return out_schema.dump(obj)
+
+def ajustar_cantidad_reserva(empresa: int, cod_bodega: int, cod_producto: str, op: str):
+    """
+    Incrementa o decrementa en 1 la 'cantidad_utilizada' de la reserva activa y vigente
+    que coincida con (empresa, cod_bodega_destino, cod_producto).
+    Si no existe una reserva que cumpla, retorna None sin alterar el flujo del llamador.
+    """
+    out_schema = ReservaSchema()
+    delta = Decimal("1") if op == "inc" else Decimal("-1")
+
+    # 1) Buscar una reserva activa y vigente (sin bloquear ni fallar si no hay)
+    q = (db.session.query(STReservaProducto)
+         .filter(STReservaProducto.empresa == empresa)
+         .filter(STReservaProducto.cod_bodega_destino == cod_bodega)  # usa destino según tu comentario
+         .filter(STReservaProducto.cod_producto == cod_producto)
+         .filter(text("NVL(ES_INACTIVO,0) = 0"))
+         .filter(text("FECHA_FIN IS NOT NULL AND FECHA_FIN > SYSDATE"))
+         .order_by(STReservaProducto.fecha_ini.desc(),
+                   STReservaProducto.cod_reserva.desc()))
+
+    obj = q.first()
+
+    # 1.a) Si no hay reserva, no-op (salida silenciosa)
+    if not obj:
+        return None
+
+    # 2) Calcular nueva 'cantidad_utilizada' y validar coherencia
+    qty_actual_total = Decimal(str(obj.cantidad or 0))
+    qty_usada = Decimal(str(obj.cantidad_utilizada or 0))
+    qty_usada_nueva = qty_usada + delta
+
+    # No permitir superar la cantidad total
+    if qty_usada_nueva > qty_actual_total:
+        raise ValidationError({
+            "cantidad_utilizada": [
+                "La reserva ya está completamente utilizada; no se puede incrementar más.",
+                f"cantidad_total: {qty_actual_total}",
+                f"cantidad_utilizada_actual: {qty_usada}"
+            ]
+        })
+
+    # Permitir 0, pero no negativo
+    if qty_usada_nueva < 0:
+        raise ValidationError({
+            "cantidad_utilizada": [
+                "La cantidad utilizada resultante debe ser 0 o mayor.",
+                f"propuesta: {qty_usada_nueva}"
+            ]
+        })
+
+    # 3) Aplicar cambio y confirmar
+    obj.cantidad_utilizada = qty_usada_nueva
     db.session.commit()
 
     return out_schema.dump(obj)
