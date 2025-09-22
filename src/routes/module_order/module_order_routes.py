@@ -815,10 +815,10 @@ def get_vendedores_agencia():
             row = cur.fetchone()
             if row:
                 # Si encuentra, retorna ese registro (JSON single object, puedes cambiar a list si lo prefieres)
-                return jsonify({
+                return jsonify([{
                     "cod_persona_vendor": row[0],
                     "nombre": row[1]
-                }), 200
+                }]), 200
             # Si no encuentra, sigue flujo normal
 
         # ------------------- FLUJO ORIGINAL -------------------
