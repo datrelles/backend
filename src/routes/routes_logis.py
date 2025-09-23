@@ -706,6 +706,28 @@ def info_moto():
                 row = cur.fetchone()
                 return row[0] if row else None
 
+        def obtener_cod_estado_por_motor(
+                db1,
+                *,
+                cod_motor: str,
+                cod_producto: str
+        ) -> str:
+            """
+            Devuelve el cod_producto asociado a un cod_motor en st_prod_packing_list.
+            Si no existe, retorna None.
+            """
+            sql = """
+                SELECT s.cod_estado_producto
+                  FROM st_producto_serie s
+                 WHERE s.numero_serie = :cod_motor
+                 AND s.cod_producto = :cod_producto
+            """
+            with db1.cursor() as cur:
+                cur.execute(sql, {"cod_motor": cod_motor, "cod_producto": cod_producto})
+                row = cur.fetchone()
+                return row[0] if row else None
+        if obtener_cod_estado_por_motor(db1, cod_motor=cod_motor, cod_producto=cod_producto) != 'A':
+            return jsonify({"error": "Serie con estado diferente a A (Disponible)"}), 500
 
         if existe_transferencia_por_serie(
                 db1,
@@ -713,8 +735,6 @@ def info_moto():
                 numero_serie=cod_motor
         ):
             return jsonify({"error": "Serie previamente asignada"}), 500
-
-        print(obtener_cod_producto_por_motor(db1, cod_motor=cod_motor))
 
         if obtener_cod_producto_por_motor(db1, cod_motor=cod_motor)!= cod_producto:
             return jsonify({"error": "Serie no pertenece a Modelo Seleccionado"}), 500
