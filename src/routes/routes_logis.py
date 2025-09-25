@@ -3,6 +3,7 @@ import logging
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 import datetime
+from sqlalchemy import text
 import re
 from decimal import Decimal
 from datetime import datetime, date
@@ -16,8 +17,10 @@ from src.models.asignacion_cupo import QueryParamsSchema, STReservaProducto, ALL
 from marshmallow import ValidationError
 from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
 from sqlalchemy.exc import IntegrityError
-
-
+from src.models.rutas import STRuta, STDireccionRuta, RutaCreateSchema, RutaUpdateSchema, RutaOutSchema, \
+    DirRutaCreateSchema, DirRutaOutSchema, DirRutaSearchSchema, DirRutaDetailSchema, DirRutaDeleteSchema, \
+    TRutaOutSchema, TRutaCreateSchema, TRutaDetailSchema, TRutaUpdateSchema, TRutaSearchSchema, TRutaDeleteSchema, \
+    STTransportistaRuta
 
 bplog = Blueprint('routes_log', __name__)
 
@@ -2270,7 +2273,6 @@ def inventario_por_serie():
         stock_in_sql, stock_bindmap = make_in_binds("sb_", bodegas)
         resv_in_sql,  resv_bindmap  = make_in_binds("rb_", bodegas)
 
-        # 2) Totales (stock / reservas / disponible) para el cod_producto
         base_sql_totales = f"""
             WITH inv AS (
                 SELECT s.empresa, s.cod_producto, SUM(s.cantidad) AS stock_total
@@ -2321,7 +2323,6 @@ def inventario_por_serie():
         reservado_total = int(res_tot[1] or 0) if res_tot else 0
         disponible_total= int(res_tot[2] or 0) if res_tot else 0
 
-        # 3) Desglose reservas por bodega
         base_sql_resv_bod = f"""
             SELECT {reserva_bodega_field} AS cod_bodega,
                    SUM(GREATEST(r.cantidad - NVL(r.cantidad_utilizada,0), 0)) AS reservado_activo
@@ -2393,3 +2394,430 @@ def inventario_por_serie():
             except Exception:
                 pass
         return jsonify({"error": str(e)}), 500
+
+out_schema = RutaOutSchema()
+out_many_schema = RutaOutSchema(many=True)
+create_schema = RutaCreateSchema()
+update_schema = RutaUpdateSchema()
+
+def map_integrity_error(err: IntegrityError):
+    msg = str(err.orig)
+    if "ORA-00001" in msg:
+        return 409, "Conflicto de clave única."
+    if "ORA-02291" in msg: return 409, "Violación de integridad referencial."
+    if "ORA-02292" in msg: return 409, "No se puede borrar por dependencias referenciales."
+    return 400, "Violación de integridad."
+
+@bplog.route("/rutas", methods=["GET"])
+def list_rutas():
+    try:
+        empresa = request.args.get("empresa", type=int)
+        fid = request.args.get("id", type=str)
+        fnombre = request.args.get("nombre", type=str)
+        page = max(request.args.get("page", default=1, type=int), 1)
+        page_size = min(max(request.args.get("page_size", default=20, type=int), 1), 200)
+    except Exception:
+        return jsonify({"detail": "Parámetros inválidos."}), 400
+
+    q = db.session.query(STRuta)
+    if empresa is not None:
+        q = q.filter(STRuta.empresa == empresa)
+    if fid:
+        q = q.filter(STRuta.id.ilike(f"%{fid}%"))
+    if fnombre:
+        q = q.filter(STRuta.nombre.ilike(f"%{fnombre}%"))
+
+    total = q.count()
+    items = (q.order_by(STRuta.cod_ruta.desc())
+               .offset((page - 1) * page_size)
+               .limit(page_size).all())
+
+    from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
+    def page_link(n):
+        parsed = urlparse(request.url)
+        params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        params["page"] = str(n)
+        params["page_size"] = str(page_size)
+        return urlunparse(parsed._replace(query=urlencode(params, doseq=True)))
+
+    next_link = page_link(page + 1) if page * page_size < total else None
+    prev_link = page_link(page - 1) if page > 1 else None
+
+    return jsonify({
+        "count": total,
+        "next": next_link,
+        "previous": prev_link,
+        "results": out_many_schema.dump(items)
+    })
+
+@bplog.route("/rutas/<int:empresa>/<int:cod_ruta>", methods=["GET"])
+def get_ruta(empresa: int, cod_ruta: int):
+    obj = db.session.get(STRuta, (cod_ruta, empresa))  # orden PK: (cod_ruta, empresa)
+    if not obj:
+        return jsonify({"detail": "No encontrado."}), 404
+    return jsonify(out_schema.dump(obj))
+
+@bplog.route("/rutas", methods=["POST"])
+def create_ruta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = create_schema.load(payload)
+        for forbidden in ("cod_ruta", "id"):
+            if forbidden in payload:
+                raise ValidationError({forbidden: ["Este campo no se acepta en creación."]})
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = STRuta(
+        empresa=data["empresa"],
+        nombre=data.get("nombre"),
+    )
+
+    db.session.add(obj)
+    try:
+        db.session.flush()
+
+        obj.id = str(int(obj.cod_ruta))
+
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    location = url_for("routes_log.get_ruta", empresa=int(obj.empresa), cod_ruta=int(obj.cod_ruta), _external=True)
+    return jsonify(out_schema.dump(obj)), 201, {"Location": location}
+@bplog.route("/rutas/<int:empresa>/<int:cod_ruta>", methods=["PUT"])
+def update_ruta(empresa: int, cod_ruta: int):
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = update_schema.load(payload)
+        if "empresa" in data and data["empresa"] != empresa:
+            raise ValidationError({"empresa": ["No se permite cambiar la PK en PUT."]})
+        if "cod_ruta" in data and data["cod_ruta"] != cod_ruta:
+            raise ValidationError({"cod_ruta": ["No se permite cambiar la PK en PUT."]})
+        if "id" in payload:
+            raise ValidationError({"id": ["No se permite modificar este campo."]})
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = db.session.get(STRuta, (cod_ruta, empresa))
+    if not obj:
+        return jsonify({"detail": "No encontrado."}), 404
+
+    if "nombre" in data:
+        obj.nombre = data["nombre"]
+
+    try:
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    return jsonify(out_schema.dump(obj)), 200
+
+out_schema = DirRutaOutSchema()
+out_many_schema = DirRutaOutSchema(many=True)
+create_schema = DirRutaCreateSchema()
+search_schema = DirRutaSearchSchema()
+detail_schema = DirRutaDetailSchema()
+delete_schema = DirRutaDeleteSchema()
+def fk_exists(sql: str, params: dict) -> bool:
+    return db.session.execute(text(sql), params).first() is not None
+
+def validate_foreign_keys_dir_rutas(data):
+    errors = {}
+    if not fk_exists("SELECT 1 FROM CLIENTE WHERE EMPRESA=:e AND COD_CLIENTE=:c AND ROWNUM=1",
+                     {"e": data["empresa"], "c": data["cod_cliente"]}):
+        errors["cod_cliente"] = ["Cliente no existe para la empresa."]
+    if not fk_exists("""SELECT 1 FROM ST_CLIENTE_DIRECCION_GUIAS
+                        WHERE EMPRESA=:e AND COD_CLIENTE=:c AND COD_DIRECCION=:d AND ROWNUM=1""",
+                     {"e": data["empresa"], "c": data["cod_cliente"], "d": data["cod_direccion"]}):
+        errors["cod_direccion"] = ["Dirección no existe para ese cliente y empresa."]
+    if not fk_exists("SELECT 1 FROM ST_RUTAS WHERE COD_RUTA=:r AND EMPRESA=:e AND ROWNUM=1",
+                     {"r": data["cod_ruta"], "e": data["empresa"]}):
+        errors["cod_ruta"] = ["Ruta no existe para la empresa."]
+    if errors:
+        raise ValidationError(errors)
+
+@bplog.route("/direccion-rutas/search", methods=["POST"])
+def search_dir_rutas():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = search_schema.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    page = max(data.get("page", 1), 1)
+    page_size = min(max(data.get("page_size", 20), 1), 200)
+
+    q = db.session.query(STDireccionRuta)
+    if data.get("empresa") is not None:
+        q = q.filter(STDireccionRuta.empresa == data["empresa"])
+    if data.get("cod_cliente"):
+        q = q.filter(STDireccionRuta.cod_cliente == data["cod_cliente"])
+    if data.get("cod_ruta") is not None:
+        q = q.filter(STDireccionRuta.cod_ruta == data["cod_ruta"])
+
+    total = q.count()
+    items = (q.order_by(STDireccionRuta.empresa.asc(),
+                        STDireccionRuta.cod_cliente.asc(),
+                        STDireccionRuta.cod_direccion.asc(),
+                        STDireccionRuta.cod_ruta.asc())
+               .offset((page - 1) * page_size)
+               .limit(page_size).all())
+
+    next_page = page + 1 if page * page_size < total else None
+    prev_page = page - 1 if page > 1 else None
+
+    return jsonify({
+        "count": total,
+        "next": next_page,
+        "previous": prev_page,
+        "results": out_many_schema.dump(items)
+    })
+
+@bplog.route("/direccion-rutas/detail", methods=["POST"])
+def detail_dir_ruta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = detail_schema.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = db.session.get(STDireccionRuta, (
+        data["empresa"], data["cod_cliente"], data["cod_direccion"], data["cod_ruta"]
+    ))
+    if not obj:
+        return jsonify({"detail": "No encontrado."}), 404
+    return jsonify(out_schema.dump(obj)), 200
+
+@bplog.route("/direccion-rutas", methods=["POST"])
+def create_dir_ruta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = create_schema.load(payload)
+        validate_foreign_keys_dir_rutas(data)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    existing = db.session.get(STDireccionRuta, (
+        data["empresa"], data["cod_cliente"], data["cod_direccion"], data["cod_ruta"]
+    ))
+    if existing:
+        return jsonify({"detail": "La relación ya existe."}), 409
+
+    obj = STDireccionRuta(**data)
+    db.session.add(obj)
+    try:
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    return jsonify(out_schema.dump(obj)), 201
+
+@bplog.route("/direccion-rutas/delete", methods=["POST"])
+def delete_dir_ruta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = delete_schema.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = db.session.get(STDireccionRuta, (
+        data["empresa"], data["cod_cliente"], data["cod_direccion"], data["cod_ruta"]
+    ))
+    if not obj:
+        return "", 204
+
+    db.session.delete(obj)
+    try:
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    return "", 204
+
+out_schema_t = TRutaOutSchema()
+out_many_schema_t = TRutaOutSchema(many=True)
+create_schema_t = TRutaCreateSchema()
+detail_schema_t = TRutaDetailSchema()
+update_schema_t = TRutaUpdateSchema()
+search_schema_t = TRutaSearchSchema()
+delete_schema_t = TRutaDeleteSchema()
+
+def validate_foreign_keys_t(data):
+    errors = {}
+    if not fk_exists(
+        "SELECT 1 FROM ST_RUTAS WHERE COD_RUTA=:r AND EMPRESA=:e AND ROWNUM=1",
+        {"r": data["cod_ruta"], "e": data["empresa"]}
+    ):
+        errors["cod_ruta"] = ["Ruta no existe para la empresa."]
+    if not fk_exists(
+        "SELECT 1 FROM ST_TRANSPORTISTA WHERE COD_TRANSPORTISTA=:t AND EMPRESA=:e AND ROWNUM=1",
+        {"t": data["cod_transportista"], "e": data["empresa"]}
+    ):
+        errors["cod_transportista"] = ["Transportista no existe para la empresa."]
+    if errors:
+        raise ValidationError(errors)
+
+def validate_unique_transportista_ruta(empresa: int, cod_transportista: str, cod_ruta: int, exclude_codigo: int | None = None):
+
+    base_sql = """
+        SELECT 1
+          FROM ST_TRANSPORTISTA_RUTA
+         WHERE EMPRESA = :e
+           AND COD_TRANSPORTISTA = :t
+           AND COD_RUTA = :r
+    """
+    params = {"e": empresa, "t": cod_transportista, "r": cod_ruta}
+
+    if exclude_codigo is not None:
+        base_sql += " AND CODIGO <> :codigo"
+        params["codigo"] = exclude_codigo
+
+    exists = db.session.execute(text(base_sql + " AND ROWNUM = 1"), params).first() is not None
+    if exists:
+        from marshmallow import ValidationError
+        raise ValidationError({
+            "cod_transportista": [f"Ya existe un vínculo para transportista '{cod_transportista}' con ruta {cod_ruta} en empresa {empresa}."],
+            "cod_ruta": ["Par (cod_transportista, cod_ruta) duplicado."]
+        })
+
+@bplog.route("/transportista-ruta/search", methods=["POST"])
+def search_truta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = search_schema_t.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    page = max(data.get("page", 1), 1)
+    page_size = min(max(data.get("page_size", 20), 1), 200)
+
+    q = db.session.query(STTransportistaRuta)
+    if data.get("empresa") is not None:
+        q = q.filter(STTransportistaRuta.empresa == data["empresa"])
+    if data.get("cod_transportista"):
+        q = q.filter(STTransportistaRuta.cod_transportista == data["cod_transportista"])
+    if data.get("cod_ruta") is not None:
+        q = q.filter(STTransportistaRuta.cod_ruta == data["cod_ruta"])
+
+    total = q.count()
+    items = (q.order_by(STTransportistaRuta.empresa.asc(),
+                        STTransportistaRuta.codigo.desc())
+               .offset((page - 1) * page_size)
+               .limit(page_size).all())
+
+    return jsonify({
+        "count": total,
+        "next": (page + 1) if page * page_size < total else None,
+        "previous": (page - 1) if page > 1 else None,
+        "results": out_many_schema_t.dump(items)
+    })
+
+@bplog.route("/transportista-ruta/detail", methods=["POST"])
+def detail_truta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = detail_schema_t.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = db.session.get(STTransportistaRuta, (data["codigo"], data["empresa"]))  # orden PK: (codigo, empresa)
+    if not obj:
+        return jsonify({"detail": "No encontrado."}), 404
+    return jsonify(out_schema_t.dump(obj)), 200
+
+@bplog.route("/transportista-ruta", methods=["POST"])
+def create_truta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        if "codigo" in payload:
+            raise ValidationError({"codigo": ["Este campo no se acepta en creación."]})
+        data = create_schema_t.load(payload)
+        validate_foreign_keys_t(data)
+        validate_unique_transportista_ruta(
+            empresa=data["empresa"],
+            cod_transportista=data["cod_transportista"],
+            cod_ruta=data["cod_ruta"]
+        )
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = STTransportistaRuta(
+        empresa=data["empresa"],
+        cod_transportista=data["cod_transportista"],
+        cod_ruta=data["cod_ruta"],
+    )
+    db.session.add(obj)
+    try:
+        db.session.flush()
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    return jsonify(out_schema_t.dump(obj)), 201
+
+@bplog.route("/transportista-ruta/update", methods=["POST"])
+def update_truta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = update_schema_t.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = db.session.get(STTransportistaRuta, (data["codigo"], data["empresa"]))
+    if not obj:
+        return jsonify({"detail": "No encontrado."}), 404
+
+    fks_to_check = {}
+    if "cod_ruta" in data:
+        fks_to_check["cod_ruta"] = data["cod_ruta"]
+    if "cod_transportista" in data:
+        fks_to_check["cod_transportista"] = data["cod_transportista"]
+    if fks_to_check:
+        validate_foreign_keys_t({**{"empresa": data["empresa"]}, **fks_to_check})
+
+    if "cod_ruta" in data:
+        obj.cod_ruta = data["cod_ruta"]
+    if "cod_transportista" in data:
+        obj.cod_transportista = data["cod_transportista"]
+
+    try:
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    return jsonify(out_schema_t.dump(obj)), 200
+
+@bplog.route("/transportista-ruta/delete", methods=["POST"])
+def delete_truta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = detail_schema_t.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = db.session.get(STTransportistaRuta, (data["codigo"], data["empresa"]))
+    if not obj:
+        return "", 204
+
+    db.session.delete(obj)
+    try:
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    return "", 204
