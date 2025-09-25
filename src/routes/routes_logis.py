@@ -1356,6 +1356,7 @@ def series_antiguas_por_serie():
                                    AND s.empresa      = :empresa
                                    AND s.cantidad    != 0
                                    AND s.empresa      = iv.empresa
+                                   AND s.cod_estado_producto LIKE '%A%'
                                    AND iv.numero_serie= s.numero_serie
                            ) x
                      WHERE i.empresa = :empresa
