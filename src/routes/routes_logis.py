@@ -2396,7 +2396,7 @@ def inventario_por_serie():
                 pass
         return jsonify({"error": str(e)}), 500
 
-out_schema_ru = RutaOutSchema()
+out_schema_ru = RutaOutSchema(many=True)
 out_many_schema_ru = RutaOutSchema()
 create_schema_ru = RutaCreateSchema()
 update_schema_ru = RutaUpdateSchema()
@@ -2448,7 +2448,7 @@ def list_rutas():
         "count": total,
         "next": next_link,
         "previous": prev_link,
-        "results": out_many_schema_ru.dump(items)
+        "results": out_schema_ru.dump(items)
     })
 
 @bplog.route("/rutas/<int:empresa>/<int:cod_ruta>", methods=["GET"])
