@@ -20,7 +20,7 @@ from sqlalchemy.exc import IntegrityError
 from src.models.rutas import STRuta, STDireccionRuta, RutaCreateSchema, RutaUpdateSchema, RutaOutSchema, \
     DirRutaCreateSchema, DirRutaOutSchema, DirRutaSearchSchema, DirRutaDetailSchema, DirRutaDeleteSchema, \
     TRutaOutSchema, TRutaCreateSchema, TRutaDetailSchema, TRutaUpdateSchema, TRutaSearchSchema, TRutaDeleteSchema, \
-    STTransportistaRuta
+    STTransportistaRuta, DespachoSearchIn, DespachoRowOut, ALLOWED_ORDERING_FIELDS
 
 bplog = Blueprint('routes_log', __name__)
 
@@ -2396,10 +2396,10 @@ def inventario_por_serie():
                 pass
         return jsonify({"error": str(e)}), 500
 
-out_schema = RutaOutSchema()
-out_many_schema = RutaOutSchema(many=True)
-create_schema = RutaCreateSchema()
-update_schema = RutaUpdateSchema()
+out_schema_ru = RutaOutSchema()
+out_many_schema_ru = RutaOutSchema()
+create_schema_ru = RutaCreateSchema()
+update_schema_ru = RutaUpdateSchema()
 
 def map_integrity_error(err: IntegrityError):
     msg = str(err.orig)
@@ -2448,7 +2448,7 @@ def list_rutas():
         "count": total,
         "next": next_link,
         "previous": prev_link,
-        "results": out_many_schema.dump(items)
+        "results": out_many_schema_ru.dump(items)
     })
 
 @bplog.route("/rutas/<int:empresa>/<int:cod_ruta>", methods=["GET"])
@@ -2456,13 +2456,13 @@ def get_ruta(empresa: int, cod_ruta: int):
     obj = db.session.get(STRuta, (cod_ruta, empresa))  # orden PK: (cod_ruta, empresa)
     if not obj:
         return jsonify({"detail": "No encontrado."}), 404
-    return jsonify(out_schema.dump(obj))
+    return jsonify(out_many_schema_ru.dump(obj))
 
 @bplog.route("/rutas", methods=["POST"])
 def create_ruta():
     payload = request.get_json(silent=True) or {}
     try:
-        data = create_schema.load(payload)
+        data = create_schema_ru.load(payload)
         for forbidden in ("cod_ruta", "id"):
             if forbidden in payload:
                 raise ValidationError({forbidden: ["Este campo no se acepta en creación."]})
@@ -2487,12 +2487,12 @@ def create_ruta():
         return jsonify({"detail": detail}), status
 
     location = url_for("routes_log.get_ruta", empresa=int(obj.empresa), cod_ruta=int(obj.cod_ruta), _external=True)
-    return jsonify(out_schema.dump(obj)), 201, {"Location": location}
+    return jsonify(out_schema_ru.dump(obj)), 201, {"Location": location}
 @bplog.route("/rutas/<int:empresa>/<int:cod_ruta>", methods=["PUT"])
 def update_ruta(empresa: int, cod_ruta: int):
     payload = request.get_json(silent=True) or {}
     try:
-        data = update_schema.load(payload)
+        data = update_schema_ru.load(payload)
         if "empresa" in data and data["empresa"] != empresa:
             raise ValidationError({"empresa": ["No se permite cambiar la PK en PUT."]})
         if "cod_ruta" in data and data["cod_ruta"] != cod_ruta:
@@ -2516,14 +2516,14 @@ def update_ruta(empresa: int, cod_ruta: int):
         status, detail = map_integrity_error(ie)
         return jsonify({"detail": detail}), status
 
-    return jsonify(out_schema.dump(obj)), 200
+    return jsonify(out_schema_ru.dump(obj)), 200
 
-out_schema = DirRutaOutSchema()
-out_many_schema = DirRutaOutSchema(many=True)
-create_schema = DirRutaCreateSchema()
-search_schema = DirRutaSearchSchema()
-detail_schema = DirRutaDetailSchema()
-delete_schema = DirRutaDeleteSchema()
+out_schema_dir = DirRutaOutSchema()
+out_many_schema_dir = DirRutaOutSchema(many=True)
+create_schema_dir = DirRutaCreateSchema()
+search_schema_dir = DirRutaSearchSchema()
+detail_schema_dir = DirRutaDetailSchema()
+delete_schema_dir = DirRutaDeleteSchema()
 def fk_exists(sql: str, params: dict) -> bool:
     return db.session.execute(text(sql), params).first() is not None
 
@@ -2546,7 +2546,7 @@ def validate_foreign_keys_dir_rutas(data):
 def search_dir_rutas():
     payload = request.get_json(silent=True) or {}
     try:
-        data = search_schema.load(payload)
+        data = search_schema_dir.load(payload)
     except ValidationError as err:
         return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
 
@@ -2576,14 +2576,14 @@ def search_dir_rutas():
         "count": total,
         "next": next_page,
         "previous": prev_page,
-        "results": out_many_schema.dump(items)
+        "results": out_many_schema_dir.dump(items)
     })
 
 @bplog.route("/direccion-rutas/detail", methods=["POST"])
 def detail_dir_ruta():
     payload = request.get_json(silent=True) or {}
     try:
-        data = detail_schema.load(payload)
+        data = detail_schema_dir.load(payload)
     except ValidationError as err:
         return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
 
@@ -2592,13 +2592,13 @@ def detail_dir_ruta():
     ))
     if not obj:
         return jsonify({"detail": "No encontrado."}), 404
-    return jsonify(out_schema.dump(obj)), 200
+    return jsonify(out_schema_dir.dump(obj)), 200
 
 @bplog.route("/direccion-rutas", methods=["POST"])
 def create_dir_ruta():
     payload = request.get_json(silent=True) or {}
     try:
-        data = create_schema.load(payload)
+        data = create_schema_dir.load(payload)
         validate_foreign_keys_dir_rutas(data)
     except ValidationError as err:
         return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
@@ -2618,13 +2618,13 @@ def create_dir_ruta():
         status, detail = map_integrity_error(ie)
         return jsonify({"detail": detail}), status
 
-    return jsonify(out_schema.dump(obj)), 201
+    return jsonify(out_schema_dir.dump(obj)), 201
 
 @bplog.route("/direccion-rutas/delete", methods=["POST"])
 def delete_dir_ruta():
     payload = request.get_json(silent=True) or {}
     try:
-        data = delete_schema.load(payload)
+        data = delete_schema_dir.load(payload)
     except ValidationError as err:
         return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
 
@@ -2822,3 +2822,155 @@ def delete_truta():
         return jsonify({"detail": detail}), status
 
     return "", 204
+
+in_schema_d = DespachoSearchIn()
+out_many_d = DespachoRowOut(many=True)
+
+def build_ordering(ordering_param: str | None):
+    # Por defecto
+    if not ordering_param:
+        return "ORDER BY fecha_est_desp DESC, cod_orden DESC"
+    clauses = []
+    for tok in ordering_param.split(","):
+        tok = tok.strip()
+        desc = tok.startswith("-")
+        key = tok.lstrip("-")
+        if key not in ALLOWED_ORDERING_FIELDS:
+            continue
+        direction = "DESC" if desc else "ASC"
+        clauses.append(f"{key} {direction}")
+    return "ORDER BY " + ", ".join(clauses) if clauses else "ORDER BY fecha_est_desp DESC, cod_orden DESC"
+
+@bplog.route("/api/despachos/search", methods=["POST"])
+def search_despachos():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = in_schema_d.load(payload)
+        in_schema_d.validate_ordering(data.get("ordering"))
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    # Base SELECT: mapeo de alias a nombres reales de la vista
+    base_select = """
+        SELECT
+            empresa, cod_tipo_pedido, cod_pedido, cod_tipo_orden, cod_orden,
+            tipo_pretransferencia, cod_pretransferencia, cod_guia_des, cod_tipo_guia_des,
+            fecha_agrega, fecha_est_desp, fecha_despacho, fecha_envio, fecha_entrega,
+            FAC_CON as fac_con, cod_ruta, ruta, bod_destino, CADENA as cadena,
+            cliente, ruc_cliente, DESTINO as destino, transportista,
+            m.nombre as producto, pr.cod_producto, od.cantidad_x_enviar,
+            p.modelo, p.cod_color, numero_serie, pr.nombre,
+            en_despacho, despachada, cod_ddespacho, cod_guia_envio, tipo_guia_envio
+        FROM VT_DESPACHO_FINAL
+    """
+
+    # Construcción del WHERE dinámico
+    where = ["empresa = :empresa"]
+    params = {"empresa": data["empresa"]}
+
+    # Filtros exactos
+    if data.get("cod_ruta") is not None:
+        where.append("cod_ruta = :cod_ruta")
+        params["cod_ruta"] = data["cod_ruta"]
+    if data.get("cod_tipo_pedido"):
+        where.append("cod_tipo_pedido = :cod_tipo_pedido")
+        params["cod_tipo_pedido"] = data["cod_tipo_pedido"]
+    if data.get("cod_pedido") is not None:
+        where.append("cod_pedido = :cod_pedido")
+        params["cod_pedido"] = data["cod_pedido"]
+    if data.get("cod_tipo_orden"):
+        where.append("cod_tipo_orden = :cod_tipo_orden")
+        params["cod_tipo_orden"] = data["cod_tipo_orden"]
+    if data.get("cod_orden") is not None:
+        where.append("cod_orden = :cod_orden")
+        params["cod_orden"] = data["cod_orden"]
+    if data.get("cod_cliente"):
+        where.append("ruc_cliente = :cod_cliente")
+        params["cod_cliente"] = data["cod_cliente"]
+    if data.get("cod_producto"):
+        where.append("pr.cod_producto = :cod_producto")
+        params["cod_producto"] = data["cod_producto"]
+    if data.get("cadena"):
+        where.append("CADENA = :cadena")
+        params["cadena"] = data["cadena"]
+    if data.get("fac_con"):
+        where.append("FAC_CON = :fac_con")
+        params["fac_con"] = data["fac_con"]
+    if data.get("numero_serie"):
+        where.append("numero_serie = :numero_serie")
+        params["numero_serie"] = data["numero_serie"]
+    if data.get("modelo"):
+        where.append("p.modelo = :modelo")
+        params["modelo"] = data["modelo"]
+
+    # LIKEs (case-insensitive; usa UPPER en ambos lados)
+    if data.get("transportista"):
+        where.append("UPPER(transportista) LIKE :transportista")
+        params["transportista"] = f"%{data['transportista'].upper()}%"
+    if data.get("destino"):
+        where.append("UPPER(DESTINO) LIKE :destino")
+        params["destino"] = f"%{data['destino'].upper()}%"
+    if data.get("ruta"):
+        where.append("UPPER(ruta) LIKE :ruta")
+        params["ruta"] = f"%{data['ruta'].upper()}%"
+    if data.get("bod_destino"):
+        where.append("UPPER(bod_destino) LIKE :bod_destino")
+        params["bod_destino"] = f"%{data['bod_destino'].upper()}%"
+
+    # Estados
+    if data.get("en_despacho") is not None:
+        where.append("NVL(en_despacho,0) = :en_despacho")
+        params["en_despacho"] = data["en_despacho"]
+    if data.get("despachada") is not None:
+        where.append("NVL(despachada,0) = :despachada")
+        params["despachada"] = data["despachada"]
+
+    # Rango de fechas sobre el campo elegido
+    date_field = data.get("date_field", "fecha_est_desp")
+    if data.get("fecha_desde"):
+        where.append(f"{date_field} >= :fecha_desde")
+        params["fecha_desde"] = data["fecha_desde"]
+    if data.get("fecha_hasta"):
+        where.append(f"{date_field} <= :fecha_hasta")
+        params["fecha_hasta"] = data["fecha_hasta"]
+
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+
+    # Ordenamiento
+    order_sql = build_ordering(data.get("ordering"))
+
+    # Paginación
+    page = max(data.get("page", 1), 1)
+    page_size = min(max(data.get("page_size", 20), 1), 200)
+    offset = (page - 1) * page_size
+
+    # Count total
+    count_sql = text(f"SELECT COUNT(1) AS cnt FROM VT_DESPACHO_FINAL {where_sql}")
+    total = db.session.execute(count_sql, params).scalar() or 0
+
+    # Datos paginados (12c+)
+    data_sql = text(f"""
+        SELECT * FROM (
+            SELECT inner_q.*, ROWNUM AS rn FROM (
+                {base_select}
+                {where_sql}
+                {order_sql}
+            ) inner_q
+            WHERE ROWNUM <= :rownum_max
+        ) 
+        WHERE rn > :rownum_min
+    """)
+    rownum_max = offset + page_size
+    rownum_min = offset
+    rows = db.session.execute(data_sql, {**params, "rownum_max": rownum_max, "rownum_min": rownum_min}).mappings().all()
+
+    # Respuesta DRF-like con next/previous numéricas
+    next_page = page + 1 if page * page_size < total else None
+    prev_page = page - 1 if page > 1 else None
+
+    return jsonify({
+        "count": int(total),
+        "next": next_page,
+        "previous": prev_page,
+        "results": out_many_d.dump(rows)
+    }), 200
