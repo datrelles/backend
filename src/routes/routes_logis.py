@@ -2487,7 +2487,7 @@ def create_ruta():
         return jsonify({"detail": detail}), status
 
     location = url_for("routes_log.get_ruta", empresa=int(obj.empresa), cod_ruta=int(obj.cod_ruta), _external=True)
-    return jsonify(out_schema_ru.dump(obj)), 201, {"Location": location}
+    return jsonify(out_many_schema_ru.dump(obj)), 201, {"Location": location}
 @bplog.route("/rutas/<int:empresa>/<int:cod_ruta>", methods=["PUT"])
 def update_ruta(empresa: int, cod_ruta: int):
     payload = request.get_json(silent=True) or {}
@@ -2516,7 +2516,7 @@ def update_ruta(empresa: int, cod_ruta: int):
         status, detail = map_integrity_error(ie)
         return jsonify({"detail": detail}), status
 
-    return jsonify(out_schema_ru.dump(obj)), 200
+    return jsonify(out_many_schema_ru.dump(obj)), 200
 
 out_schema_dir = DirRutaOutSchema()
 out_many_schema_dir = DirRutaOutSchema(many=True)
