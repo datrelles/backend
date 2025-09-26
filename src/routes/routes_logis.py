@@ -2841,7 +2841,7 @@ def build_ordering(ordering_param: str | None):
         clauses.append(f"{key} {direction}")
     return "ORDER BY " + ", ".join(clauses) if clauses else "ORDER BY fecha_est_desp DESC, cod_orden DESC"
 
-@bplog.route("/api/despachos/search", methods=["POST"])
+@bplog.route("/despachos/search", methods=["POST"])
 def search_despachos():
     payload = request.get_json(silent=True) or {}
     try:
@@ -2853,14 +2853,7 @@ def search_despachos():
     # Base SELECT: mapeo de alias a nombres reales de la vista
     base_select = """
         SELECT
-            empresa, cod_tipo_pedido, cod_pedido, cod_tipo_orden, cod_orden,
-            tipo_pretransferencia, cod_pretransferencia, cod_guia_des, cod_tipo_guia_des,
-            fecha_agrega, fecha_est_desp, fecha_despacho, fecha_envio, fecha_entrega,
-            FAC_CON as fac_con, cod_ruta, ruta, bod_destino, CADENA as cadena,
-            cliente, ruc_cliente, DESTINO as destino, transportista,
-            m.nombre as producto, pr.cod_producto, od.cantidad_x_enviar,
-            p.modelo, p.cod_color, numero_serie, pr.nombre,
-            en_despacho, despachada, cod_ddespacho, cod_guia_envio, tipo_guia_envio
+            *
         FROM VT_DESPACHO_FINAL
     """
 
