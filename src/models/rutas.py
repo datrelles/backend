@@ -1,8 +1,11 @@
 # coding: utf-8
 from sqlalchemy import Column, DateTime, Index, VARCHAR, text
 from sqlalchemy.dialects.oracle import NUMBER
-from sqlalchemy import Sequence
+from sqlalchemy import Sequence, and_
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
+from src.models.clientes import cliente_hor
+
 from src.config.database import db
 from marshmallow import Schema, fields, validate, EXCLUDE, ValidationError
 
@@ -226,3 +229,35 @@ class DespachoRowOut(Schema):
     cod_ddespacho = fields.Integer(allow_none=True)
     cod_guia_envio = fields.String(allow_none=True)
     tipo_guia_envio = fields.String(allow_none=True)
+
+class STClienteDireccionGuias(db.Model):
+    __tablename__ = "ST_CLIENTE_DIRECCION_GUIAS"
+
+    empresa         = db.Column("EMPRESA", db.Integer, nullable=False)
+    cod_cliente     = db.Column("COD_CLIENTE", db.String(14), nullable=False)
+    ciudad          = db.Column("CIUDAD", db.String(200), nullable=False)
+    direccion       = db.Column("DIRECCION", db.String(200))
+    direccion_larga = db.Column("DIRECCION_LARGA", db.String(500))
+    cod_direccion   = db.Column("COD_DIRECCION", db.Integer, nullable=False)
+    cod_zona_ciudad = db.Column("COD_ZONA_CIUDAD", db.String(14))
+    es_activo       = db.Column("ES_ACTIVO", db.Integer, nullable=False, server_default="1")
+    nombre          = db.Column("NOMBRE", db.String(100))
+
+    __table_args__ = (
+        db.PrimaryKeyConstraint("EMPRESA", "COD_CLIENTE", "COD_DIRECCION",
+                                name="PK_CLIENTE_DIRECCION_GUIAS"),
+        # ⬇⬇⬇ AQUI LA CORRECCIÓN: referencias a TABLA y COLUMNAS reales con ESQUEMA
+        db.ForeignKeyConstraint(
+            ["EMPRESA", "COD_CLIENTE"],
+            ["STOCK.CLIENTE_HOR.empresah", "STOCK.CLIENTE_HOR.cod_clienteh"],
+            name="FK_CLIENTE_DIRECCION_CLIENTE"
+        ),
+        db.Index("IND_CLIENTE_DIRECCION_GUIAS01", "EMPRESA", "COD_CLIENTE"),
+    )
+
+    # Relación SIN primaryjoin: ahora sí puede inferirse por la FK compuesta
+    cliente = relationship(
+        cliente_hor,     # usa la CLASE (o el string "ClienteHor" si prefieres)
+        viewonly=True,  # quítalo si quieres permitir escritura a través de la relación
+        lazy="select",
+    )

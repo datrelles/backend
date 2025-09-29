@@ -3,13 +3,15 @@ import logging
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 import datetime
-from sqlalchemy import text
+from sqlalchemy import and_, text, literal, func
+from sqlalchemy.orm import aliased
 import re
 from decimal import Decimal
 from datetime import datetime, date
 from src import oracle
 from os import getenv
 import cx_Oracle
+from src.models.clientes import Cliente, cliente_hor
 from src.config.database import db, engine, session
 from src.models.asignacion_cupo import QueryParamsSchema, STReservaProducto, ALLOWED_ORDERING, reservas_schema, \
     CreateReservaSchema, UpdateReservaSchema, ReservaSchema, map_integrity_error, validate_no_active_duplicate, \
@@ -17,10 +19,11 @@ from src.models.asignacion_cupo import QueryParamsSchema, STReservaProducto, ALL
 from marshmallow import ValidationError
 from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
 from sqlalchemy.exc import IntegrityError
+from src.models.proveedores import st_transportistas
 from src.models.rutas import STRuta, STDireccionRuta, RutaCreateSchema, RutaUpdateSchema, RutaOutSchema, \
     DirRutaCreateSchema, DirRutaOutSchema, DirRutaSearchSchema, DirRutaDetailSchema, DirRutaDeleteSchema, \
     TRutaOutSchema, TRutaCreateSchema, TRutaDetailSchema, TRutaUpdateSchema, TRutaSearchSchema, TRutaDeleteSchema, \
-    STTransportistaRuta, DespachoSearchIn, DespachoRowOut, ALLOWED_ORDERING_FIELDS
+    STTransportistaRuta, DespachoSearchIn, DespachoRowOut, ALLOWED_ORDERING_FIELDS, STClienteDireccionGuias
 
 bplog = Blueprint('routes_log', __name__)
 
@@ -2553,7 +2556,54 @@ def search_dir_rutas():
     page = max(data.get("page", 1), 1)
     page_size = min(max(data.get("page_size", 20), 1), 200)
 
-    q = db.session.query(STDireccionRuta)
+    # 1) Query base para el count (sin joins para evitar multiplicidades)
+    base_q = db.session.query(STDireccionRuta)
+    if data.get("empresa") is not None:
+        base_q = base_q.filter(STDireccionRuta.empresa == data["empresa"])
+    if data.get("cod_cliente"):
+        base_q = base_q.filter(STDireccionRuta.cod_cliente == data["cod_cliente"])
+    if data.get("cod_ruta") is not None:
+        base_q = base_q.filter(STDireccionRuta.cod_ruta == data["cod_ruta"])
+
+    total = base_q.count()
+
+    # 2) Query con joins explícitos y alias
+    c   = aliased(Cliente, name="c")                        # CLIENTE (tiene el nombre)
+    cdg = aliased(STClienteDireccionGuias, name="cdg")      # ST_CLIENTE_DIRECCION_GUIAS (tiene nombre de dirección)
+
+    nombre_cli = func.concat(
+        c.nombre,
+        func.coalesce(func.concat(literal(" "), c.apellido1), literal(""))
+    ).label("nombre_cliente")
+
+    q = (
+        db.session.query(
+            STDireccionRuta,
+            nombre_cli,               # <-- AJUSTA si tu columna se llama distinto (p.ej. razon_social)
+            cdg.nombre.label("nombre_direccion"),
+            cdg.direccion.label("direccion"),
+            cdg.direccion_larga.label("direccion_larga"),
+        )
+        .select_from(STDireccionRuta)
+        .outerjoin(                                         # join a CLIENTE por (empresa, cod_cliente)
+            c,
+            and_(
+                c.empresa == STDireccionRuta.empresa,
+                c.cod_cliente == STDireccionRuta.cod_cliente,
+            ),
+        )
+        .outerjoin(                                         # join a ST_CLIENTE_DIRECCION_GUIAS por (empresa, cod_cliente, cod_direccion)
+            cdg,
+            and_(
+                cdg.empresa == STDireccionRuta.empresa,
+                cdg.cod_cliente == STDireccionRuta.cod_cliente,
+                cdg.cod_direccion == STDireccionRuta.cod_direccion,
+            ),
+        )
+        .enable_eagerloads(False)
+    )
+
+    # Reaplica filtros
     if data.get("empresa") is not None:
         q = q.filter(STDireccionRuta.empresa == data["empresa"])
     if data.get("cod_cliente"):
@@ -2561,13 +2611,30 @@ def search_dir_rutas():
     if data.get("cod_ruta") is not None:
         q = q.filter(STDireccionRuta.cod_ruta == data["cod_ruta"])
 
-    total = q.count()
-    items = (q.order_by(STDireccionRuta.empresa.asc(),
-                        STDireccionRuta.cod_cliente.asc(),
-                        STDireccionRuta.cod_direccion.asc(),
-                        STDireccionRuta.cod_ruta.asc())
-               .offset((page - 1) * page_size)
-               .limit(page_size).all())
+    # Orden + paginación
+    rows = (
+        q.order_by(
+            STDireccionRuta.empresa.asc(),
+            STDireccionRuta.cod_cliente.asc(),
+            STDireccionRuta.cod_direccion.asc(),
+            STDireccionRuta.cod_ruta.asc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    # 3) Construcción del payload
+    results = []
+    for r, nombre_cli, nombre_dir, dir_corta, dir_larga in rows:
+        item = out_schema_dir.dump(r)
+        item.update({
+            "nombre_cliente": nombre_cli,
+            "nombre_direccion": nombre_dir,
+            "direccion": dir_corta,
+            "direccion_larga": dir_larga,
+        })
+        results.append(item)
 
     next_page = page + 1 if page * page_size < total else None
     prev_page = page - 1 if page > 1 else None
@@ -2576,8 +2643,45 @@ def search_dir_rutas():
         "count": total,
         "next": next_page,
         "previous": prev_page,
-        "results": out_many_schema_dir.dump(items)
+        "results": results
     })
+
+# @bplog.route("/direccion-rutas/search", methods=["POST"])
+# def search_dir_rutas():
+#     payload = request.get_json(silent=True) or {}
+#     try:
+#         data = search_schema_dir.load(payload)
+#     except ValidationError as err:
+#         return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+#
+#     page = max(data.get("page", 1), 1)
+#     page_size = min(max(data.get("page_size", 20), 1), 200)
+#
+#     q = db.session.query(STDireccionRuta)
+#     if data.get("empresa") is not None:
+#         q = q.filter(STDireccionRuta.empresa == data["empresa"])
+#     if data.get("cod_cliente"):
+#         q = q.filter(STDireccionRuta.cod_cliente == data["cod_cliente"])
+#     if data.get("cod_ruta") is not None:
+#         q = q.filter(STDireccionRuta.cod_ruta == data["cod_ruta"])
+#
+#     total = q.count()
+#     items = (q.order_by(STDireccionRuta.empresa.asc(),
+#                         STDireccionRuta.cod_cliente.asc(),
+#                         STDireccionRuta.cod_direccion.asc(),
+#                         STDireccionRuta.cod_ruta.asc())
+#                .offset((page - 1) * page_size)
+#                .limit(page_size).all())
+#
+#     next_page = page + 1 if page * page_size < total else None
+#     prev_page = page - 1 if page > 1 else None
+#
+#     return jsonify({
+#         "count": total,
+#         "next": next_page,
+#         "previous": prev_page,
+#         "results": out_many_schema_dir.dump(items)
+#     })
 
 @bplog.route("/direccion-rutas/detail", methods=["POST"])
 def detail_dir_ruta():
@@ -2701,7 +2805,41 @@ def search_truta():
     page = max(data.get("page", 1), 1)
     page_size = min(max(data.get("page_size", 20), 1), 200)
 
-    q = db.session.query(STTransportistaRuta)
+    # Base para el total (sin joins)
+    base_q = db.session.query(STTransportistaRuta)
+    if data.get("empresa") is not None:
+        base_q = base_q.filter(STTransportistaRuta.empresa == data["empresa"])
+    if data.get("cod_transportista"):
+        base_q = base_q.filter(STTransportistaRuta.cod_transportista == data["cod_transportista"])
+    if data.get("cod_ruta") is not None:
+        base_q = base_q.filter(STTransportistaRuta.cod_ruta == data["cod_ruta"])
+    total = base_q.count()
+
+    # Query con JOIN explícito a ST_TRANSPORTISTA
+    tr = aliased(st_transportistas, name="tr")
+
+    nombre_completo = func.concat(
+        func.concat(tr.apellido1, literal(" ")),
+        tr.nombre
+    ).label("nombre_transportista")
+
+    q = (
+        db.session.query(
+            STTransportistaRuta,
+            nombre_completo,
+        )
+        .select_from(STTransportistaRuta)
+        .outerjoin(
+            tr,
+            and_(
+                tr.empresa == STTransportistaRuta.empresa,
+                tr.cod_transportista == STTransportistaRuta.cod_transportista,
+            ),
+        )
+        .enable_eagerloads(False)
+    )
+
+    # Reaplicar filtros
     if data.get("empresa") is not None:
         q = q.filter(STTransportistaRuta.empresa == data["empresa"])
     if data.get("cod_transportista"):
@@ -2709,18 +2847,64 @@ def search_truta():
     if data.get("cod_ruta") is not None:
         q = q.filter(STTransportistaRuta.cod_ruta == data["cod_ruta"])
 
-    total = q.count()
-    items = (q.order_by(STTransportistaRuta.empresa.asc(),
-                        STTransportistaRuta.codigo.desc())
-               .offset((page - 1) * page_size)
-               .limit(page_size).all())
+    # Orden y paginación
+    rows = (
+        q.order_by(
+            STTransportistaRuta.empresa.asc(),
+            STTransportistaRuta.codigo.desc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    # Construcción del payload
+    results = []
+    for r, nombre_t in rows:
+        item = out_schema_t.dump(r)
+        item.update({
+            "nombre_transportista": nombre_t,
+        })
+        results.append(item)
 
     return jsonify({
         "count": total,
         "next": (page + 1) if page * page_size < total else None,
         "previous": (page - 1) if page > 1 else None,
-        "results": out_many_schema_t.dump(items)
+        "results": results
     })
+
+# @bplog.route("/transportista-ruta/search", methods=["POST"])
+# def search_truta():
+#     payload = request.get_json(silent=True) or {}
+#     try:
+#         data = search_schema_t.load(payload)
+#     except ValidationError as err:
+#         return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+#
+#     page = max(data.get("page", 1), 1)
+#     page_size = min(max(data.get("page_size", 20), 1), 200)
+#
+#     q = db.session.query(STTransportistaRuta)
+#     if data.get("empresa") is not None:
+#         q = q.filter(STTransportistaRuta.empresa == data["empresa"])
+#     if data.get("cod_transportista"):
+#         q = q.filter(STTransportistaRuta.cod_transportista == data["cod_transportista"])
+#     if data.get("cod_ruta") is not None:
+#         q = q.filter(STTransportistaRuta.cod_ruta == data["cod_ruta"])
+#
+#     total = q.count()
+#     items = (q.order_by(STTransportistaRuta.empresa.asc(),
+#                         STTransportistaRuta.codigo.desc())
+#                .offset((page - 1) * page_size)
+#                .limit(page_size).all())
+#
+#     return jsonify({
+#         "count": total,
+#         "next": (page + 1) if page * page_size < total else None,
+#         "previous": (page - 1) if page > 1 else None,
+#         "results": out_many_schema_t.dump(items)
+#     })
 
 @bplog.route("/transportista-ruta/detail", methods=["POST"])
 def detail_truta():
