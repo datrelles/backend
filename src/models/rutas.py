@@ -261,3 +261,77 @@ class STClienteDireccionGuias(db.Model):
         viewonly=True,  # quítalo si quieres permitir escritura a través de la relación
         lazy="select",
     )
+
+class STCDespachoEntrega(db.Model):
+    __tablename__ = "ST_CDESPACHO_ENTREGA"
+    empresa           = db.Column("EMPRESA", db.Integer, nullable=False, primary_key=True)
+    cde_codigo = db.Column(
+        "CDE_CODIGO",
+        db.Integer,
+        Sequence("SEQ_STC_DESPACHO_ENTREGA"),  # crea/usa la secuencia
+        primary_key=True,  # parte de la PK
+        autoincrement=True  # delega en la secuencia
+    )
+    fecha             = db.Column("FECHA", db.Date)  # enviar ISO 'YYYY-MM-DD'
+    usuario           = db.Column("USUARIO", db.String(20))
+    cod_ruta          = db.Column("COD_RUTA", db.Integer)
+    observacion       = db.Column("OBSERVACION", db.String(200))
+    cod_persona       = db.Column("COD_PERSONA", db.String(14))
+    cod_tipo_persona  = db.Column("COD_TIPO_PERSONA", db.String(3))
+    cod_transportista = db.Column("COD_TRANSPORTISTA", db.String(14))
+    finalizado        = db.Column("FINALIZADO", db.Integer, server_default="0")
+
+    __table_args__ = (
+        db.PrimaryKeyConstraint("CDE_CODIGO", "EMPRESA", name="PK_CDESPACHO_ENTREGA"),
+        db.ForeignKeyConstraint(
+            ["COD_RUTA", "EMPRESA"],
+            ["ST_RUTAS.COD_RUTA", "ST_RUTAS.EMPRESA"],
+            name="FK_CDESPACHO_ENTREG_RUTA"
+        ),
+    )
+
+class CDECreateSchema(Schema):
+    empresa           = fields.Int(required=True)
+    cde_codigo        = fields.Int(required=True)
+    fecha             = fields.Date(required=False)  # ISO 'YYYY-MM-DD'
+    usuario           = fields.Str(required=False, validate=validate.Length(max=20))
+    cod_ruta          = fields.Int(required=False)
+    observacion       = fields.Str(required=False, validate=validate.Length(max=200))
+    cod_persona       = fields.Str(required=False, validate=validate.Length(max=14))
+    cod_tipo_persona  = fields.Str(required=False, validate=validate.Length(max=3))
+    cod_transportista = fields.Str(required=False, validate=validate.Length(max=14))
+    finalizado        = fields.Int(required=False, validate=validate.OneOf([0,1]))
+
+class CDEUpdateSchema(Schema):
+    # Todos opcionales en update
+    fecha             = fields.Date(required=False)
+    usuario           = fields.Str(required=False, validate=validate.Length(max=20))
+    cod_ruta          = fields.Int(required=False)
+    observacion       = fields.Str(required=False, validate=validate.Length(max=200))
+    cod_persona       = fields.Str(required=False, validate=validate.Length(max=14))
+    cod_tipo_persona  = fields.Str(required=False, validate=validate.Length(max=3))
+    cod_transportista = fields.Str(required=False, validate=validate.Length(max=14))
+    finalizado        = fields.Int(required=False, validate=validate.OneOf([0,1]))
+
+class CDEQuerySchema(Schema):
+    page              = fields.Int(load_default=1)
+    page_size         = fields.Int(load_default=20)
+    empresa           = fields.Int(required=False)
+    cde_codigo        = fields.Int(required=False)
+    cod_ruta          = fields.Int(required=False)
+    cod_persona       = fields.Str(required=False)
+    cod_tipo_persona  = fields.Str(required=False)
+    cod_transportista = fields.Str(required=False)
+    finalizado        = fields.Int(required=False, validate=validate.OneOf([0,1]))
+
+class CDEOutSchema(Schema):
+    empresa           = fields.Int()
+    cde_codigo        = fields.Int()
+    fecha             = fields.Date(allow_none=True)
+    usuario           = fields.Str(allow_none=True)
+    cod_ruta          = fields.Int(allow_none=True)
+    observacion       = fields.Str(allow_none=True)
+    cod_persona       = fields.Str(allow_none=True)
+    cod_tipo_persona  = fields.Str(allow_none=True)
+    cod_transportista = fields.Str(allow_none=True)
+    finalizado        = fields.Int()

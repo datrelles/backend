@@ -11,7 +11,7 @@ from datetime import datetime, date
 from src import oracle
 from os import getenv
 import cx_Oracle
-from src.models.clientes import Cliente, cliente_hor
+from src.models.clientes import Cliente, persona
 from src.config.database import db, engine, session
 from src.models.asignacion_cupo import QueryParamsSchema, STReservaProducto, ALLOWED_ORDERING, reservas_schema, \
     CreateReservaSchema, UpdateReservaSchema, ReservaSchema, map_integrity_error, validate_no_active_duplicate, \
@@ -23,7 +23,8 @@ from src.models.proveedores import st_transportistas
 from src.models.rutas import STRuta, STDireccionRuta, RutaCreateSchema, RutaUpdateSchema, RutaOutSchema, \
     DirRutaCreateSchema, DirRutaOutSchema, DirRutaSearchSchema, DirRutaDetailSchema, DirRutaDeleteSchema, \
     TRutaOutSchema, TRutaCreateSchema, TRutaDetailSchema, TRutaUpdateSchema, TRutaSearchSchema, TRutaDeleteSchema, \
-    STTransportistaRuta, DespachoSearchIn, DespachoRowOut, ALLOWED_ORDERING_FIELDS, STClienteDireccionGuias
+    STTransportistaRuta, DespachoSearchIn, DespachoRowOut, ALLOWED_ORDERING_FIELDS, STClienteDireccionGuias, \
+    CDECreateSchema, CDEUpdateSchema, CDEQuerySchema, CDEOutSchema, STCDespachoEntrega
 
 bplog = Blueprint('routes_log', __name__)
 
@@ -660,7 +661,7 @@ def info_moto():
         bodega_contra = 25
     else:
         bodega_actual = 25
-        bodega_contra = cod_bodega
+        bodega_contra = 1
 
     db1 = None
     try:
@@ -961,6 +962,8 @@ def info_moto():
             "cod_comprobante": cod_comprobante,
             "tipo_comprobante": tipo_comprobante
         })
+
+        print(cod_comprobante , ' ', tipo_comprobante,  ' ' ,bodega_contra)
         if y == 0:
             return jsonify({"error": "SERIE NO EXISTE EN B1, A3 ni N2"}), 404
 
@@ -973,8 +976,8 @@ def info_moto():
                   and a.numero_serie=b.numero_serie
                   and a.empresa=b.empresa
                   and a.numero_serie=:cod_motor
-                  and b.cod_bodega=5
-            """, {"cod_motor": cod_motor})
+                  and b.cod_bodega in (5, :bodega_contra)
+            """, {"cod_motor": cod_motor, "bodega_contra": bodega_contra})
             row = cur.fetchone()
             if not row:
                 return jsonify({"error": "Serie no encontrada en bodega 5"}), 404
@@ -2646,43 +2649,6 @@ def search_dir_rutas():
         "results": results
     })
 
-# @bplog.route("/direccion-rutas/search", methods=["POST"])
-# def search_dir_rutas():
-#     payload = request.get_json(silent=True) or {}
-#     try:
-#         data = search_schema_dir.load(payload)
-#     except ValidationError as err:
-#         return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
-#
-#     page = max(data.get("page", 1), 1)
-#     page_size = min(max(data.get("page_size", 20), 1), 200)
-#
-#     q = db.session.query(STDireccionRuta)
-#     if data.get("empresa") is not None:
-#         q = q.filter(STDireccionRuta.empresa == data["empresa"])
-#     if data.get("cod_cliente"):
-#         q = q.filter(STDireccionRuta.cod_cliente == data["cod_cliente"])
-#     if data.get("cod_ruta") is not None:
-#         q = q.filter(STDireccionRuta.cod_ruta == data["cod_ruta"])
-#
-#     total = q.count()
-#     items = (q.order_by(STDireccionRuta.empresa.asc(),
-#                         STDireccionRuta.cod_cliente.asc(),
-#                         STDireccionRuta.cod_direccion.asc(),
-#                         STDireccionRuta.cod_ruta.asc())
-#                .offset((page - 1) * page_size)
-#                .limit(page_size).all())
-#
-#     next_page = page + 1 if page * page_size < total else None
-#     prev_page = page - 1 if page > 1 else None
-#
-#     return jsonify({
-#         "count": total,
-#         "next": next_page,
-#         "previous": prev_page,
-#         "results": out_many_schema_dir.dump(items)
-#     })
-
 @bplog.route("/direccion-rutas/detail", methods=["POST"])
 def detail_dir_ruta():
     payload = request.get_json(silent=True) or {}
@@ -2873,38 +2839,6 @@ def search_truta():
         "previous": (page - 1) if page > 1 else None,
         "results": results
     })
-
-# @bplog.route("/transportista-ruta/search", methods=["POST"])
-# def search_truta():
-#     payload = request.get_json(silent=True) or {}
-#     try:
-#         data = search_schema_t.load(payload)
-#     except ValidationError as err:
-#         return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
-#
-#     page = max(data.get("page", 1), 1)
-#     page_size = min(max(data.get("page_size", 20), 1), 200)
-#
-#     q = db.session.query(STTransportistaRuta)
-#     if data.get("empresa") is not None:
-#         q = q.filter(STTransportistaRuta.empresa == data["empresa"])
-#     if data.get("cod_transportista"):
-#         q = q.filter(STTransportistaRuta.cod_transportista == data["cod_transportista"])
-#     if data.get("cod_ruta") is not None:
-#         q = q.filter(STTransportistaRuta.cod_ruta == data["cod_ruta"])
-#
-#     total = q.count()
-#     items = (q.order_by(STTransportistaRuta.empresa.asc(),
-#                         STTransportistaRuta.codigo.desc())
-#                .offset((page - 1) * page_size)
-#                .limit(page_size).all())
-#
-#     return jsonify({
-#         "count": total,
-#         "next": (page + 1) if page * page_size < total else None,
-#         "previous": (page - 1) if page > 1 else None,
-#         "results": out_many_schema_t.dump(items)
-#     })
 
 @bplog.route("/transportista-ruta/detail", methods=["POST"])
 def detail_truta():
@@ -3151,3 +3085,168 @@ def search_despachos():
         "previous": prev_page,
         "results": out_many_d.dump(rows)
     }), 200
+
+create_schema_cde = CDECreateSchema()
+update_schema_cde = CDEUpdateSchema()
+query_schema_cde  = CDEQuerySchema()
+out_schema_cde    = CDEOutSchema()
+out_many_cde      = CDEOutSchema(many=True)
+
+@bplog.route("/cdespacho-entrega", methods=["POST"])
+def cde_create():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = create_schema_cde.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    if data.get("cde_codigo") is not None:
+        exists = db.session.query(STCDespachoEntrega).filter_by(
+            empresa=data["empresa"], cde_codigo=data["cde_codigo"]
+        ).first()
+        if exists:
+            return jsonify({"detail": "Registro ya existe (PK duplicada)."}), 409
+
+    obj = STCDespachoEntrega(**data)
+    db.session.add(obj)
+    db.session.commit()  # aquí la BD ya generó el CDE_CODIGO
+
+    return jsonify(out_schema_cde.dump(obj)), 201
+# UPDATE
+@bplog.route("/cdespacho-entrega/<int:empresa>/<int:cde_codigo>", methods=["PUT", "PATCH"])
+def cde_update(empresa, cde_codigo):
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = update_schema_cde.load(payload, partial=True)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = db.session.query(STCDespachoEntrega).filter_by(
+        empresa=empresa, cde_codigo=cde_codigo
+    ).first()
+
+    if not obj:
+        return jsonify({"detail": "No encontrado."}), 404
+
+    for k, v in data.items():
+        setattr(obj, k, v)
+
+    db.session.commit()
+    return jsonify(out_schema_cde.dump(obj)), 200
+
+
+@bplog.route("/cdespacho-entrega/search", methods=["POST"])
+def cde_search():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = query_schema_cde.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    page = max(data.get("page", 1), 1)
+    page_size = min(max(data.get("page_size", 20), 1), 200)
+
+    base_q = db.session.query(STCDespachoEntrega)
+    if data.get("empresa") is not None:
+        base_q = base_q.filter(STCDespachoEntrega.empresa == data["empresa"])
+    if data.get("cde_codigo") is not None:
+        base_q = base_q.filter(STCDespachoEntrega.cde_codigo == data["cde_codigo"])
+    if data.get("cod_ruta") is not None:
+        base_q = base_q.filter(STCDespachoEntrega.cod_ruta == data["cod_ruta"])
+    if data.get("cod_persona"):
+        base_q = base_q.filter(STCDespachoEntrega.cod_persona == data["cod_persona"])
+    if data.get("cod_tipo_persona"):
+        base_q = base_q.filter(STCDespachoEntrega.cod_tipo_persona == data["cod_tipo_persona"])
+    if data.get("cod_transportista"):
+        base_q = base_q.filter(STCDespachoEntrega.cod_transportista == data["cod_transportista"])
+    if data.get("finalizado") is not None:
+        base_q = base_q.filter(STCDespachoEntrega.finalizado == data["finalizado"])
+
+    total = base_q.count()
+
+    p  = aliased(persona, name="p")
+    r  = aliased(STRuta, name="r")
+    tr = aliased(st_transportistas, name="tr")
+
+    nombre_persona = p.nombre.label("nombre_persona")
+
+    nombre_transportista = func.concat(
+        func.coalesce(tr.apellido1, literal("")),
+        func.coalesce(func.concat(literal(" "), tr.nombre), literal(""))
+    ).label("nombre_transportista")
+
+    nombre_ruta = (r.nombre).label("nombre_ruta")
+
+    q = (
+        db.session.query(
+            STCDespachoEntrega,
+            nombre_persona,
+            nombre_ruta,
+            nombre_transportista,
+        )
+        .select_from(STCDespachoEntrega)
+        .outerjoin(
+            p,
+            and_(
+                p.cod_persona == STCDespachoEntrega.cod_persona,
+                p.cod_tipo_persona == STCDespachoEntrega.cod_tipo_persona,
+                p.empresa == STCDespachoEntrega.empresa
+            ),
+        )
+        .outerjoin(
+            r,
+            and_(
+                r.cod_ruta == STCDespachoEntrega.cod_ruta,
+                r.empresa == STCDespachoEntrega.empresa,
+            ),
+        )
+        .outerjoin(
+            tr,
+            and_(
+                tr.cod_transportista == STCDespachoEntrega.cod_transportista,
+                tr.empresa == STCDespachoEntrega.empresa,
+            ),
+        )
+        .enable_eagerloads(False)
+    )
+    if data.get("empresa") is not None:
+        q = q.filter(STCDespachoEntrega.empresa == data["empresa"])
+    if data.get("cde_codigo") is not None:
+        q = q.filter(STCDespachoEntrega.cde_codigo == data["cde_codigo"])
+    if data.get("cod_ruta") is not None:
+        q = q.filter(STCDespachoEntrega.cod_ruta == data["cod_ruta"])
+    if data.get("cod_persona"):
+        q = q.filter(STCDespachoEntrega.cod_persona == data["cod_persona"])
+    if data.get("cod_tipo_persona"):
+        q = q.filter(STCDespachoEntrega.cod_tipo_persona == data["cod_tipo_persona"])
+    if data.get("cod_transportista"):
+        q = q.filter(STCDespachoEntrega.cod_transportista == data["cod_transportista"])
+    if data.get("finalizado") is not None:
+        q = q.filter(STCDespachoEntrega.finalizado == data["finalizado"])
+
+    rows = (
+        q.order_by(
+            STCDespachoEntrega.empresa.asc(),
+            STCDespachoEntrega.cde_codigo.desc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    results = []
+    for obj, nom_persona, nom_ruta, nom_trans in rows:
+        base = out_schema_cde.dump(obj)
+        base.update({
+            "nombre_persona": nom_persona,
+            "nombre_ruta": nom_ruta,
+            "nombre_transportista": nom_trans,
+        })
+        results.append(base)
+
+    return jsonify({
+        "count": total,
+        "next": (page + 1) if page * page_size < total else None,
+        "previous": (page - 1) if page > 1 else None,
+        "results": results
+    })
