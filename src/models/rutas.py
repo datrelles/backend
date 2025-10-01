@@ -1,5 +1,5 @@
 # coding: utf-8
-from sqlalchemy import Column, DateTime, Index, VARCHAR, text
+from sqlalchemy import Column, DateTime, Index, VARCHAR, text, FetchedValue
 from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy import Sequence, and_
 from sqlalchemy.ext.declarative import declarative_base
@@ -7,8 +7,7 @@ from sqlalchemy.orm import relationship
 from src.models.clientes import cliente_hor
 
 from src.config.database import db
-from marshmallow import Schema, fields, validate, EXCLUDE, ValidationError
-
+from marshmallow import Schema, fields, validate, EXCLUDE, ValidationError, validates_schema, pre_load
 
 Base = declarative_base(metadata = db.metadata)
 
@@ -147,41 +146,34 @@ class DespachoSearchIn(Schema):
     class Meta:
         unknown = EXCLUDE
 
-    # Obligatorio
     empresa = fields.Integer(required=True)
-
-    # Filtros exactos/opcionales
     cod_ruta = fields.Integer()
-    cod_tipo_pedido = fields.String(validate=validate.Length(max=4)) # p.ej. 'PC'
-    cod_pedido = fields.Integer()
+    cod_tipo_pedido = fields.String(validate=validate.Length(max=4))
+    cod_pedido = fields.String(validate=validate.Length(max=30))
     cod_tipo_orden = fields.String(validate=validate.Length(max=4))
-    cod_orden = fields.Integer()
+    cod_orden = fields.String(validate=validate.Length(max=14))
     cod_cliente = fields.String(validate=validate.Length(max=14))
     cod_producto = fields.String(validate=validate.Length(max=30))
     cadena = fields.String(validate=validate.OneOf(["RETAIL","MAYOREO"]))
-    fac_con = fields.String(validate=validate.OneOf(["CONSIGNACION","FACTURACION"]))  # FAC_CON en la vista
-    transportista = fields.String()  # texto LIKE
-    destino = fields.String()        # ciudad LIKE
-    ruta = fields.String()           # nombre de la ruta LIKE
-    bod_destino = fields.String()    # nombre bodega LIKE
+    fac_con = fields.String(validate=validate.OneOf(["CONSIGNACION","FACTURACION"]))
+    transportista = fields.String()
+    destino = fields.String()
+    ruta = fields.String()
+    bod_destino = fields.String()
     modelo = fields.String()
     numero_serie = fields.String()
 
-    # Estados (opcionales)
     en_despacho = fields.Integer(validate=validate.OneOf([0,1]))
     despachada = fields.Integer(validate=validate.OneOf([0,1]))
 
-    # Rango de fechas (elige el campo sobre el que se filtra)
     date_field = fields.String(load_default="fecha_est_desp",
                                validate=validate.OneOf(["fecha_est_desp","fecha_despacho","fecha_envio","fecha_entrega"]))
     fecha_desde = fields.Date()
     fecha_hasta = fields.Date()
 
-    # Paginación
     page = fields.Integer(load_default=1)
     page_size = fields.Integer(load_default=20)
 
-    # Ordenamiento estilo DRF: "-fecha_est_desp,cod_orden"
     ordering = fields.String()
 
     def validate_ordering(self, value):
@@ -193,7 +185,6 @@ class DespachoSearchIn(Schema):
                 raise ValidationError(f"Campo de ordenamiento no permitido: {key}")
 
 class DespachoRowOut(Schema):
-    # Campos clave (ajusta tipos si necesitas exactitud decimal)
     empresa = fields.Integer()
     cod_tipo_pedido = fields.String()
     cod_pedido = fields.String()
@@ -254,11 +245,9 @@ class STClienteDireccionGuias(db.Model):
         ),
         db.Index("IND_CLIENTE_DIRECCION_GUIAS01", "EMPRESA", "COD_CLIENTE"),
     )
-
-    # Relación SIN primaryjoin: ahora sí puede inferirse por la FK compuesta
     cliente = relationship(
-        cliente_hor,     # usa la CLASE (o el string "ClienteHor" si prefieres)
-        viewonly=True,  # quítalo si quieres permitir escritura a través de la relación
+        cliente_hor,
+        viewonly=True,
         lazy="select",
     )
 
@@ -268,11 +257,11 @@ class STCDespachoEntrega(db.Model):
     cde_codigo = db.Column(
         "CDE_CODIGO",
         db.Integer,
-        Sequence("SEQ_STC_DESPACHO_ENTREGA"),  # crea/usa la secuencia
-        primary_key=True,  # parte de la PK
-        autoincrement=True  # delega en la secuencia
+        Sequence("SEQ_STC_DESPACHO_ENTREGA"),
+        primary_key=True,
+        autoincrement=True
     )
-    fecha             = db.Column("FECHA", db.Date)  # enviar ISO 'YYYY-MM-DD'
+    fecha             = db.Column("FECHA", db.Date)
     usuario           = db.Column("USUARIO", db.String(20))
     cod_ruta          = db.Column("COD_RUTA", db.Integer)
     observacion       = db.Column("OBSERVACION", db.String(200))
@@ -291,25 +280,27 @@ class STCDespachoEntrega(db.Model):
     )
 
 class CDECreateSchema(Schema):
-    empresa           = fields.Int(required=True)
-    cde_codigo        = fields.Int(required=True)
-    fecha             = fields.Date(required=False)  # ISO 'YYYY-MM-DD'
-    usuario           = fields.Str(required=False, validate=validate.Length(max=20))
-    cod_ruta          = fields.Int(required=False)
-    observacion       = fields.Str(required=False, validate=validate.Length(max=200))
-    cod_persona       = fields.Str(required=False, validate=validate.Length(max=14))
-    cod_tipo_persona  = fields.Str(required=False, validate=validate.Length(max=3))
-    cod_transportista = fields.Str(required=False, validate=validate.Length(max=14))
-    finalizado        = fields.Int(required=False, validate=validate.OneOf([0,1]))
+    class Meta:
+        unknown = EXCLUDE
+
+    empresa = fields.Int(required=True)
+    cod_transportista = fields.Str(required=True)
+    cod_ruta = fields.Int(required=True)
+    cde_codigo = fields.Int(dump_only=True)
+
+    @pre_load
+    def drop_cde_codigo_if_present(self, in_data, **kwargs):
+        in_data.pop("cde_codigo", None)
+        return in_data
+
 
 class CDEUpdateSchema(Schema):
-    # Todos opcionales en update
-    fecha             = fields.Date(required=False)
+    fecha             = fields.Date(required=True)
     usuario           = fields.Str(required=False, validate=validate.Length(max=20))
     cod_ruta          = fields.Int(required=False)
     observacion       = fields.Str(required=False, validate=validate.Length(max=200))
-    cod_persona       = fields.Str(required=False, validate=validate.Length(max=14))
-    cod_tipo_persona  = fields.Str(required=False, validate=validate.Length(max=3))
+    cod_persona       = fields.Str(required=True, validate=validate.Length(max=14))
+    cod_tipo_persona  = fields.Str(required=True, validate=validate.Length(max=3))
     cod_transportista = fields.Str(required=False, validate=validate.Length(max=14))
     finalizado        = fields.Int(required=False, validate=validate.OneOf([0,1]))
 
@@ -325,13 +316,139 @@ class CDEQuerySchema(Schema):
     finalizado        = fields.Int(required=False, validate=validate.OneOf([0,1]))
 
 class CDEOutSchema(Schema):
-    empresa           = fields.Int()
-    cde_codigo        = fields.Int()
-    fecha             = fields.Date(allow_none=True)
-    usuario           = fields.Str(allow_none=True)
-    cod_ruta          = fields.Int(allow_none=True)
-    observacion       = fields.Str(allow_none=True)
-    cod_persona       = fields.Str(allow_none=True)
-    cod_tipo_persona  = fields.Str(allow_none=True)
-    cod_transportista = fields.Str(allow_none=True)
-    finalizado        = fields.Int()
+    empresa = fields.Int()
+    cde_codigo = fields.Int()
+    cod_transportista = fields.Str()
+    cod_ruta = fields.Int()
+
+class STDDespachoEntrega(db.Model):
+    __tablename__ = "ST_DDESPACHO_ENTREGA"
+
+    empresa    = db.Column("EMPRESA", db.Integer, primary_key=True, nullable=False)
+    cde_codigo = db.Column("CDE_CODIGO", db.Integer, primary_key=True, nullable=False)
+
+    secuencia  = db.Column(
+        "SECUENCIA",
+        db.Integer,
+        primary_key=True,
+        nullable=False,
+        server_default=FetchedValue()
+    )
+    cod_ddespacho = db.Column("COD_DDESPACHO", db.Integer)
+    cod_producto  = db.Column("COD_PRODUCTO", db.String(14))
+    numero_serie  = db.Column("NUMERO_SERIE", db.String(40))
+    fecha         = db.Column("FECHA", db.Date)
+    observacion   = db.Column("OBSERVACION", db.String(200))
+
+    __table_args__ = (
+        db.ForeignKeyConstraint(
+            ["CDE_CODIGO", "EMPRESA"],
+            ["ST_CDESPACHO_ENTREGA.CDE_CODIGO", "ST_CDESPACHO_ENTREGA.EMPRESA"],
+            name="FK_DDESPACHO_ENT_CDESPACHOP"
+        ),
+        db.ForeignKeyConstraint(
+            ["COD_DDESPACHO", "EMPRESA"],
+            ["ST_DDESPACHO.COD_DDESPACHO", "ST_DDESPACHO.EMPRESA"],
+            name="FK_DDESPACHO_ENT_DDESPACHO"
+        ),
+    )
+
+    __mapper_args__ = {"eager_defaults": True}
+
+    cabecera = relationship(
+        "STCDespachoEntrega",
+        primaryjoin="and_(STDDespachoEntrega.empresa==STCDespachoEntrega.empresa, "
+                    "STDDespachoEntrega.cde_codigo==STCDespachoEntrega.cde_codigo)",
+        backref="detalles"
+    )
+
+    ddespacho = relationship(
+        "STDDespacho",
+        primaryjoin="and_(STDDespachoEntrega.empresa==STDDespacho.empresa, "
+                    "STDDespachoEntrega.cod_ddespacho==STDDespacho.cod_ddespacho)",
+        viewonly=True
+    )
+class DDECreateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    empresa        = fields.Int(required=True)
+    cde_codigo     = fields.Int(required=True)
+    cod_ddespacho  = fields.Int(allow_none=True)
+    cod_producto   = fields.Str(allow_none=True)
+    numero_serie   = fields.Str(allow_none=True)
+    fecha          = fields.Date(allow_none=True)
+    observacion    = fields.Str(allow_none=True)
+
+    secuencia      = fields.Int(dump_only=True)
+
+    @pre_load
+    def drop_secuencia(self, in_data, **kwargs):
+        in_data.pop("secuencia", None)
+        return in_data
+
+class STDDespacho(db.Model):
+    __tablename__ = "ST_DDESPACHO"
+
+    empresa       = db.Column("EMPRESA", db.Integer, primary_key=True, nullable=False)
+    cod_ddespacho = db.Column("COD_DDESPACHO", db.Integer, primary_key=True, nullable=False)
+    cod_despacho         = db.Column("COD_DESPACHO", db.Integer)
+    cod_producto         = db.Column("COD_PRODUCTO", db.String(14))
+    numero_serie         = db.Column("NUMERO_SERIE", db.String(30))   # DDL: VARCHAR2(30)
+    fecha_despacho       = db.Column("FECHA_DESPACHO", db.Date)
+    usuario_despacha     = db.Column("USUARIO_DESPACHA", db.String(50))
+    cod_comprobante      = db.Column("COD_COMPROBANTE", db.String(20))
+    tipo_comprobante     = db.Column("TIPO_COMPROBANTE", db.String(2))
+    en_despacho          = db.Column("EN_DESPACHO", db.Integer, server_default="0")
+    despachada           = db.Column("DESPACHADA", db.Integer, server_default="0")
+    cod_comprobante_gui  = db.Column("COD_COMPROBANTE_GUI", db.String(20))
+    tipo_comprobante_gui = db.Column("TIPO_COMPROBANTE_GUI", db.String(2))
+    cod_guia_des         = db.Column("COD_GUIA_DES", db.String(20))
+    cod_tipo_guia_des    = db.Column("COD_TIPO_GUIA_DES", db.String(2))
+
+    __table_args__ = (
+        db.PrimaryKeyConstraint("COD_DDESPACHO", "EMPRESA", name="PK_ST_DDESPACHO"),
+        db.ForeignKeyConstraint(
+            ["COD_DESPACHO", "EMPRESA"],
+            ["ST_CDESPACHO.COD_DESPACHO", "ST_CDESPACHO.EMPRESA"],
+            name="FK_DDESPACHO_ST_DESPACHO"
+        ),
+    )
+class DDEUpdateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    cod_ddespacho  = fields.Int(allow_none=True)
+    cod_producto   = fields.Str(allow_none=True)
+    numero_serie   = fields.Str(allow_none=True)
+    fecha          = fields.Date(allow_none=True)
+    observacion    = fields.Str(allow_none=True)
+
+    empresa        = fields.Int(load_only=True)
+    cde_codigo     = fields.Int(load_only=True)
+    secuencia      = fields.Int(load_only=True)
+
+    @validates_schema
+    def forbid_keys(self, data, **kwargs):
+        forbidden = [k for k in ("empresa", "cde_codigo", "secuencia") if k in data]
+        if forbidden:
+            raise ValidationError({f: ["Campo no editable."] for f in forbidden})
+
+class DDEListBodySchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    empresa    = fields.Int(required=True)
+    cde_codigo = fields.Int(required=True)
+    page     = fields.Int(load_default=1, validate=validate.Range(min=1))
+    per_page = fields.Int(load_default=20, validate=validate.Range(min=1, max=200))
+class DDEOutSchema(Schema):
+    empresa        = fields.Int()
+    cde_codigo     = fields.Int()
+    secuencia      = fields.Int()
+    cod_ddespacho  = fields.Int(allow_none=True)
+    cod_producto   = fields.Str(allow_none=True)
+    numero_serie   = fields.Str(allow_none=True)
+    fecha          = fields.Date(allow_none=True)
+    observacion    = fields.Str(allow_none=True)
+

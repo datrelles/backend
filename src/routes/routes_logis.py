@@ -24,7 +24,8 @@ from src.models.rutas import STRuta, STDireccionRuta, RutaCreateSchema, RutaUpda
     DirRutaCreateSchema, DirRutaOutSchema, DirRutaSearchSchema, DirRutaDetailSchema, DirRutaDeleteSchema, \
     TRutaOutSchema, TRutaCreateSchema, TRutaDetailSchema, TRutaUpdateSchema, TRutaSearchSchema, TRutaDeleteSchema, \
     STTransportistaRuta, DespachoSearchIn, DespachoRowOut, ALLOWED_ORDERING_FIELDS, STClienteDireccionGuias, \
-    CDECreateSchema, CDEUpdateSchema, CDEQuerySchema, CDEOutSchema, STCDespachoEntrega
+    CDECreateSchema, CDEUpdateSchema, CDEQuerySchema, CDEOutSchema, STCDespachoEntrega, DDECreateSchema, DDEOutSchema, \
+    DDEUpdateSchema, STDDespachoEntrega, DDEListBodySchema, STDDespacho
 
 bplog = Blueprint('routes_log', __name__)
 
@@ -2848,7 +2849,7 @@ def detail_truta():
     except ValidationError as err:
         return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
 
-    obj = db.session.get(STTransportistaRuta, (data["codigo"], data["empresa"]))  # orden PK: (codigo, empresa)
+    obj = db.session.get(STTransportistaRuta, (data["codigo"], data["empresa"]))
     if not obj:
         return jsonify({"detail": "No encontrado."}), 404
     return jsonify(out_schema_t.dump(obj)), 200
@@ -2945,7 +2946,6 @@ in_schema_d = DespachoSearchIn()
 out_many_d = DespachoRowOut(many=True)
 
 def build_ordering(ordering_param: str | None):
-    # Por defecto
     if not ordering_param:
         return "ORDER BY fecha_est_desp DESC, cod_orden DESC"
     clauses = []
@@ -2968,18 +2968,15 @@ def search_despachos():
     except ValidationError as err:
         return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
 
-    # Base SELECT: mapeo de alias a nombres reales de la vista
     base_select = """
         SELECT
             *
         FROM VT_DESPACHO_FINAL
     """
 
-    # Construcción del WHERE dinámico
     where = ["empresa = :empresa"]
     params = {"empresa": data["empresa"]}
 
-    # Filtros exactos
     if data.get("cod_ruta") is not None:
         where.append("cod_ruta = :cod_ruta")
         params["cod_ruta"] = data["cod_ruta"]
@@ -3014,7 +3011,6 @@ def search_despachos():
         where.append("p.modelo = :modelo")
         params["modelo"] = data["modelo"]
 
-    # LIKEs (case-insensitive; usa UPPER en ambos lados)
     if data.get("transportista"):
         where.append("UPPER(transportista) LIKE :transportista")
         params["transportista"] = f"%{data['transportista'].upper()}%"
@@ -3028,15 +3024,12 @@ def search_despachos():
         where.append("UPPER(bod_destino) LIKE :bod_destino")
         params["bod_destino"] = f"%{data['bod_destino'].upper()}%"
 
-    # Estados
     if data.get("en_despacho") is not None:
         where.append("NVL(en_despacho,0) = :en_despacho")
         params["en_despacho"] = data["en_despacho"]
     if data.get("despachada") is not None:
         where.append("NVL(despachada,0) = :despachada")
         params["despachada"] = data["despachada"]
-
-    # Rango de fechas sobre el campo elegido
     date_field = data.get("date_field", "fecha_est_desp")
     if data.get("fecha_desde"):
         where.append(f"{date_field} >= :fecha_desde")
@@ -3047,19 +3040,15 @@ def search_despachos():
 
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
 
-    # Ordenamiento
     order_sql = build_ordering(data.get("ordering"))
 
-    # Paginación
     page = max(data.get("page", 1), 1)
     page_size = min(max(data.get("page_size", 20), 1), 200)
     offset = (page - 1) * page_size
 
-    # Count total
     count_sql = text(f"SELECT COUNT(1) AS cnt FROM VT_DESPACHO_FINAL {where_sql}")
     total = db.session.execute(count_sql, params).scalar() or 0
 
-    # Datos paginados (12c+)
     data_sql = text(f"""
         SELECT * FROM (
             SELECT inner_q.*, ROWNUM AS rn FROM (
@@ -3075,7 +3064,6 @@ def search_despachos():
     rownum_min = offset
     rows = db.session.execute(data_sql, {**params, "rownum_max": rownum_max, "rownum_min": rownum_min}).mappings().all()
 
-    # Respuesta DRF-like con next/previous numéricas
     next_page = page + 1 if page * page_size < total else None
     prev_page = page - 1 if page > 1 else None
 
@@ -3109,10 +3097,9 @@ def cde_create():
 
     obj = STCDespachoEntrega(**data)
     db.session.add(obj)
-    db.session.commit()  # aquí la BD ya generó el CDE_CODIGO
+    db.session.commit()
 
     return jsonify(out_schema_cde.dump(obj)), 201
-# UPDATE
 @bplog.route("/cdespacho-entrega/<int:empresa>/<int:cde_codigo>", methods=["PUT", "PATCH"])
 def cde_update(empresa, cde_codigo):
     payload = request.get_json(silent=True) or {}
@@ -3250,3 +3237,96 @@ def cde_search():
         "previous": (page - 1) if page > 1 else None,
         "results": results
     })
+
+dde_create_schema = DDECreateSchema()
+dde_out_schema = DDEOutSchema()
+dde_out_many_schema = DDEOutSchema(many=True)
+dde_update_schema = DDEUpdateSchema()
+dde_list_body_schema = DDEListBodySchema()
+
+@bplog.route("/ddespacho-entrega", methods=["POST"])
+def dde_create():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = dde_create_schema.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    parent = db.session.query(STCDespachoEntrega).filter_by(
+        empresa=data["empresa"], cde_codigo=data["cde_codigo"]
+    ).first()
+    if parent is None:
+        return jsonify({"detail": "Cabecera inexistente (CDE_CODIGO, EMPRESA)."}), 422
+
+    obj = STDDespachoEntrega(**data)
+    db.session.add(obj)
+    db.session.flush()
+    db.session.refresh(obj)
+    db.session.commit()
+
+    return jsonify(dde_out_schema.dump(obj)), 201
+
+@bplog.route("/ddespacho-entrega/list", methods=["POST"])
+def dde_list_body():
+    payload = request.get_json(silent=True) or {}
+    try:
+        params = dde_list_body_schema.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    empresa    = params["empresa"]
+    cde_codigo = params["cde_codigo"]
+    page       = params["page"]
+    per_page   = params["per_page"]
+
+    query = (db.session.query(STDDespachoEntrega)
+             .filter(STDDespachoEntrega.empresa == empresa,
+                     STDDespachoEntrega.cde_codigo == cde_codigo)
+             .order_by(STDDespachoEntrega.secuencia.asc()))
+
+    items = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    return jsonify({
+        "page": page,
+        "per_page": per_page,
+        "total": items.total,
+        "pages": items.pages,
+        "data": dde_out_many_schema.dump(items.items)
+    }), 200
+
+@bplog.route("/ddespacho-entrega/<int:empresa>/<int:cde_codigo>/<int:secuencia>", methods=["PUT", "PATCH"])
+def dde_update(empresa: int, cde_codigo: int, secuencia: int):
+    payload = request.get_json(silent=True) or {}
+    if not payload:
+        return jsonify({"detail": "Body JSON requerido."}), 400
+
+    try:
+        data = dde_update_schema.load(payload, partial=(request.method == "PATCH"))
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    if request.method == "PUT":
+        campos_editables = {"cod_ddespacho", "cod_producto", "numero_serie", "fecha", "observacion"}
+        if not (set(data.keys()) & campos_editables):
+            return jsonify({"detail": "PUT requiere al menos un campo editable."}), 400
+
+    obj = (db.session.query(STDDespachoEntrega)
+           .filter_by(empresa=empresa, cde_codigo=cde_codigo, secuencia=secuencia)
+           .first())
+    if obj is None:
+        return jsonify({"detail": "Detalle no encontrado."}), 404
+
+    if "cod_ddespacho" in data and data["cod_ddespacho"] is not None:
+        exists_dd = (db.session.query(STDDespacho)
+                     .filter_by(empresa=empresa, cod_ddespacho=data["cod_ddespacho"])
+                     .first())
+        if exists_dd is None:
+            return jsonify({"detail": "COD_DDESPACHO no existe para la EMPRESA indicada."}), 422
+
+    for field in ("cod_ddespacho", "cod_producto", "numero_serie", "fecha", "observacion"):
+        if field in data:
+            setattr(obj, field, data[field])
+
+    db.session.commit()
+
+    return jsonify(dde_out_schema.dump(obj)), 200
