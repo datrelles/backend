@@ -3079,7 +3079,7 @@ def search_despachos():
 create_schema_cde = CDECreateSchema()
 update_schema_cde = CDEUpdateSchema()
 query_schema_cde  = CDEQuerySchema()
-out_schema_cde    = CDEOutSchema()
+out_schema_cde    = CDEQuerySchema() #CDEOutSchema(many=True)
 out_many_cde      = CDEOutSchema(many=True)
 
 @bplog.route("/cdespacho-entrega", methods=["POST"])
