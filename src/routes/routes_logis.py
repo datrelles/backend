@@ -1082,6 +1082,7 @@ def info_moto():
                 db1.close()
         except Exception:
             pass
+
 @bplog.route('/info_moto_des', methods=['POST'])
 @jwt_required()
 @cross_origin()
@@ -3331,9 +3332,6 @@ def dde_update(empresa: int, cde_codigo: int, secuencia: int):
 
     return jsonify(dde_out_schema.dump(obj)), 200
 
-
-
-
 @bplog.route("/clientes_con_direcciones", methods=["GET"])
 def clientes_con_direcciones():
     """
@@ -3429,8 +3427,6 @@ def clientes_con_direcciones():
         "previous": prev_page,
         "results": results
     }), 200
-
-
 
 @bplog.route("/clientes_direcciones", methods=["GET"])
 def direcciones_por_cliente():
