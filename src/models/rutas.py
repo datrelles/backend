@@ -387,6 +387,92 @@ class DDECreateSchema(Schema):
         in_data.pop("secuencia", None)
         return in_data
 
+class STCDespacho(db.Model):
+    __tablename__  = "ST_CDESPACHO"
+    # __table_args__ = {"schema": "TU_OWNER"}  # si usas owner, descomenta y ajusta
+
+    empresa           = db.Column("EMPRESA", db.Integer, primary_key=True, nullable=False)
+    cod_despacho      = db.Column("COD_DESPACHO", db.Integer, primary_key=True, nullable=False)
+
+    cod_pedido        = db.Column("COD_PEDIDO", db.String(9))
+    cod_tipo_pedido   = db.Column("COD_TIPO_PEDIDO", db.String(2))
+    cod_orden         = db.Column("COD_ORDEN", db.String(9))
+    cod_tipo_orden    = db.Column("COD_TIPO_ORDEN", db.String(2))
+    cod_producto      = db.Column("COD_PRODUCTO", db.String(14))
+    fecha_agrega      = db.Column("FECHA_AGREGA", db.Date)
+    fecha_est_desp    = db.Column("FECHA_EST_DESP", db.Date)
+    fecha_entrega     = db.Column("FECHA_ENTREGA", db.Date)
+    usr_agrega        = db.Column("USR_AGREGA", db.String(20))
+    bodega_ini        = db.Column("BODEGA_INI", db.Integer)
+    bodega_destino    = db.Column("BODEGA_DESTINO", db.Integer)
+    cod_cliente       = db.Column("COD_CLIENTE", db.String(14))
+    cod_ruta          = db.Column("COD_RUTA", db.Integer)
+    cod_transportista = db.Column("COD_TRANSPORTISTA", db.String(14))
+    en_despacho       = db.Column("EN_DESPACHO", db.Integer)
+    es_despachada     = db.Column("ES_DESPACHADA", db.Integer)
+    secuencia         = db.Column("SECUENCIA", db.Integer)
+    cod_direccion_cli = db.Column("COD_DIRECCION_CLI", db.Integer)
+
+class CDCUpdateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    # Todos opcionales en PATCH; en PUT exigiremos al menos uno
+    cod_pedido        = fields.Str(allow_none=True, validate=validate.Length(max=9))
+    cod_tipo_pedido   = fields.Str(allow_none=True, validate=validate.Length(max=2))
+    cod_orden         = fields.Str(allow_none=True, validate=validate.Length(max=9))
+    cod_tipo_orden    = fields.Str(allow_none=True, validate=validate.Length(max=2))
+    cod_producto      = fields.Str(allow_none=True, validate=validate.Length(max=14))
+    fecha_agrega      = fields.Date(allow_none=True)       # 'YYYY-MM-DD'
+    fecha_est_desp    = fields.Date(allow_none=True)
+    fecha_entrega     = fields.Date(allow_none=True)
+    usr_agrega        = fields.Str(allow_none=True, validate=validate.Length(max=20))
+    bodega_ini        = fields.Int(allow_none=True)
+    bodega_destino    = fields.Int(allow_none=True)
+    cod_cliente       = fields.Str(allow_none=True, validate=validate.Length(max=14))
+    cod_ruta          = fields.Int(allow_none=True)
+    cod_transportista = fields.Str(allow_none=True, validate=validate.Length(max=14))
+    en_despacho       = fields.Int(allow_none=True, validate=validate.OneOf([0,1]))
+    es_despachada     = fields.Int(allow_none=True, validate=validate.OneOf([0,1]))
+    secuencia         = fields.Int(allow_none=True)
+    cod_direccion_cli = fields.Int(allow_none=True)
+
+    # No permitir tocar PK
+    empresa      = fields.Int(load_only=True)
+    cod_despacho = fields.Int(load_only=True)
+
+    @staticmethod
+    def require_any_editable(data: dict) -> bool:
+        editable = {
+            "cod_pedido","cod_tipo_pedido","cod_orden","cod_tipo_orden","cod_producto",
+            "fecha_agrega","fecha_est_desp","fecha_entrega","usr_agrega",
+            "bodega_ini","bodega_destino","cod_cliente","cod_ruta","cod_transportista",
+            "en_despacho","es_despachada","secuencia","cod_direccion_cli"
+        }
+        return any(k in data for k in editable)
+
+
+class CDCOutSchema(Schema):
+    empresa           = fields.Int()
+    cod_despacho      = fields.Int()
+    cod_pedido        = fields.Str()
+    cod_tipo_pedido   = fields.Str()
+    cod_orden         = fields.Str()
+    cod_tipo_orden    = fields.Str()
+    cod_producto      = fields.Str()
+    fecha_agrega      = fields.Date(allow_none=True)
+    fecha_est_desp    = fields.Date(allow_none=True)
+    fecha_entrega     = fields.Date(allow_none=True)
+    usr_agrega        = fields.Str()
+    bodega_ini        = fields.Int()
+    bodega_destino    = fields.Int()
+    cod_cliente       = fields.Str()
+    cod_ruta          = fields.Int()
+    cod_transportista = fields.Str()
+    en_despacho       = fields.Int()
+    es_despachada     = fields.Int()
+    secuencia         = fields.Int()
+    cod_direccion_cli = fields.Int()
 class STDDespacho(db.Model):
     __tablename__ = "ST_DDESPACHO"
 
@@ -452,3 +538,155 @@ class DDEOutSchema(Schema):
     fecha          = fields.Date(allow_none=True)
     observacion    = fields.Str(allow_none=True)
 
+###################################GENERACION DE GUIAS FINAL################################################
+class GenGuiasSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    empresa  = fields.Int(required=True)
+    despacho = fields.Int(required=True)
+
+
+class TGAgenciaPersona(db.Model):
+    __tablename__  = "TG_AGENCIA_PERSONA"
+    __table_args__ = (
+        db.PrimaryKeyConstraint(
+            "COD_PERSONA", "COD_TIPO_PERSONA", "COD_AGENCIA", "EMPRESA",
+            name="PK_TG_AGENCIA_PERSONA"
+        ),
+        {"schema": "COMPUTO"},
+    )
+    cod_persona      = db.Column("COD_PERSONA", db.String(14), primary_key=True)
+    cod_tipo_persona = db.Column("COD_TIPO_PERSONA", db.String(3),  primary_key=True)
+    cod_agencia      = db.Column("COD_AGENCIA", db.Integer,        primary_key=True)
+    empresa          = db.Column("EMPRESA", db.Integer,            primary_key=True)
+
+class Usuario(db.Model):
+    __tablename__  = "USUARIO"
+    __table_args__ = {"schema": "COMPUTO"}
+    usuario_oracle = db.Column("USUARIO_ORACLE", db.String(20), primary_key=True)
+
+class TGUsuarioVend(db.Model):
+    __tablename__  = "TG_USUARIO_VEND"
+    __table_args__ = (
+        db.PrimaryKeyConstraint(
+            "COD_PERSONA","COD_TIPO_PERSONA","COD_AGENCIA","EMPRESA","USUARIO_ORACLE",
+            name="PK_USU_VEND"
+        ),
+        db.ForeignKeyConstraint(
+            ["COD_PERSONA","COD_TIPO_PERSONA","COD_AGENCIA","EMPRESA"],
+            ["COMPUTO.TG_AGENCIA_PERSONA.COD_PERSONA",
+             "COMPUTO.TG_AGENCIA_PERSONA.COD_TIPO_PERSONA",
+             "COMPUTO.TG_AGENCIA_PERSONA.COD_AGENCIA",
+             "COMPUTO.TG_AGENCIA_PERSONA.EMPRESA"],
+            name="FK_VEND_PERSONA"
+        ),
+        db.ForeignKeyConstraint(
+            ["USUARIO_ORACLE"],
+            ["COMPUTO.USUARIO.USUARIO_ORACLE"],
+            name="FK_VEND_USUARIO"
+        ),
+        {"schema": "COMPUTO"},
+    )
+
+    cod_persona      = db.Column("COD_PERSONA", db.String(14), nullable=False, primary_key=True)
+    cod_tipo_persona = db.Column("COD_TIPO_PERSONA", db.String(3),  nullable=False, primary_key=True)
+    cod_agencia      = db.Column("COD_AGENCIA", db.Integer,        nullable=False, primary_key=True)
+    empresa          = db.Column("EMPRESA", db.Integer,            nullable=False, primary_key=True)
+    usuario_oracle   = db.Column("USUARIO_ORACLE", db.String(20),  nullable=False, primary_key=True)
+
+class TGUVCreateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+    cod_persona      = fields.Str(required=True, validate=validate.Length(max=14))
+    cod_tipo_persona = fields.Str(required=True, validate=validate.Length(max=3))
+    cod_agencia      = fields.Int(required=True)
+    empresa          = fields.Int(required=True)
+    usuario_oracle   = fields.Str(required=True, validate=validate.Length(max=20))
+
+class TGUVOutSchema(Schema):
+    cod_persona      = fields.Str()
+    cod_tipo_persona = fields.Str()
+    cod_agencia      = fields.Int()
+    empresa          = fields.Int()
+    usuario_oracle   = fields.Str()
+
+class TGUVSearchSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+    # filtros
+    cod_persona      = fields.Str(validate=validate.Length(max=14))
+    cod_tipo_persona = fields.Str(validate=validate.Length(max=3))
+    cod_agencia      = fields.Int()
+    empresa          = fields.Int()
+    usuario_oracle   = fields.Str(validate=validate.Length(max=20))
+    q                = fields.Str()  # búsqueda rápida por usuario_oracle o cod_persona
+
+    # paginación y ordenamiento
+    page             = fields.Int(load_default=1, validate=validate.Range(min=1))
+    page_size        = fields.Int(load_default=20, validate=validate.Range(min=1, max=200))
+    ordering         = fields.List(fields.Str(), load_default=[])  # ej: ["usuario_oracle:asc","cod_persona:desc"]
+
+class TGUVUpdateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+    new_cod_persona      = fields.Str(validate=validate.Length(max=14))
+    new_cod_tipo_persona = fields.Str(validate=validate.Length(max=3))
+    new_cod_agencia      = fields.Int()
+    new_empresa          = fields.Int()
+    new_usuario_oracle   = fields.Str(validate=validate.Length(max=20))
+
+    def validate_has_changes(self, data):
+        if not any(k in data for k in (
+            "new_cod_persona", "new_cod_tipo_persona", "new_cod_agencia", "new_empresa", "new_usuario_oracle"
+        )):
+            raise ValidationError("Debe enviar al menos un campo 'new_*' para actualizar.")
+
+def build_ordering_in(allowed_map, ordering_list):
+    order_by = []
+    if not ordering_list:
+        return [allowed_map["usuario_oracle"].asc()]
+    for raw in ordering_list:
+        if not raw:
+            continue
+        parts = raw.split(":")
+        colname = parts[0].strip().lower()
+        direction = parts[1].strip().lower() if len(parts) > 1 else "asc"
+        col = allowed_map.get(colname)
+        if not col:
+            continue
+        order_by.append(col.asc() if direction != "desc" else col.desc())
+    return order_by or [allowed_map["usuario_oracle"].asc()]
+
+
+class DDespachoUpdateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE  # ignora claves desconocidas
+
+    # Campos editables (todos opcionales en PATCH; en PUT exigiremos al menos uno)
+    cod_despacho         = fields.Int(allow_none=True)
+    cod_producto         = fields.Str(allow_none=True, validate=validate.Length(max=14))
+    numero_serie         = fields.Str(allow_none=True, validate=validate.Length(max=30))
+    fecha_despacho       = fields.Date(allow_none=True)          # ISO 'YYYY-MM-DD'
+    usuario_despacha     = fields.Str(allow_none=True, validate=validate.Length(max=50))
+    cod_comprobante      = fields.Str(allow_none=True, validate=validate.Length(max=20))
+    tipo_comprobante     = fields.Str(allow_none=True, validate=validate.Length(max=2))
+    en_despacho          = fields.Int(allow_none=True, validate=validate.OneOf([0,1]))
+    despachada           = fields.Int(allow_none=True, validate=validate.OneOf([0,1]))
+    cod_comprobante_gui  = fields.Str(allow_none=True, validate=validate.Length(max=20))
+    tipo_comprobante_gui = fields.Str(allow_none=True, validate=validate.Length(max=2))
+    cod_guia_des         = fields.Str(allow_none=True, validate=validate.Length(max=20))
+    cod_tipo_guia_des    = fields.Str(allow_none=True, validate=validate.Length(max=2))
+
+    # Bloqueo de PK por si alguien intenta enviarla
+    empresa        = fields.Int(load_only=True)
+    cod_ddespacho  = fields.Int(load_only=True)
+
+    @staticmethod
+    def require_any_editable(data: dict):
+        editable = {
+            "cod_despacho","cod_producto","numero_serie","fecha_despacho","usuario_despacha",
+            "cod_comprobante","tipo_comprobante","en_despacho","despachada",
+            "cod_comprobante_gui","tipo_comprobante_gui","cod_guia_des","cod_tipo_guia_des"
+        }
+        return any(k in data for k in editable)
