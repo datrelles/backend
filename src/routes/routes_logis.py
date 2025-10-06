@@ -28,7 +28,8 @@ from src.models.rutas import STRuta, STDireccionRuta, RutaCreateSchema, RutaUpda
     STTransportistaRuta, DespachoSearchIn, DespachoRowOut, ALLOWED_ORDERING_FIELDS, STClienteDireccionGuias, \
     CDECreateSchema, CDEUpdateSchema, CDEQuerySchema, CDEOutSchema, STCDespachoEntrega, DDECreateSchema, DDEOutSchema, \
     DDEUpdateSchema, STDDespachoEntrega, DDEListBodySchema, STDDespacho, GenGuiasSchema, TGUsuarioVend, \
-    TGUVCreateSchema, TGUVSearchSchema, TGUVUpdateSchema, TGUVOutSchema, build_ordering_in
+    TGUVCreateSchema, TGUVSearchSchema, TGUVUpdateSchema, TGUVOutSchema, build_ordering_in, DDespachoUpdateSchema, \
+    CDCUpdateSchema, CDCOutSchema, STCDespacho
 
 bplog = Blueprint('routes_log', __name__)
 
@@ -3535,3 +3536,115 @@ def tguv_update(cod_persona, cod_tipo_persona, cod_agencia, empresa, usuario_ora
         return jsonify({"detail": "Conflicto de integridad.", "error": str(e.orig)}), 409
 
     return jsonify(out_one.dump(new_obj)), 200
+
+cdc_update_schema = CDCUpdateSchema()
+cdc_out_schema = CDCOutSchema()
+d_desp_update_schema = DDespachoUpdateSchema()
+@bplog.route("/cdespacho/<int:empresa>/<int:cod_despacho>", methods=["PUT","PATCH"])
+def cdespacho_update(empresa: int, cod_despacho: int):
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = cdc_update_schema.load(payload, partial=(request.method == "PATCH"))
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    if request.method == "PUT" and not CDCUpdateSchema.require_any_editable(data):
+        return jsonify({"detail": "PUT requiere al menos un campo editable."}), 400
+
+    obj = (db.session.query(STCDespacho)
+           .filter_by(empresa=empresa, cod_despacho=cod_despacho)
+           .first())
+    if obj is None:
+        return jsonify({"detail": "Registro no encontrado."}), 404
+
+    # Aplicar solo campos presentes
+    for field in (
+        "cod_pedido","cod_tipo_pedido","cod_orden","cod_tipo_orden","cod_producto",
+        "fecha_agrega","fecha_est_desp","fecha_entrega","usr_agrega","bodega_ini",
+        "bodega_destino","cod_cliente","cod_ruta","cod_transportista","en_despacho",
+        "es_despachada","secuencia","cod_direccion_cli"
+    ):
+        if field in data:
+            setattr(obj, field, data[field])
+
+    try:
+        db.session.commit()
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"detail": "Conflicto de integridad.", "error": str(e.orig)}), 409
+
+    return jsonify(cdc_out_schema.dump(obj)), 200
+@bplog.route("/ddespacho/<int:empresa>/<int:cod_despacho>/<int:cod_ddespacho>", methods=["PUT", "PATCH"])
+def ddespacho_update(empresa: int, cod_despacho: int, cod_ddespacho: int):
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = d_desp_update_schema.load(payload, partial=(request.method == "PATCH"))
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    if request.method == "PUT" and not DDespachoUpdateSchema.require_any_editable(data):
+        return jsonify({"detail": "PUT requiere al menos un campo editable."}), 400
+
+    # 1) Verificar que la CABECERA exista
+    exists_header = (db.session.query(STCDespacho)
+                     .filter_by(empresa=empresa, cod_despacho=cod_despacho)
+                     .first())
+    if exists_header is None:
+        return jsonify({"detail": "Cabecera ST_CDESPACHO no existe para (empresa, cod_despacho)."}), 404
+
+    # 2) Buscar el DETALLE acotando por los 3 identificadores
+    obj = (db.session.query(STDDespacho)
+           .filter_by(empresa=empresa, cod_ddespacho=cod_ddespacho, cod_despacho=cod_despacho)
+           .first())
+
+    if obj is None:
+        # Si existe el detalle por (empresa, cod_ddespacho) pero con otro cod_despacho, aclara el problema:
+        alt = (db.session.query(STDDespacho)
+               .filter_by(empresa=empresa, cod_ddespacho=cod_ddespacho)
+               .first())
+        if alt is not None:
+            return jsonify({"detail": "El detalle existe pero está asociado a otro COD_DESPACHO."}), 409
+        return jsonify({"detail": "Detalle no encontrado."}), 404
+
+    # 3) Si el body trae cod_despacho y no coincide con el de la ruta, rechazar
+    if "cod_despacho" in data and data["cod_despacho"] is not None:
+        if data["cod_despacho"] != cod_despacho:
+            return jsonify({"detail": "cod_despacho del body debe coincidir con la ruta."}), 400
+        # Opcional: eliminarlo para no intentar “actualizar” ese campo
+        data.pop("cod_despacho", None)
+
+    # 4) (Opcional) Validación referencial si intentaran cambiar algo que afecte cabecera
+    # En este diseño NO permitimos mover el detalle a otra cabecera desde este endpoint.
+
+    # 5) Aplicar cambios permitidos
+    for field in (
+        "cod_producto","numero_serie","fecha_despacho","usuario_despacha",
+        "cod_comprobante","tipo_comprobante","en_despacho","despachada",
+        "cod_comprobante_gui","tipo_comprobante_gui","cod_guia_des","cod_tipo_guia_des"
+    ):
+        if field in data:
+            setattr(obj, field, data[field])
+
+    try:
+        db.session.commit()
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"detail": "Conflicto de integridad.", "error": str(e.orig)}), 409
+
+    return jsonify({
+        "empresa": obj.empresa,
+        "cod_despacho": obj.cod_despacho,
+        "cod_ddespacho": obj.cod_ddespacho,
+        "cod_producto": obj.cod_producto,
+        "numero_serie": obj.numero_serie,
+        "fecha_despacho": obj.fecha_despacho.isoformat() if obj.fecha_despacho else None,
+        "usuario_despacha": obj.usuario_despacha,
+        "cod_comprobante": obj.cod_comprobante,
+        "tipo_comprobante": obj.tipo_comprobante,
+        "en_despacho": obj.en_despacho,
+        "despachada": obj.despachada,
+        "cod_comprobante_gui": obj.cod_comprobante_gui,
+        "tipo_comprobante_gui": obj.tipo_comprobante_gui,
+        "cod_guia_des": obj.cod_guia_des,
+        "cod_tipo_guia_des": obj.cod_tipo_guia_des
+    }), 200

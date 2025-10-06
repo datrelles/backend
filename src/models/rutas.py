@@ -387,6 +387,92 @@ class DDECreateSchema(Schema):
         in_data.pop("secuencia", None)
         return in_data
 
+class STCDespacho(db.Model):
+    __tablename__  = "ST_CDESPACHO"
+    # __table_args__ = {"schema": "TU_OWNER"}  # si usas owner, descomenta y ajusta
+
+    empresa           = db.Column("EMPRESA", db.Integer, primary_key=True, nullable=False)
+    cod_despacho      = db.Column("COD_DESPACHO", db.Integer, primary_key=True, nullable=False)
+
+    cod_pedido        = db.Column("COD_PEDIDO", db.String(9))
+    cod_tipo_pedido   = db.Column("COD_TIPO_PEDIDO", db.String(2))
+    cod_orden         = db.Column("COD_ORDEN", db.String(9))
+    cod_tipo_orden    = db.Column("COD_TIPO_ORDEN", db.String(2))
+    cod_producto      = db.Column("COD_PRODUCTO", db.String(14))
+    fecha_agrega      = db.Column("FECHA_AGREGA", db.Date)
+    fecha_est_desp    = db.Column("FECHA_EST_DESP", db.Date)
+    fecha_entrega     = db.Column("FECHA_ENTREGA", db.Date)
+    usr_agrega        = db.Column("USR_AGREGA", db.String(20))
+    bodega_ini        = db.Column("BODEGA_INI", db.Integer)
+    bodega_destino    = db.Column("BODEGA_DESTINO", db.Integer)
+    cod_cliente       = db.Column("COD_CLIENTE", db.String(14))
+    cod_ruta          = db.Column("COD_RUTA", db.Integer)
+    cod_transportista = db.Column("COD_TRANSPORTISTA", db.String(14))
+    en_despacho       = db.Column("EN_DESPACHO", db.Integer)
+    es_despachada     = db.Column("ES_DESPACHADA", db.Integer)
+    secuencia         = db.Column("SECUENCIA", db.Integer)
+    cod_direccion_cli = db.Column("COD_DIRECCION_CLI", db.Integer)
+
+class CDCUpdateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    # Todos opcionales en PATCH; en PUT exigiremos al menos uno
+    cod_pedido        = fields.Str(allow_none=True, validate=validate.Length(max=9))
+    cod_tipo_pedido   = fields.Str(allow_none=True, validate=validate.Length(max=2))
+    cod_orden         = fields.Str(allow_none=True, validate=validate.Length(max=9))
+    cod_tipo_orden    = fields.Str(allow_none=True, validate=validate.Length(max=2))
+    cod_producto      = fields.Str(allow_none=True, validate=validate.Length(max=14))
+    fecha_agrega      = fields.Date(allow_none=True)       # 'YYYY-MM-DD'
+    fecha_est_desp    = fields.Date(allow_none=True)
+    fecha_entrega     = fields.Date(allow_none=True)
+    usr_agrega        = fields.Str(allow_none=True, validate=validate.Length(max=20))
+    bodega_ini        = fields.Int(allow_none=True)
+    bodega_destino    = fields.Int(allow_none=True)
+    cod_cliente       = fields.Str(allow_none=True, validate=validate.Length(max=14))
+    cod_ruta          = fields.Int(allow_none=True)
+    cod_transportista = fields.Str(allow_none=True, validate=validate.Length(max=14))
+    en_despacho       = fields.Int(allow_none=True, validate=validate.OneOf([0,1]))
+    es_despachada     = fields.Int(allow_none=True, validate=validate.OneOf([0,1]))
+    secuencia         = fields.Int(allow_none=True)
+    cod_direccion_cli = fields.Int(allow_none=True)
+
+    # No permitir tocar PK
+    empresa      = fields.Int(load_only=True)
+    cod_despacho = fields.Int(load_only=True)
+
+    @staticmethod
+    def require_any_editable(data: dict) -> bool:
+        editable = {
+            "cod_pedido","cod_tipo_pedido","cod_orden","cod_tipo_orden","cod_producto",
+            "fecha_agrega","fecha_est_desp","fecha_entrega","usr_agrega",
+            "bodega_ini","bodega_destino","cod_cliente","cod_ruta","cod_transportista",
+            "en_despacho","es_despachada","secuencia","cod_direccion_cli"
+        }
+        return any(k in data for k in editable)
+
+
+class CDCOutSchema(Schema):
+    empresa           = fields.Int()
+    cod_despacho      = fields.Int()
+    cod_pedido        = fields.Str()
+    cod_tipo_pedido   = fields.Str()
+    cod_orden         = fields.Str()
+    cod_tipo_orden    = fields.Str()
+    cod_producto      = fields.Str()
+    fecha_agrega      = fields.Date(allow_none=True)
+    fecha_est_desp    = fields.Date(allow_none=True)
+    fecha_entrega     = fields.Date(allow_none=True)
+    usr_agrega        = fields.Str()
+    bodega_ini        = fields.Int()
+    bodega_destino    = fields.Int()
+    cod_cliente       = fields.Str()
+    cod_ruta          = fields.Int()
+    cod_transportista = fields.Str()
+    en_despacho       = fields.Int()
+    es_despachada     = fields.Int()
+    secuencia         = fields.Int()
+    cod_direccion_cli = fields.Int()
 class STDDespacho(db.Model):
     __tablename__ = "ST_DDESPACHO"
 
@@ -571,3 +657,36 @@ def build_ordering_in(allowed_map, ordering_list):
             continue
         order_by.append(col.asc() if direction != "desc" else col.desc())
     return order_by or [allowed_map["usuario_oracle"].asc()]
+
+
+class DDespachoUpdateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE  # ignora claves desconocidas
+
+    # Campos editables (todos opcionales en PATCH; en PUT exigiremos al menos uno)
+    cod_despacho         = fields.Int(allow_none=True)
+    cod_producto         = fields.Str(allow_none=True, validate=validate.Length(max=14))
+    numero_serie         = fields.Str(allow_none=True, validate=validate.Length(max=30))
+    fecha_despacho       = fields.Date(allow_none=True)          # ISO 'YYYY-MM-DD'
+    usuario_despacha     = fields.Str(allow_none=True, validate=validate.Length(max=50))
+    cod_comprobante      = fields.Str(allow_none=True, validate=validate.Length(max=20))
+    tipo_comprobante     = fields.Str(allow_none=True, validate=validate.Length(max=2))
+    en_despacho          = fields.Int(allow_none=True, validate=validate.OneOf([0,1]))
+    despachada           = fields.Int(allow_none=True, validate=validate.OneOf([0,1]))
+    cod_comprobante_gui  = fields.Str(allow_none=True, validate=validate.Length(max=20))
+    tipo_comprobante_gui = fields.Str(allow_none=True, validate=validate.Length(max=2))
+    cod_guia_des         = fields.Str(allow_none=True, validate=validate.Length(max=20))
+    cod_tipo_guia_des    = fields.Str(allow_none=True, validate=validate.Length(max=2))
+
+    # Bloqueo de PK por si alguien intenta enviarla
+    empresa        = fields.Int(load_only=True)
+    cod_ddespacho  = fields.Int(load_only=True)
+
+    @staticmethod
+    def require_any_editable(data: dict):
+        editable = {
+            "cod_despacho","cod_producto","numero_serie","fecha_despacho","usuario_despacha",
+            "cod_comprobante","tipo_comprobante","en_despacho","despachada",
+            "cod_comprobante_gui","tipo_comprobante_gui","cod_guia_des","cod_tipo_guia_des"
+        }
+        return any(k in data for k in editable)
