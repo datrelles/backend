@@ -3,7 +3,7 @@ import logging
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 import datetime
-from sqlalchemy import and_, text, literal, func
+from sqlalchemy import and_, text, literal, func, exists, literal, func, select
 from sqlalchemy.orm import aliased
 from sqlalchemy.dialects.oracle import CLOB
 import oracledb
@@ -3332,3 +3332,170 @@ def dde_update(empresa: int, cde_codigo: int, secuencia: int):
     db.session.commit()
 
     return jsonify(dde_out_schema.dump(obj)), 200
+
+@bplog.route("/clientes_con_direcciones", methods=["GET"])
+def clientes_con_direcciones():
+    """
+    Lista los clientes (tabla CLIENTE) que tienen al menos una dirección
+    en ST_CLIENTE_DIRECCION_GUIAS.
+    """
+    # Paginación y filtros
+    try:
+        page = max(int(request.args.get("page", 1)), 1)
+    except Exception:
+        page = 1
+
+    try:
+        page_size = int(request.args.get("page_size", 20))
+        page_size = min(max(page_size, 1), 200)
+    except Exception:
+        page_size = 20
+
+    empresa = request.args.get("empresa", type=int)
+    cod_cliente_like = (request.args.get("cod_cliente_like") or "").strip()
+    nombre_like = (request.args.get("nombre_like") or "").strip()
+
+    C = aliased(Cliente, name="c")
+    CDG = aliased(STClienteDireccionGuias, name="cdg")
+
+    # nombre completo: nombre + ' ' + coalesce(apellido1, '')
+    nombre_cli = func.concat(
+        C.nombre,
+        func.coalesce(func.concat(literal(" "), C.apellido1), literal(""))
+    ).label("nombre_cliente")
+
+    # ✅ EXISTS correcto (Select -> .exists())
+    exists_dir_expr = (
+        select(literal(1))
+        .select_from(CDG)
+        .where(
+            CDG.empresa == C.empresa,
+            CDG.cod_cliente == C.cod_cliente,
+        )
+        .exists()
+    )
+
+    q = (
+        db.session.query(
+            C.empresa.label("empresa"),
+            C.cod_cliente.label("cod_cliente"),
+            nombre_cli
+        )
+        .filter(exists_dir_expr)  # <-- aplicar EXISTS expression
+    )
+
+    if empresa is not None:
+        q = q.filter(C.empresa == empresa)
+
+    if cod_cliente_like:
+        # Oracle no soporta ILIKE; usamos lower(...)
+        q = q.filter(func.lower(C.cod_cliente).like(f"%{cod_cliente_like.lower()}%"))
+
+    if nombre_like:
+        q = q.filter(
+            func.lower(
+                func.concat(
+                    func.concat(C.nombre, literal(" ")),
+                    func.coalesce(C.apellido1, literal(""))
+                )
+            ).like(f"%{nombre_like.lower()}%")
+        )
+
+    total = q.count()
+
+    rows = (
+        q.order_by(C.empresa.asc(), C.cod_cliente.asc())
+         .offset((page - 1) * page_size)
+         .limit(page_size)
+         .all()
+    )
+
+    results = [
+        {
+            "empresa": r.empresa,
+            "cod_cliente": r.cod_cliente,
+            "nombre_cliente": r.nombre_cliente
+        }
+        for r in rows
+    ]
+
+    next_page = page + 1 if page * page_size < total else None
+    prev_page = page - 1 if page > 1 else None
+
+    return jsonify({
+        "count": total,
+        "next": next_page,
+        "previous": prev_page,
+        "results": results
+    }), 200
+
+@bplog.route("/clientes_direcciones", methods=["GET"])
+def direcciones_por_cliente():
+    """
+    Lista las direcciones de ST_CLIENTE_DIRECCION_GUIAS para un cliente.
+    Query params:
+      - cod_cliente: str (requerido)
+      - empresa: int (opcional, si omites, trae de todas las empresas)
+      - page: int (default 1)
+      - page_size: int (default 50, máx 500)
+    Devuelve:
+      - cod_direccion
+      - direccion
+      - ciudad
+      - (opcionalmente puedes devolver direccion_larga, nombre, es_activo si los necesitas)
+    """
+    cod_cliente = (request.args.get("cod_cliente") or "").strip()
+    if not cod_cliente:
+        return jsonify({"detail": "El parámetro 'cod_cliente' es requerido."}), 400
+
+    empresa = request.args.get("empresa", type=int)
+
+    try:
+        page = max(int(request.args.get("page", 1)), 1)
+    except Exception:
+        page = 1
+
+    try:
+        page_size = int(request.args.get("page_size", 50))
+        page_size = min(max(page_size, 1), 500)
+    except Exception:
+        page_size = 50
+
+    CDG = aliased(STClienteDireccionGuias, name="cdg")
+
+    q = db.session.query(
+        CDG.cod_direccion.label("cod_direccion"),
+        CDG.direccion.label("direccion"),
+        CDG.ciudad.label("ciudad"),
+    ).filter(CDG.cod_cliente == cod_cliente)
+
+    if empresa is not None:
+        q = q.filter(CDG.empresa == empresa)
+
+    total = q.count()
+
+    rows = (
+        q.order_by(CDG.empresa.asc(), CDG.cod_cliente.asc(), CDG.cod_direccion.asc())
+         .offset((page - 1) * page_size)
+         .limit(page_size)
+         .all()
+    )
+
+    results = [
+        {
+            "cod_direccion": r.cod_direccion,
+            "direccion": r.direccion,
+            "ciudad": r.ciudad,
+        }
+        for r in rows
+    ]
+
+    next_page = page + 1 if page * page_size < total else None
+    prev_page = page - 1 if page > 1 else None
+
+    return jsonify({
+        "count": total,
+        "next": next_page,
+        "previous": prev_page,
+        "results": results
+    }), 200
