@@ -3,7 +3,7 @@ import logging
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 import datetime
-from sqlalchemy import and_, text, literal, func, exists, literal, func, select
+from sqlalchemy import and_, text, literal, func, exists, literal, func, select, bindparam, types as satypes, outparam,  or_
 from sqlalchemy.orm import aliased
 from sqlalchemy.dialects.oracle import CLOB
 import oracledb
@@ -27,7 +27,9 @@ from src.models.rutas import STRuta, STDireccionRuta, RutaCreateSchema, RutaUpda
     TRutaOutSchema, TRutaCreateSchema, TRutaDetailSchema, TRutaUpdateSchema, TRutaSearchSchema, TRutaDeleteSchema, \
     STTransportistaRuta, DespachoSearchIn, DespachoRowOut, ALLOWED_ORDERING_FIELDS, STClienteDireccionGuias, \
     CDECreateSchema, CDEUpdateSchema, CDEQuerySchema, CDEOutSchema, STCDespachoEntrega, DDECreateSchema, DDEOutSchema, \
-    DDEUpdateSchema, STDDespachoEntrega, DDEListBodySchema, STDDespacho
+    DDEUpdateSchema, STDDespachoEntrega, DDEListBodySchema, STDDespacho, DDEUpdateSchema, STDDespachoEntrega, DDEListBodySchema, STDDespacho, GenGuiasSchema, TGUsuarioVend, \
+    TGUVCreateSchema, TGUVSearchSchema, TGUVUpdateSchema, TGUVOutSchema, build_ordering_in, DDespachoUpdateSchema, \
+    CDCUpdateSchema, CDCOutSchema, STCDespacho
 
 bplog = Blueprint('routes_log', __name__)
 
@@ -3498,4 +3500,332 @@ def direcciones_por_cliente():
         "next": next_page,
         "previous": prev_page,
         "results": results
+    }), 200
+
+#############################################GENERAR GUIAS FINAL##############################################
+
+PROC_FQN = "STOCK.KS_DESPACHOS.GENERAR_GUIAS_FINALES"
+def call_generar_guias_finales(empresa: int, despacho: int) -> str:
+    empresa = int(empresa)
+    despacho = int(despacho)
+
+    stmt = text(f"""
+    BEGIN
+      {PROC_FQN}(:p_emp, :p_desp, :p_out);
+    END;
+    """).bindparams(
+        bindparam("p_emp", type_=satypes.Integer),
+        bindparam("p_desp", type_=satypes.Integer),
+        outparam("p_out", satypes.String(length=4000))
+    )
+
+    result = db.session.execute(stmt, {"p_emp": empresa, "p_desp": despacho})
+    out_raw = result.out_parameters.get("p_out") or ""
+
+
+
+
+    db.session.commit()
+
+
+
+    return out_raw
+
+
+def call_generar_guias_finales_clob(empresa: int, despacho: int) -> str:
+    empresa = int(empresa)
+    despacho = int(despacho)
+
+
+
+    stmt = text(f"""
+    BEGIN
+      {PROC_FQN}(:p_emp, :p_desp, :p_out);
+    END;
+    """).bindparams(
+        bindparam("p_emp", type_=satypes.Integer),
+        bindparam("p_desp", type_=satypes.Integer),
+        outparam("p_out", CLOB())
+
+    )
+
+    result = db.session.execute(stmt, {"p_emp": empresa, "p_desp": despacho})
+    clob = result.out_parameters.get("p_out")
+    out_raw = clob.read() if clob is not None else ""
+
+    db.session.commit()
+    return out_raw
+
+bp_desp = Blueprint("despachos", __name__)
+
+gen_guias_in_schema = GenGuiasSchema()
+
+@bplog.route("/despachos/generar-guias", methods=["POST"])
+def generar_guias():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = gen_guias_in_schema.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    empresa  = data["empresa"]
+    despacho = data["despacho"]
+
+    try:
+        raw_out = call_generar_guias_finales(empresa, despacho)
+        guias = [g for g in (raw_out or "").split(";") if g]
+
+        return jsonify({
+            "empresa": empresa,
+            "despacho": despacho,
+            "guias": guias,
+            "out_raw": raw_out or ""
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "detail": "Error al generar guías.",
+            "error": str(e)
+        }), 500
+
+create_in  = TGUVCreateSchema()
+search_in  = TGUVSearchSchema()
+update_in  = TGUVUpdateSchema()
+out_one    = TGUVOutSchema()
+out_many_in   = TGUVOutSchema(many=True)
+
+# Crear
+@bplog.route("/usuarios-vend", methods=["POST"])
+def tguv_create():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = create_in.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = TGUsuarioVend(**data)
+    db.session.add(obj)
+    try:
+        db.session.commit()
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"detail": "Conflicto de integridad.", "error": str(e.orig)}), 409
+
+
+
+    return jsonify(out_one.dump(obj)), 201
+
+@bplog.route("/usuarios-vend/search", methods=["POST"])
+def tguv_search():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = search_in.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    qry = db.session.query(TGUsuarioVend)
+
+    if "empresa" in data:
+        qry = qry.filter(TGUsuarioVend.empresa == data["empresa"])
+    if "cod_agencia" in data:
+        qry = qry.filter(TGUsuarioVend.cod_agencia == data["cod_agencia"])
+    if "cod_tipo_persona" in data:
+        qry = qry.filter(TGUsuarioVend.cod_tipo_persona == data["cod_tipo_persona"])
+    if "cod_persona" in data:
+        qry = qry.filter(TGUsuarioVend.cod_persona == data["cod_persona"])
+    if "usuario_oracle" in data:
+        qry = qry.filter(TGUsuarioVend.usuario_oracle == data["usuario_oracle"])
+
+    if "q" in data and data["q"]:
+        q = data["q"].upper()
+        qry = qry.filter(or_(
+            func.upper(TGUsuarioVend.usuario_oracle).like(f"%{q}%"),
+            func.upper(TGUsuarioVend.cod_persona).like(f"%{q}%")
+        ))
+
+    allowed_map = {
+        "empresa": TGUsuarioVend.empresa,
+        "cod_agencia": TGUsuarioVend.cod_agencia,
+        "cod_tipo_persona": TGUsuarioVend.cod_tipo_persona,
+        "cod_persona": TGUsuarioVend.cod_persona,
+        "usuario_oracle": TGUsuarioVend.usuario_oracle,
+    }
+    ordering = build_ordering_in(allowed_map, data.get("ordering", []))
+    for ob in ordering:
+        qry = qry.order_by(ob)
+
+    page = data.get("page", 1)
+    page_size = data.get("page_size", 20)
+    items = qry.paginate(page=page, per_page=page_size, error_out=False)
+
+    return jsonify({
+        "page": page,
+        "per_page": page_size,
+        "total": items.total,
+        "pages": items.pages,
+        "data": out_many_in.dump(items.items)
+    }), 200
+
+@bplog.route(
+    "/usuarios-vend/<string:cod_persona>/<string:cod_tipo_persona>/<int:cod_agencia>/<int:empresa>/<string:usuario_oracle>",
+    methods=["PUT","PATCH"]
+)
+def tguv_update(cod_persona, cod_tipo_persona, cod_agencia, empresa, usuario_oracle):
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = update_in.load(payload)
+        update_in.validate_has_changes(data)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    # 1) Buscar registro actual
+    current = (db.session.query(TGUsuarioVend)
+               .filter_by(cod_persona=cod_persona,
+                          cod_tipo_persona=cod_tipo_persona,
+                          cod_agencia=cod_agencia,
+                          empresa=empresa,
+                          usuario_oracle=usuario_oracle)
+               .first())
+    if current is None:
+        return jsonify({"detail": "Registro no encontrado."}), 404
+
+    new_obj = TGUsuarioVend(
+        cod_persona      = data.get("new_cod_persona", current.cod_persona),
+        cod_tipo_persona = data.get("new_cod_tipo_persona", current.cod_tipo_persona),
+        cod_agencia      = data.get("new_cod_agencia", current.cod_agencia),
+        empresa          = data.get("new_empresa", current.empresa),
+        usuario_oracle   = data.get("new_usuario_oracle", current.usuario_oracle),
+    )
+
+    if (new_obj.cod_persona == current.cod_persona and
+        new_obj.cod_tipo_persona == current.cod_tipo_persona and
+        new_obj.cod_agencia == current.cod_agencia and
+        new_obj.empresa == current.empresa and
+        new_obj.usuario_oracle == current.usuario_oracle):
+        return jsonify(out_one.dump(current)), 200
+
+    try:
+        db.session.delete(current)
+        db.session.flush()
+        db.session.add(new_obj)
+        db.session.commit()
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"detail": "Conflicto de integridad.", "error": str(e.orig)}), 409
+
+    return jsonify(out_one.dump(new_obj)), 200
+
+cdc_update_schema = CDCUpdateSchema()
+cdc_out_schema = CDCOutSchema()
+d_desp_update_schema = DDespachoUpdateSchema()
+@bplog.route("/cdespacho/<int:empresa>/<int:cod_despacho>", methods=["PUT","PATCH"])
+def cdespacho_update(empresa: int, cod_despacho: int):
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = cdc_update_schema.load(payload, partial=(request.method == "PATCH"))
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    if request.method == "PUT" and not CDCUpdateSchema.require_any_editable(data):
+        return jsonify({"detail": "PUT requiere al menos un campo editable."}), 400
+
+    obj = (db.session.query(STCDespacho)
+           .filter_by(empresa=empresa, cod_despacho=cod_despacho)
+           .first())
+    if obj is None:
+        return jsonify({"detail": "Registro no encontrado."}), 404
+
+    # Aplicar solo campos presentes
+    for field in (
+        "cod_pedido","cod_tipo_pedido","cod_orden","cod_tipo_orden","cod_producto",
+        "fecha_agrega","fecha_est_desp","fecha_entrega","usr_agrega","bodega_ini",
+        "bodega_destino","cod_cliente","cod_ruta","cod_transportista","en_despacho",
+        "es_despachada","secuencia","cod_direccion_cli"
+    ):
+        if field in data:
+            setattr(obj, field, data[field])
+
+    try:
+        db.session.commit()
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"detail": "Conflicto de integridad.", "error": str(e.orig)}), 409
+
+    return jsonify(cdc_out_schema.dump(obj)), 200
+@bplog.route("/ddespacho/<int:empresa>/<int:cod_despacho>/<int:cod_ddespacho>", methods=["PUT", "PATCH"])
+def ddespacho_update(empresa: int, cod_despacho: int, cod_ddespacho: int):
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = d_desp_update_schema.load(payload, partial=(request.method == "PATCH"))
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    if request.method == "PUT" and not DDespachoUpdateSchema.require_any_editable(data):
+        return jsonify({"detail": "PUT requiere al menos un campo editable."}), 400
+
+
+
+
+    # 1) Verificar que la CABECERA exista
+    exists_header = (db.session.query(STCDespacho)
+                     .filter_by(empresa=empresa, cod_despacho=cod_despacho)
+                     .first())
+    if exists_header is None:
+        return jsonify({"detail": "Cabecera ST_CDESPACHO no existe para (empresa, cod_despacho)."}), 404
+
+    # 2) Buscar el DETALLE acotando por los 3 identificadores
+    obj = (db.session.query(STDDespacho)
+           .filter_by(empresa=empresa, cod_ddespacho=cod_ddespacho, cod_despacho=cod_despacho)
+           .first())
+
+    if obj is None:
+        # Si existe el detalle por (empresa, cod_ddespacho) pero con otro cod_despacho, aclara el problema:
+        alt = (db.session.query(STDDespacho)
+               .filter_by(empresa=empresa, cod_ddespacho=cod_ddespacho)
+               .first())
+        if alt is not None:
+            return jsonify({"detail": "El detalle existe pero está asociado a otro COD_DESPACHO."}), 409
+        return jsonify({"detail": "Detalle no encontrado."}), 404
+
+    # 3) Si el body trae cod_despacho y no coincide con el de la ruta, rechazar
+    if "cod_despacho" in data and data["cod_despacho"] is not None:
+        if data["cod_despacho"] != cod_despacho:
+            return jsonify({"detail": "cod_despacho del body debe coincidir con la ruta."}), 400
+        # Opcional: eliminarlo para no intentar “actualizar” ese campo
+        data.pop("cod_despacho", None)
+
+    # 4) (Opcional) Validación referencial si intentaran cambiar algo que afecte cabecera
+    # En este diseño NO permitimos mover el detalle a otra cabecera desde este endpoint.
+
+    # 5) Aplicar cambios permitidos
+    for field in (
+        "cod_producto","numero_serie","fecha_despacho","usuario_despacha",
+        "cod_comprobante","tipo_comprobante","en_despacho","despachada",
+        "cod_comprobante_gui","tipo_comprobante_gui","cod_guia_des","cod_tipo_guia_des"
+    ):
+        if field in data:
+            setattr(obj, field, data[field])
+
+    try:
+        db.session.commit()
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"detail": "Conflicto de integridad.", "error": str(e.orig)}), 409
+
+    return jsonify({
+        "empresa": obj.empresa,
+        "cod_despacho": obj.cod_despacho,
+        "cod_ddespacho": obj.cod_ddespacho,
+        "cod_producto": obj.cod_producto,
+        "numero_serie": obj.numero_serie,
+        "fecha_despacho": obj.fecha_despacho.isoformat() if obj.fecha_despacho else None,
+        "usuario_despacha": obj.usuario_despacha,
+        "cod_comprobante": obj.cod_comprobante,
+        "tipo_comprobante": obj.tipo_comprobante,
+        "en_despacho": obj.en_despacho,
+        "despachada": obj.despachada,
+        "cod_comprobante_gui": obj.cod_comprobante_gui,
+        "tipo_comprobante_gui": obj.tipo_comprobante_gui,
+        "cod_guia_des": obj.cod_guia_des,
+        "cod_tipo_guia_des": obj.cod_tipo_guia_des
     }), 200
