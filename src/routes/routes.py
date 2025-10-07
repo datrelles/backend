@@ -4613,8 +4613,7 @@ def get_transportistas_moto():
 
         # Consulta para obtener todos los transportistas de la empresa especificada
         transportistas = st_transportistas.query().filter(
-            st_transportistas.empresa == empresa,
-            st_transportistas.activo_ecommerce == 0
+            st_transportistas.empresa == empresa
         ).all()
 
         # Formatear los resultados en una lista de diccionarios
