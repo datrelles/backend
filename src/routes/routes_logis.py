@@ -1,20 +1,16 @@
-from flask import Blueprint, jsonify, request,  url_for
+from flask import Blueprint, url_for
 import logging
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 import datetime
-from sqlalchemy import and_, text, literal, func, exists, literal, func, select, bindparam, types as satypes, outparam,  or_
+from sqlalchemy import and_, text, literal, func, select, bindparam, types as satypes, outparam,  or_
 from sqlalchemy.orm import aliased
 from sqlalchemy.dialects.oracle import CLOB
-import oracledb
-import re
-from decimal import Decimal
-from datetime import datetime, date
+from datetime import datetime
 from src import oracle
 from os import getenv
-import cx_Oracle
 from src.models.clientes import Cliente, persona
-from src.config.database import db, engine, session
+from src.config.database import db
 from src.models.asignacion_cupo import QueryParamsSchema, STReservaProducto, ALLOWED_ORDERING, reservas_schema, \
     CreateReservaSchema, UpdateReservaSchema, ReservaSchema, map_integrity_error, validate_no_active_duplicate, \
     validate_available_stock_before_create, validate_available_stock_before_update, ajustar_cantidad_reserva
@@ -27,7 +23,7 @@ from src.models.rutas import STRuta, STDireccionRuta, RutaCreateSchema, RutaUpda
     TRutaOutSchema, TRutaCreateSchema, TRutaDetailSchema, TRutaUpdateSchema, TRutaSearchSchema, TRutaDeleteSchema, \
     STTransportistaRuta, DespachoSearchIn, DespachoRowOut, ALLOWED_ORDERING_FIELDS, STClienteDireccionGuias, \
     CDECreateSchema, CDEUpdateSchema, CDEQuerySchema, CDEOutSchema, STCDespachoEntrega, DDECreateSchema, DDEOutSchema, \
-    DDEUpdateSchema, STDDespachoEntrega, DDEListBodySchema, STDDespacho, DDEUpdateSchema, STDDespachoEntrega, DDEListBodySchema, STDDespacho, GenGuiasSchema, TGUsuarioVend, \
+    DDEUpdateSchema, STDDespachoEntrega, DDEListBodySchema, STDDespacho, GenGuiasSchema, TGUsuarioVend, \
     TGUVCreateSchema, TGUVSearchSchema, TGUVUpdateSchema, TGUVOutSchema, build_ordering_in, DDespachoUpdateSchema, \
     CDCUpdateSchema, CDCOutSchema, STCDespacho
 
@@ -47,7 +43,6 @@ def parse_date(date_string):
     if date_string:
         return datetime.strptime(date_string, '%d/%m/%Y').date()
     return None
-# --- Utilidades de parseo ----------------------------------------------------
 
 DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y")
 
@@ -60,7 +55,6 @@ def parse_date(s: str):
             return datetime.strptime(s, fmt)
         except ValueError:
             continue
-    # Si no coincide ningún formato, levanta error controlado
     raise ValueError(f"Formato de fecha inválido: '{s}'. Usa YYYY-MM-DD o DD/MM/YYYY.")
 
 def parse_int(s: str):
@@ -78,7 +72,6 @@ def parse_str(s: str):
     return s if s != "" else None
 
 def parse_order(field: str, default_field="COD_PEDIDO"):
-    # Permite solo un conjunto mínimo “seguro” de columnas para ordenar (ajusta a tus columnas reales)
     allowed = {
         "COD_PEDIDO", "FECHA_PEDIDO", "COD_PERSONA_CLI", "COD_PERSONA_VEN",
         "ESTADO", "COD_AGENCIA", "EMPRESA"
@@ -172,8 +165,8 @@ def cambia_estado_y_graba(
                     reg["cod_estado_producto"],
                     estado_nuevo,
                     numero_agencia,
-                    v_tipo_comprobante,    # OUT
-                    v_cod_comprobante,     # OUT
+                    v_tipo_comprobante,
+                    v_cod_comprobante,
                 ],
             )
             v_tipo_comprobante_val = v_tipo_comprobante.getvalue()
@@ -192,9 +185,9 @@ def cambia_estado_y_graba(
                     v_cod_agente,
                     numero_agencia,
                     v_useridc,
-                    empresa_g,                 # IN
-                    v_cod_tipo_comprobante_g,  # OUT
-                    v_cod_comprobante_g,       # OUT
+                    empresa_g,
+                    v_cod_tipo_comprobante_g,
+                    v_cod_comprobante_g,
                 ],
             )
             v_cod_tipo_comprobante_g_val = v_cod_tipo_comprobante_g.getvalue()
@@ -238,40 +231,16 @@ def cambia_estado_y_graba(
         db1.rollback()
         raise
 
-
-# Requiere: oracle.connection, getenv, cx_Oracle ya importados en el archivo.
-
 def inventario_por_serie_info(
     *,
     empresa: int,
     numero_serie: str,
-    bodegas_stock=None,         # lista[int], por defecto [5,1,25]
+    bodegas_stock=None,
     aa: int = 0,
     cod_tipo_inventario: int = 1,
     estado_producto: str = "A",
-    reserva_scope: str = "destino"   # "destino" -> r.cod_bodega_destino | "origen" -> r.cod_bodega
+    reserva_scope: str = "destino"
 ) -> dict:
-    """
-    Calcula inventario y reservas para el cod_producto de una serie.
-
-    Devuelve:
-    {
-      "empresa": 20,
-      "numero_serie": "172FMNTZ419020",
-      "cod_producto": "MNI25XX000101",
-      "nombre": "...",
-      "stock_total": 9,
-      "reservado_activo_total": 4,
-      "disponible_total": 5,
-      "reservas_por_bodega": [
-        {"cod_bodega": 25, "reservado_activo": 4}
-      ]
-    }
-
-    Lanza:
-      - ValueError si faltan datos o la serie no existe.
-      - cx_Oracle.DatabaseError si falla la DB.
-    """
     if not numero_serie or not str(numero_serie).strip():
         raise ValueError("Falta parámetro: numero_serie")
     if empresa is None:
@@ -287,7 +256,6 @@ def inventario_por_serie_info(
         db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur = db1.cursor()
 
-        # 1) Resolver cod_producto + nombre a partir de la serie
         sql_resolver = """
             SELECT p.cod_producto, d.nombre
               FROM st_producto_serie p
@@ -320,7 +288,6 @@ def inventario_por_serie_info(
 
         cod_producto, nombre = row_prod[0], row_prod[1]
 
-        # Helper para IN-list con binds únicos
         def _make_in_binds(prefix, values):
             placeholders = []
             bindmap = {}
@@ -333,7 +300,6 @@ def inventario_por_serie_info(
         stock_in_sql, stock_bindmap = _make_in_binds("sb_", bodegas_stock)
         resv_in_sql,  resv_bindmap  = _make_in_binds("rb_", bodegas_stock)
 
-        # 2) Totales de stock, reservas y disponible
         base_sql_totales = f"""
             WITH inv AS (
                 SELECT s.empresa, s.cod_producto, SUM(s.cantidad) AS stock_total
@@ -383,7 +349,6 @@ def inventario_por_serie_info(
         reservado_total  = int(res_tot[1] or 0) if res_tot else 0
         disponible_total = int(res_tot[2] or 0) if res_tot else 0
 
-        # 3) Desglose de reservas por bodega
         base_sql_resv_bod = f"""
             SELECT {reserva_bodega_field} AS cod_bodega,
                    SUM(GREATEST(r.cantidad - NVL(r.cantidad_utilizada,0), 0)) AS reservado_activo
@@ -532,29 +497,7 @@ def get_listado_pedido():
 @jwt_required()
 @cross_origin()
 def get_pedidos_get():
-    """
-    GET /pedidos?pd_fecha_inicial=2025-08-01&pd_fecha_final=2025-08-21&pedido=12345&pn_empresa=20&pn_cod_agencia=3
-    Parámetros aceptados (todos opcionales salvo los que tu SP requiera):
-      - pd_fecha_inicial, pd_fecha_final  (YYYY-MM-DD o DD/MM/YYYY)
-      - pedido                           -> pv_cod_pedido
-      - pv_comprobante_manual
-      - pv_cod_persona_ven
-      - pv_nombre_persona_ven
-      - pv_cod_persona_cli
-      - cliente                          -> pv_nombre_persona_cli
-      - pv_estado
-      - pn_cod_agencia                   (int)
-      - pn_empresa                       (int)
-      - pv_cod_tipo_pedido
-      - pn_cod_bodega_despacho           (int)
-      - p_orden                          (validado contra lista segura)
-      - p_tipo_orden                     (ASC|DESC)
-      - bodega_consignacion              -> pv_bodega_envia
-      - direccion                        -> pv_direccion
-      - orden                            -> pv_cod_orden
-    """
     args = request.args
-
     try:
         pd_fecha_inicial = parse_date(args.get('pd_fecha_inicial'))
         pd_fecha_final   = parse_date(args.get('pd_fecha_final'))
@@ -671,18 +614,12 @@ def info_moto():
     db1 = None
     try:
         db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
-
         def existe_transferencia_por_serie(
                 db1,
                 *,
                 empresa: int,
                 numero_serie: str
         ) -> bool:
-            """
-            Valida si existe al menos un registro en STA_TRANSFERENCIA
-            con los parámetros dados.
-            Retorna True si existe, False en caso contrario.
-            """
             sql = """
                 SELECT COUNT(1)
                   FROM sta_transferencia x
@@ -704,10 +641,6 @@ def info_moto():
                 *,
                 cod_motor: str
         ) -> str:
-            """
-            Devuelve el cod_producto asociado a un cod_motor en st_prod_packing_list.
-            Si no existe, retorna None.
-            """
             sql = """
                 SELECT s.cod_producto
                   FROM st_prod_packing_list s
@@ -724,10 +657,6 @@ def info_moto():
                 cod_motor: str,
                 cod_producto: str
         ) -> str:
-            """
-            Devuelve el cod_producto asociado a un cod_motor en st_prod_packing_list.
-            Si no existe, retorna None.
-            """
             sql = """
                 SELECT s.cod_estado_producto
                   FROM st_producto_serie s
@@ -1100,7 +1029,6 @@ def revertir_transferencia():
     numero_agencia     = data.get("numero_agencia")
     empresa_g          = data.get("empresa_g") or empresa
     cod_estado_actual  = data.get("cod_estado_producto")
-    # Validaciones mínimas
     requeridos = {
         "empresa": empresa,
         "cod_comprobante": cod_comprobante,
@@ -1193,17 +1121,12 @@ def revertir_transferencia():
 @jwt_required()
 @cross_origin()
 def get_transferencias():
-    """
-    GET /transferencias?cod_comprobante=...&cod_tipo_comprobante=...&empresa=...&cod_producto=...
-    Retorna las filas de STA_TRANSFERENCIA que coinciden con los parámetros.
-    """
     try:
         cod_comprobante = request.args.get('cod_comprobante', type=str)
         cod_tipo_comprobante = request.args.get('cod_tipo_comprobante', type=str)
         empresa = request.args.get('empresa', type=int)
-        cod_producto = request.args.get('cod_producto', type=str)  # <-- opcional
+        cod_producto = request.args.get('cod_producto', type=str)
 
-        # Validación de parámetros obligatorios
         missing = []
         if not cod_comprobante:
             missing.append("cod_comprobante")
@@ -1215,7 +1138,6 @@ def get_transferencias():
         if missing:
             return jsonify({"error": f"Faltan parámetros: {', '.join(missing)}"}), 400
 
-        # Conexión y consulta
         db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cursor = db1.cursor()
 
@@ -1246,7 +1168,7 @@ def get_transferencias():
             "empresa": empresa
         }
 
-        if cod_producto:  # se agrega filtro extra si llega
+        if cod_producto:
             sql += " AND COD_PRODUCTO = :cod_producto"
             params["cod_producto"] = cod_producto
 
@@ -1272,14 +1194,6 @@ def get_transferencias():
 @jwt_required()
 @cross_origin()
 def series_antiguas_por_serie():
-    """
-    GET /series_antiguas_por_serie?numero_serie=XY163FMLTA029358&empresa=20
-
-    Devuelve las filas (de bodegas 1, 25 y 5) cuya fecha de producción
-    resulta en una edad mayor que la edad de la serie actual (calculada
-    desde KS_INVENTARIO_SERIE.OBT_FECHA_PRODUCCION_SB_PT) y ordenadas
-    por edad_dias desc.
-    """
     try:
         numero_serie = request.args.get('numero_serie', type=str)
         empresa = request.args.get('empresa', type=int, default=20)
@@ -1293,15 +1207,14 @@ def series_antiguas_por_serie():
         inv = inventario_por_serie_info(
             empresa=empresa,
             numero_serie=numero_serie,
-            bodegas_stock=[5, 1, 25],  # o el set que definas
+            bodegas_stock=[5, 1, 25],
             aa=0,
             cod_tipo_inventario=1,
             estado_producto="A",
-            reserva_scope="destino"  # "origen" si prefieres
+            reserva_scope="destino"
         )
 
         if int(inv.get("disponible_total", 0)) <= 0:
-            # ¿existe reserva activa en la bodega indicada?
             reservado_en_bodega = next(
                 (int(r.get("reservado_activo", 0)) for r in inv.get("reservas_por_bodega", [])
                  if int(r.get("cod_bodega")) == int(bodega)),
@@ -1316,7 +1229,7 @@ def series_antiguas_por_serie():
                         "numero_serie": numero_serie,
                         "inventario": inv
                     }
-                }), 409  # Conflict (puedes usar 422 si prefieres)
+                }), 409
 
         db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur = db1.cursor()
@@ -1415,11 +1328,9 @@ def series_antiguas_por_serie():
             return 4  # > 90 días
 
         if data:
-            # La edad actual viene repetida en cada fila como EDAD_SERIE_ACTUAL; tomamos la primera
             edad_actual_dias = data[0].get("EDAD_SERIE_ACTUAL")
             unidad_actual = _unidad_edad(edad_actual_dias)
 
-            # Unidad máxima entre las series candidatas (las que regresará el endpoint)
             unidades_list = [
                 _unidad_edad(item.get("EDAD_DIAS"))
                 for item in data
@@ -1427,7 +1338,6 @@ def series_antiguas_por_serie():
             ]
             unidad_max_lista = max(unidades_list) if unidades_list else None
 
-            # Si están en la misma unidad, no sugerimos lista (devolvemos [])
             if unidad_actual is not None and unidad_max_lista is not None and unidad_actual == unidad_max_lista:
                 return jsonify([]), 200
         # --- FIN VALIDACIÓN EXTRA ---
@@ -1459,21 +1369,6 @@ def series_antiguas_por_serie():
 @jwt_required()
 @cross_origin()
 def comentarios_por_rango():
-    """
-    GET /transferencias/comentarios/rango?empresa=20&desde=2025-09-01&hasta=2025-09-08
-      [opcionales]
-        cod_comprobante=...
-        cod_tipo_comprobante=...
-        secuencia=...
-        cod_producto=...
-        numero_serie=...
-        usuario_creacion=...
-        origen=...
-        tipo_comentario=...
-        es_activo=0|1
-        buscar=texto  (LIKE sobre COMENTARIO)
-    Requiere: empresa, desde, hasta
-    """
     db1 = None
     try:
         args = request.args
@@ -1589,23 +1484,6 @@ def comentarios_por_rango():
 @jwt_required()
 @cross_origin()
 def crear_comentario_transferencia():
-    """
-    POST /transferencias/comentarios
-    Body JSON (NO opcionales):
-      - cod_comprobante (str)
-      - cod_tipo_comprobante (str)
-      - empresa (int)
-      - secuencia (int)
-      - cod_producto (str)
-      - comentario (str)
-    Opcionales:
-      - secuencia_comentario (int)  -> si no llega, se calcula MAX+1
-      - numero_serie (str)
-      - usuario_creacion (str)      -> si no llega, usa USER de Oracle
-      - origen (str)
-      - tipo_comentario (str)
-      - es_activo (int: 0/1, default 1)
-    """
     db1 = None
     try:
         body = request.get_json(silent=True) or {}
@@ -1635,13 +1513,11 @@ def crear_comentario_transferencia():
 
         db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
 
-        # Usuario Oracle por defecto si no llega usuario_creacion
         if not usuario_creacion:
             with db1.cursor() as cur:
                 cur.execute("SELECT USER FROM dual")
                 usuario_creacion = cur.fetchone()[0]
 
-        # Si no llega secuencia_comentario, calcular MAX+1 por PK parcial
         if secuencia_comentario is None:
             with db1.cursor() as cur:
                 cur.execute("""
@@ -1686,7 +1562,6 @@ def crear_comentario_transferencia():
 
         db1.commit()
 
-        # Devolver el registro insertado
         with db1.cursor() as cur:
             cur.execute("""
                 SELECT
@@ -1729,10 +1604,6 @@ def crear_comentario_transferencia():
 @jwt_required()
 @cross_origin()
 def borrar_comentario_transferencia():
-    """
-    DELETE /transferencias/comentarios?cod_comprobante=...&cod_tipo_comprobante=...&empresa=...&secuencia=...&secuencia_comentario=...
-    Requiere: PK completa
-    """
     db1 = None
     try:
         args = request.args
@@ -1786,18 +1657,15 @@ def borrar_comentario_transferencia():
 
 query_params_schema = QueryParamsSchema()
 
-# ---------- Helpers ----------
 def apply_filters(q, params):
     if "empresa" in params:
         q = q.filter(STReservaProducto.empresa == params["empresa"])
     if "cod_producto" in params:
-        # Exacto por defecto; si quieres LIKE prefijo, cambia aquí.
         q = q.filter(STReservaProducto.cod_producto == params["cod_producto"])
     if "cod_cliente" in params:
         q = q.filter(STReservaProducto.cod_cliente == params["cod_cliente"])
     if "cod_bodega" in params:
         q = q.filter(STReservaProducto.cod_bodega == params["cod_bodega"])
-    # Fechas: si solo envían desde/hasta, aplico condición correspondiente sobre fecha_ini
     if "fecha_desde" in params:
         q = q.filter(STReservaProducto.fecha_ini >= params["fecha_desde"])
     if "fecha_hasta" in params:
@@ -1806,7 +1674,6 @@ def apply_filters(q, params):
 
 def apply_ordering(q, ordering_param):
     if not ordering_param:
-        # Por defecto: más reciente primero (fecha_ini DESC), luego cod_reserva DESC
         return q.order_by(STReservaProducto.fecha_ini.desc(),
                           STReservaProducto.cod_reserva.desc())
     clauses = []
@@ -1821,7 +1688,6 @@ def apply_ordering(q, ordering_param):
 def build_page_link(page, page_size):
     if page < 1:
         return None
-    # Reconstruyo URL con page y page_size
     url = request.url
     parsed = urlparse(url)
     params = dict(parse_qsl(parsed.query, keep_blank_values=True))
@@ -1830,12 +1696,9 @@ def build_page_link(page, page_size):
     new_qs = urlencode(params, doseq=True)
     return urlunparse(parsed._replace(query=new_qs))
 
-# ---------- Endpoint ----------
 @bplog.route("/reservas", methods=["GET"])
 def list_reservas():
-    # Validar y normalizar query params
     try:
-        # Nota: Marshmallow parsea fechas ISO automáticamente
         params = query_params_schema.load(request.args)
     except ValidationError as err:
         return jsonify({"detail": "Parámetros inválidos.", "errors": err.messages}), 400
@@ -1843,21 +1706,16 @@ def list_reservas():
     page = params.get("page", 1)
     page_size = params.get("page_size", 20)
 
-    # Construcción de Query
     q = db.session.query(STReservaProducto)
     q = apply_filters(q, params)
     q = apply_ordering(q, params.get("ordering"))
 
-    # count total (antes de paginar)
     total = q.count()
 
-    # Paginación
     items = q.offset((page - 1) * page_size).limit(page_size).all()
 
-    # Serialización
     data = reservas_schema.dump(items)
 
-    # Enlaces estilo DRF
     next_link = build_page_link(page + 1, page_size) if page * page_size < total else None
     prev_link = build_page_link(page - 1, page_size) if page > 1 else None
 
@@ -1886,7 +1744,6 @@ def create_reserva():
             return jsonify({"detail": "Datos inválidos.", "errors": e.messages}), 200
         raise
 
-    # Verificación explícita de duplicado por PK
     if data.get("cod_reserva") is not None:
         existing = db.session.get(
             STReservaProducto, {"EMPRESA": data["empresa"], "COD_RESERVA": data["cod_reserva"]}
@@ -1918,7 +1775,6 @@ def create_reserva():
         return jsonify({"detail": detail}), status
 
     body = out_schema.dump(obj)
-    # Ubicación del recurso creada
     location = url_for(
         "routes_log.update_reserva",
         empresa=int(obj.empresa),
@@ -1938,7 +1794,6 @@ def update_reserva(empresa: int, cod_reserva: int):
             return jsonify({"detail": "Datos inválidos.", "errors": e.messages}), 200
         raise
 
-    # Evitar cambio de PK vía payload
     if "empresa" in data and data["empresa"] != empresa:
         return jsonify({"detail": "No se permite cambiar empresa en PUT."}), 400
     if "cod_reserva" in data and data["cod_reserva"] != cod_reserva:
@@ -1951,7 +1806,6 @@ def update_reserva(empresa: int, cod_reserva: int):
 
     validate_available_stock_before_update(obj, data)
 
-    # Actualización parcial estilo PATCH pero por PUT para practicidad
     updatable_fields = [
         "cod_producto", "cod_bodega", "cod_cliente",
         "fecha_ini", "fecha_fin", "observacion",
@@ -1975,31 +1829,7 @@ def update_reserva(empresa: int, cod_reserva: int):
 @jwt_required()
 @cross_origin()
 def get_stock_productos_motos():
-    """
-    GET /stock_productos_motos
-    Parámetros (opcionales, defaults):
-      - empresa               (int, default=20)
-      - bodegas               (csv de ints, default=5,1,25)
-      - aa                    (int, default=0)
-      - cod_tipo_inventario   (int, default=1)
-      - estado_producto       (str, default='A')                -> s.cod_estado_producto
-      - cod_item_cat          (str, default='T')
-      - cat_match             (str: 'exact'|'prefix', default='exact')
-      - cod_producto          (str, exacto)
-      - nombre_like           (str, LIKE %valor%, case-insensitive)
-      - only_positive         (0|1, default=1)                  -> filtra por DISPONIBLE > 0
-      - order_by              (COD_PRODUCTO|NOMBRE|COD_ITEM_CAT|STOCK_TOTAL|RESERVADO_ACTIVO|DISPONIBLE, default=NOMBRE)
-      - order_dir             (ASC|DESC, default=ASC)
-      - limit                 (int, default=200; 0 = sin límite)
-      - offset                (int, default=0)
-
-    Nota:
-      - Reservas activas: NVL(es_inactivo,0)=0 AND fecha_fin > SYSDATE.
-      - Se consideran reservas por bodega origen (r.cod_bodega IN bodegas).
-        Si necesitas destino, cambia RESERVA_BODEGA_FIELD a 'cod_bodega_destino' en el SQL.
-    """
     args = request.args
-
     def _parse_int(v, default=None):
         if v is None or str(v).strip() == '':
             return default
@@ -2037,7 +1867,7 @@ def get_stock_productos_motos():
         cod_tipo_inv    = _parse_int(args.get('cod_tipo_inventario'), 1)
         estado_producto = (args.get('estado_producto') or 'A').strip().upper()
         cod_item_cat    = (args.get('cod_item_cat') or 'T').strip()
-        cat_match       = (args.get('cat_match') or 'exact').strip().lower()  # 'exact'|'prefix'
+        cat_match       = (args.get('cat_match') or 'exact').strip().lower()
         cod_producto_f  = (args.get('cod_producto') or '').strip()
         nombre_like     = (args.get('nombre_like') or '').strip()
         only_positive   = _parse_bool_01(args.get('only_positive'), 1)
@@ -2048,7 +1878,6 @@ def get_stock_productos_motos():
     except ValueError as ve:
         return jsonify({"error": str(ve)}), 400
 
-    # Bindings compartidos
     binds = {
         "empresa": empresa,
         "aa": aa,
@@ -2057,7 +1886,6 @@ def get_stock_productos_motos():
         "cod_item_cat": cod_item_cat,
     }
 
-    # IN list para bodegas de inventario
     in_placeholders_stock = []
     for i, b in enumerate(bodegas):
         key = f"b{i}"
@@ -2065,7 +1893,6 @@ def get_stock_productos_motos():
         binds[key] = b
     bodegas_in_stock = ",".join(in_placeholders_stock)
 
-    # IN list para bodegas de reservas (usar claves distintas para claridad)
     in_placeholders_resv = []
     for i, b in enumerate(bodegas):
         key = f"rb{i}"
@@ -2073,14 +1900,12 @@ def get_stock_productos_motos():
         binds[key] = b
     bodegas_in_resv = ",".join(in_placeholders_resv)
 
-    # Filtro de categoría
     if cat_match == "prefix":
         cat_filter = "d.cod_item_cat LIKE :cod_item_cat_like"
         binds["cod_item_cat_like"] = f"{cod_item_cat}%"
     else:
         cat_filter = "d.cod_item_cat = :cod_item_cat"
 
-    # Filtros opcionales
     where_extra = []
     if cod_producto_f:
         where_extra.append("d.cod_producto = :cod_producto_f")
@@ -2091,11 +1916,7 @@ def get_stock_productos_motos():
 
     where_extra_sql = f" AND {' AND '.join(where_extra)}" if where_extra else ""
 
-    # Importante: cuando only_positive=1 filtramos por DISPONIBLE > 0
     only_positive_sql = "AND NVL(i.stock_total,0) > 0"   if only_positive == 1 else ""
-
-    # Campo de bodega a considerar para reservas (origen por defecto)
-    # Si deseas destino, cambia 'r.cod_bodega' -> 'r.cod_bodega_destino'
     RESERVA_BODEGA_FIELD = "r.cod_bodega"
 
     base_sql = f"""
@@ -2147,7 +1968,6 @@ def get_stock_productos_motos():
         ORDER BY {order_by} {order_dir}
     """
 
-    # Paginación Oracle (ROWNUM)
     if limit > 0:
         binds["min_row"] = offset
         binds["max_row"] = offset + limit
@@ -2192,13 +2012,7 @@ def get_stock_productos_motos():
 @jwt_required()
 @cross_origin()
 def inventario_por_serie():
-    """
-    GET /inventario_por_serie?numero_serie=172FMNTZ419020&empresa=20
-      &bodegas=5,1,25&aa=0&cod_tipo_inventario=1&estado_producto=A
-      &reserva_scope=origen|destino&only_positive=0|1
-    """
     args = request.args
-
     def _parse_int(v, default=None):
         if v is None or str(v).strip() == '':
             return default
@@ -2238,7 +2052,6 @@ def inventario_por_serie():
         db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cur = db1.cursor()
 
-        # 1) Resolver cod_producto (y nombre) desde la serie
         sql_resolver = """
             SELECT p.cod_producto, d.nombre
               FROM st_producto_serie p
@@ -2272,7 +2085,6 @@ def inventario_por_serie():
 
         cod_producto, nombre = row_prod[0], row_prod[1]
 
-        # --- Helpers para IN-lists con binds únicos por SQL ---
         def make_in_binds(prefix, values):
             placeholders = []
             bindmap = {}
@@ -2464,7 +2276,7 @@ def list_rutas():
 
 @bplog.route("/rutas/<int:empresa>/<int:cod_ruta>", methods=["GET"])
 def get_ruta(empresa: int, cod_ruta: int):
-    obj = db.session.get(STRuta, (cod_ruta, empresa))  # orden PK: (cod_ruta, empresa)
+    obj = db.session.get(STRuta, (cod_ruta, empresa))
     if not obj:
         return jsonify({"detail": "No encontrado."}), 404
     return jsonify(out_many_schema_ru.dump(obj))
@@ -2564,7 +2376,6 @@ def search_dir_rutas():
     page = max(data.get("page", 1), 1)
     page_size = min(max(data.get("page_size", 20), 1), 200)
 
-    # 1) Query base para el count (sin joins para evitar multiplicidades)
     base_q = db.session.query(STDireccionRuta)
     if data.get("empresa") is not None:
         base_q = base_q.filter(STDireccionRuta.empresa == data["empresa"])
@@ -2575,9 +2386,8 @@ def search_dir_rutas():
 
     total = base_q.count()
 
-    # 2) Query con joins explícitos y alias
-    c   = aliased(Cliente, name="c")                        # CLIENTE (tiene el nombre)
-    cdg = aliased(STClienteDireccionGuias, name="cdg")      # ST_CLIENTE_DIRECCION_GUIAS (tiene nombre de dirección)
+    c   = aliased(Cliente, name="c")
+    cdg = aliased(STClienteDireccionGuias, name="cdg")
 
     nombre_cli = func.concat(
         c.nombre,
@@ -2587,20 +2397,20 @@ def search_dir_rutas():
     q = (
         db.session.query(
             STDireccionRuta,
-            nombre_cli,               # <-- AJUSTA si tu columna se llama distinto (p.ej. razon_social)
+            nombre_cli,
             cdg.nombre.label("nombre_direccion"),
             cdg.direccion.label("direccion"),
             cdg.direccion_larga.label("direccion_larga"),
         )
         .select_from(STDireccionRuta)
-        .outerjoin(                                         # join a CLIENTE por (empresa, cod_cliente)
+        .outerjoin(
             c,
             and_(
                 c.empresa == STDireccionRuta.empresa,
                 c.cod_cliente == STDireccionRuta.cod_cliente,
             ),
         )
-        .outerjoin(                                         # join a ST_CLIENTE_DIRECCION_GUIAS por (empresa, cod_cliente, cod_direccion)
+        .outerjoin(
             cdg,
             and_(
                 cdg.empresa == STDireccionRuta.empresa,
@@ -2611,7 +2421,6 @@ def search_dir_rutas():
         .enable_eagerloads(False)
     )
 
-    # Reaplica filtros
     if data.get("empresa") is not None:
         q = q.filter(STDireccionRuta.empresa == data["empresa"])
     if data.get("cod_cliente"):
@@ -2619,7 +2428,6 @@ def search_dir_rutas():
     if data.get("cod_ruta") is not None:
         q = q.filter(STDireccionRuta.cod_ruta == data["cod_ruta"])
 
-    # Orden + paginación
     rows = (
         q.order_by(
             STDireccionRuta.empresa.asc(),
@@ -2632,7 +2440,6 @@ def search_dir_rutas():
         .all()
     )
 
-    # 3) Construcción del payload
     results = []
     for r, nombre_cli, nombre_dir, dir_corta, dir_larga in rows:
         item = out_schema_dir.dump(r)
@@ -2776,7 +2583,6 @@ def search_truta():
     page = max(data.get("page", 1), 1)
     page_size = min(max(data.get("page_size", 20), 1), 200)
 
-    # Base para el total (sin joins)
     base_q = db.session.query(STTransportistaRuta)
     if data.get("empresa") is not None:
         base_q = base_q.filter(STTransportistaRuta.empresa == data["empresa"])
@@ -2786,7 +2592,6 @@ def search_truta():
         base_q = base_q.filter(STTransportistaRuta.cod_ruta == data["cod_ruta"])
     total = base_q.count()
 
-    # Query con JOIN explícito a ST_TRANSPORTISTA
     tr = aliased(st_transportistas, name="tr")
 
     nombre_completo = func.concat(
@@ -2810,7 +2615,6 @@ def search_truta():
         .enable_eagerloads(False)
     )
 
-    # Reaplicar filtros
     if data.get("empresa") is not None:
         q = q.filter(STTransportistaRuta.empresa == data["empresa"])
     if data.get("cod_transportista"):
@@ -2818,7 +2622,6 @@ def search_truta():
     if data.get("cod_ruta") is not None:
         q = q.filter(STTransportistaRuta.cod_ruta == data["cod_ruta"])
 
-    # Orden y paginación
     rows = (
         q.order_by(
             STTransportistaRuta.empresa.asc(),
@@ -2829,7 +2632,6 @@ def search_truta():
         .all()
     )
 
-    # Construcción del payload
     results = []
     for r, nombre_t in rows:
         item = out_schema_t.dump(r)
@@ -3014,7 +2816,6 @@ def search_despachos():
     if data.get("modelo"):
         where.append("p.modelo = :modelo")
         params["modelo"] = data["modelo"]
-
     if data.get("transportista"):
         where.append("UPPER(transportista) LIKE :transportista")
         params["transportista"] = f"%{data['transportista'].upper()}%"
@@ -3027,7 +2828,6 @@ def search_despachos():
     if data.get("bod_destino"):
         where.append("UPPER(bod_destino) LIKE :bod_destino")
         params["bod_destino"] = f"%{data['bod_destino'].upper()}%"
-
     if data.get("en_despacho") is not None:
         where.append("NVL(en_despacho,0) = :en_despacho")
         params["en_despacho"] = data["en_despacho"]
@@ -3081,7 +2881,7 @@ def search_despachos():
 create_schema_cde = CDECreateSchema()
 update_schema_cde = CDEUpdateSchema()
 query_schema_cde  = CDEQuerySchema()
-out_schema_cde    = CDEQuerySchema() #CDEOutSchema(many=True)
+out_schema_cde    = CDEQuerySchema()
 out_many_cde      = CDEOutSchema(many=True)
 
 @bplog.route("/cdespacho-entrega", methods=["POST"])
@@ -3303,7 +3103,6 @@ def dde_update(empresa: int, cde_codigo: int, secuencia: int):
     payload = request.get_json(silent=True) or {}
     if not payload:
         return jsonify({"detail": "Body JSON requerido."}), 400
-
     try:
         data = dde_update_schema.load(payload, partial=(request.method == "PATCH"))
     except ValidationError as err:
@@ -3337,11 +3136,7 @@ def dde_update(empresa: int, cde_codigo: int, secuencia: int):
 
 @bplog.route("/clientes_con_direcciones", methods=["GET"])
 def clientes_con_direcciones():
-    """
-    Lista los clientes (tabla CLIENTE) que tienen al menos una dirección
-    en ST_CLIENTE_DIRECCION_GUIAS.
-    """
-    # Paginación y filtros
+
     try:
         page = max(int(request.args.get("page", 1)), 1)
     except Exception:
@@ -3360,13 +3155,11 @@ def clientes_con_direcciones():
     C = aliased(Cliente, name="c")
     CDG = aliased(STClienteDireccionGuias, name="cdg")
 
-    # nombre completo: nombre + ' ' + coalesce(apellido1, '')
     nombre_cli = func.concat(
         C.nombre,
         func.coalesce(func.concat(literal(" "), C.apellido1), literal(""))
     ).label("nombre_cliente")
 
-    # ✅ EXISTS correcto (Select -> .exists())
     exists_dir_expr = (
         select(literal(1))
         .select_from(CDG)
@@ -3383,14 +3176,13 @@ def clientes_con_direcciones():
             C.cod_cliente.label("cod_cliente"),
             nombre_cli
         )
-        .filter(exists_dir_expr)  # <-- aplicar EXISTS expression
+        .filter(exists_dir_expr)
     )
 
     if empresa is not None:
         q = q.filter(C.empresa == empresa)
 
     if cod_cliente_like:
-        # Oracle no soporta ILIKE; usamos lower(...)
         q = q.filter(func.lower(C.cod_cliente).like(f"%{cod_cliente_like.lower()}%"))
 
     if nombre_like:
@@ -3433,25 +3225,10 @@ def clientes_con_direcciones():
 
 @bplog.route("/clientes_direcciones", methods=["GET"])
 def direcciones_por_cliente():
-    """
-    Lista las direcciones de ST_CLIENTE_DIRECCION_GUIAS para un cliente.
-    Query params:
-      - cod_cliente: str (requerido)
-      - empresa: int (opcional, si omites, trae de todas las empresas)
-      - page: int (default 1)
-      - page_size: int (default 50, máx 500)
-    Devuelve:
-      - cod_direccion
-      - direccion
-      - ciudad
-      - (opcionalmente puedes devolver direccion_larga, nombre, es_activo si los necesitas)
-    """
     cod_cliente = (request.args.get("cod_cliente") or "").strip()
     if not cod_cliente:
         return jsonify({"detail": "El parámetro 'cod_cliente' es requerido."}), 400
-
     empresa = request.args.get("empresa", type=int)
-
     try:
         page = max(int(request.args.get("page", 1)), 1)
     except Exception:
@@ -3473,16 +3250,13 @@ def direcciones_por_cliente():
 
     if empresa is not None:
         q = q.filter(CDG.empresa == empresa)
-
     total = q.count()
-
     rows = (
         q.order_by(CDG.empresa.asc(), CDG.cod_cliente.asc(), CDG.cod_direccion.asc())
          .offset((page - 1) * page_size)
          .limit(page_size)
          .all()
     )
-
     results = [
         {
             "cod_direccion": r.cod_direccion,
@@ -3491,7 +3265,6 @@ def direcciones_por_cliente():
         }
         for r in rows
     ]
-
     next_page = page + 1 if page * page_size < total else None
     prev_page = page - 1 if page > 1 else None
 
@@ -3508,7 +3281,6 @@ PROC_FQN = "STOCK.KS_DESPACHOS.GENERAR_GUIAS_FINALES"
 def call_generar_guias_finales(empresa: int, despacho: int) -> str:
     empresa = int(empresa)
     despacho = int(despacho)
-
     stmt = text(f"""
     BEGIN
       {PROC_FQN}(:p_emp, :p_desp, :p_out);
@@ -3518,25 +3290,15 @@ def call_generar_guias_finales(empresa: int, despacho: int) -> str:
         bindparam("p_desp", type_=satypes.Integer),
         outparam("p_out", satypes.String(length=4000))
     )
-
     result = db.session.execute(stmt, {"p_emp": empresa, "p_desp": despacho})
     out_raw = result.out_parameters.get("p_out") or ""
-
-
-
-
     db.session.commit()
-
-
-
     return out_raw
 
 
 def call_generar_guias_finales_clob(empresa: int, despacho: int) -> str:
     empresa = int(empresa)
     despacho = int(despacho)
-
-
 
     stmt = text(f"""
     BEGIN
@@ -3678,7 +3440,6 @@ def tguv_update(cod_persona, cod_tipo_persona, cod_agencia, empresa, usuario_ora
     except ValidationError as err:
         return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
 
-    # 1) Buscar registro actual
     current = (db.session.query(TGUsuarioVend)
                .filter_by(cod_persona=cod_persona,
                           cod_tipo_persona=cod_tipo_persona,
@@ -3735,7 +3496,6 @@ def cdespacho_update(empresa: int, cod_despacho: int):
     if obj is None:
         return jsonify({"detail": "Registro no encontrado."}), 404
 
-    # Aplicar solo campos presentes
     for field in (
         "cod_pedido","cod_tipo_pedido","cod_orden","cod_tipo_orden","cod_producto",
         "fecha_agrega","fecha_est_desp","fecha_entrega","usr_agrega","bodega_ini",
@@ -3763,23 +3523,17 @@ def ddespacho_update(empresa: int, cod_despacho: int, cod_ddespacho: int):
     if request.method == "PUT" and not DDespachoUpdateSchema.require_any_editable(data):
         return jsonify({"detail": "PUT requiere al menos un campo editable."}), 400
 
-
-
-
-    # 1) Verificar que la CABECERA exista
     exists_header = (db.session.query(STCDespacho)
                      .filter_by(empresa=empresa, cod_despacho=cod_despacho)
                      .first())
     if exists_header is None:
         return jsonify({"detail": "Cabecera ST_CDESPACHO no existe para (empresa, cod_despacho)."}), 404
 
-    # 2) Buscar el DETALLE acotando por los 3 identificadores
     obj = (db.session.query(STDDespacho)
            .filter_by(empresa=empresa, cod_ddespacho=cod_ddespacho, cod_despacho=cod_despacho)
            .first())
 
     if obj is None:
-        # Si existe el detalle por (empresa, cod_ddespacho) pero con otro cod_despacho, aclara el problema:
         alt = (db.session.query(STDDespacho)
                .filter_by(empresa=empresa, cod_ddespacho=cod_ddespacho)
                .first())
@@ -3787,17 +3541,11 @@ def ddespacho_update(empresa: int, cod_despacho: int, cod_ddespacho: int):
             return jsonify({"detail": "El detalle existe pero está asociado a otro COD_DESPACHO."}), 409
         return jsonify({"detail": "Detalle no encontrado."}), 404
 
-    # 3) Si el body trae cod_despacho y no coincide con el de la ruta, rechazar
     if "cod_despacho" in data and data["cod_despacho"] is not None:
         if data["cod_despacho"] != cod_despacho:
             return jsonify({"detail": "cod_despacho del body debe coincidir con la ruta."}), 400
-        # Opcional: eliminarlo para no intentar “actualizar” ese campo
         data.pop("cod_despacho", None)
 
-    # 4) (Opcional) Validación referencial si intentaran cambiar algo que afecte cabecera
-    # En este diseño NO permitimos mover el detalle a otra cabecera desde este endpoint.
-
-    # 5) Aplicar cambios permitidos
     for field in (
         "cod_producto","numero_serie","fecha_despacho","usuario_despacha",
         "cod_comprobante","tipo_comprobante","en_despacho","despachada",
