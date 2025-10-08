@@ -3134,6 +3134,24 @@ def dde_update(empresa: int, cde_codigo: int, secuencia: int):
 
     return jsonify(dde_out_schema.dump(obj)), 200
 
+@bplog.route("/ddespacho-entrega/<int:empresa>/<int:cde_codigo>/<int:secuencia>", methods=["DELETE"])
+def dde_delete(empresa: int, cde_codigo: int, secuencia: int):
+    obj = (db.session.query(STDDespachoEntrega)
+           .filter_by(empresa=empresa, cde_codigo=cde_codigo, secuencia=secuencia)
+           .first())
+    if obj is None:
+        return jsonify({"detail": "Detalle no encontrado."}), 404
+    try:
+        db.session.delete(obj)
+        db.session.commit()
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({
+            "detail": "Conflicto de integridad al eliminar (posible referencia en otra tabla).",
+            "error": str(e.orig)
+        }), 409
+    return jsonify({"detail": "Eliminado"}), 200
+
 @bplog.route("/clientes_con_direcciones", methods=["GET"])
 def clientes_con_direcciones():
 

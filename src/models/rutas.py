@@ -1,7 +1,6 @@
 # coding: utf-8
-from sqlalchemy import Column, DateTime, Index, VARCHAR, text, FetchedValue
-from sqlalchemy.dialects.oracle import NUMBER
-from sqlalchemy import Sequence, and_
+from sqlalchemy import FetchedValue
+from sqlalchemy import Sequence
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from src.models.clientes import cliente_hor
@@ -148,6 +147,7 @@ class DespachoSearchIn(Schema):
 
     empresa = fields.Integer(required=True)
     cod_ruta = fields.Integer()
+    cod_despacho = fields.Integer()
     cod_tipo_pedido = fields.String(validate=validate.Length(max=4))
     cod_pedido = fields.String(validate=validate.Length(max=30))
     cod_tipo_orden = fields.String(validate=validate.Length(max=4))
@@ -186,6 +186,7 @@ class DespachoSearchIn(Schema):
 
 class DespachoRowOut(Schema):
     empresa = fields.Integer()
+    cod_despacho = fields.Integer()
     cod_tipo_pedido = fields.String()
     cod_pedido = fields.String()
     cod_tipo_orden = fields.String()
@@ -237,7 +238,6 @@ class STClienteDireccionGuias(db.Model):
     __table_args__ = (
         db.PrimaryKeyConstraint("EMPRESA", "COD_CLIENTE", "COD_DIRECCION",
                                 name="PK_CLIENTE_DIRECCION_GUIAS"),
-        # ⬇⬇⬇ AQUI LA CORRECCIÓN: referencias a TABLA y COLUMNAS reales con ESQUEMA
         db.ForeignKeyConstraint(
             ["EMPRESA", "COD_CLIENTE"],
             ["STOCK.CLIENTE_HOR.empresah", "STOCK.CLIENTE_HOR.cod_clienteh"],
@@ -389,11 +389,9 @@ class DDECreateSchema(Schema):
 
 class STCDespacho(db.Model):
     __tablename__  = "ST_CDESPACHO"
-    # __table_args__ = {"schema": "TU_OWNER"}  # si usas owner, descomenta y ajusta
 
     empresa           = db.Column("EMPRESA", db.Integer, primary_key=True, nullable=False)
     cod_despacho      = db.Column("COD_DESPACHO", db.Integer, primary_key=True, nullable=False)
-
     cod_pedido        = db.Column("COD_PEDIDO", db.String(9))
     cod_tipo_pedido   = db.Column("COD_TIPO_PEDIDO", db.String(2))
     cod_orden         = db.Column("COD_ORDEN", db.String(9))
@@ -417,7 +415,6 @@ class CDCUpdateSchema(Schema):
     class Meta:
         unknown = EXCLUDE
 
-    # Todos opcionales en PATCH; en PUT exigiremos al menos uno
     cod_pedido        = fields.Str(allow_none=True, validate=validate.Length(max=9))
     cod_tipo_pedido   = fields.Str(allow_none=True, validate=validate.Length(max=2))
     cod_orden         = fields.Str(allow_none=True, validate=validate.Length(max=9))
@@ -436,8 +433,6 @@ class CDCUpdateSchema(Schema):
     es_despachada     = fields.Int(allow_none=True, validate=validate.OneOf([0,1]))
     secuencia         = fields.Int(allow_none=True)
     cod_direccion_cli = fields.Int(allow_none=True)
-
-    # No permitir tocar PK
     empresa      = fields.Int(load_only=True)
     cod_despacho = fields.Int(load_only=True)
 
@@ -480,7 +475,7 @@ class STDDespacho(db.Model):
     cod_ddespacho = db.Column("COD_DDESPACHO", db.Integer, primary_key=True, nullable=False)
     cod_despacho         = db.Column("COD_DESPACHO", db.Integer)
     cod_producto         = db.Column("COD_PRODUCTO", db.String(14))
-    numero_serie         = db.Column("NUMERO_SERIE", db.String(30))   # DDL: VARCHAR2(30)
+    numero_serie         = db.Column("NUMERO_SERIE", db.String(30))
     fecha_despacho       = db.Column("FECHA_DESPACHO", db.Date)
     usuario_despacha     = db.Column("USUARIO_DESPACHA", db.String(50))
     cod_comprobante      = db.Column("COD_COMPROBANTE", db.String(20))
@@ -509,7 +504,6 @@ class DDEUpdateSchema(Schema):
     numero_serie   = fields.Str(allow_none=True)
     fecha          = fields.Date(allow_none=True)
     observacion    = fields.Str(allow_none=True)
-
     empresa        = fields.Int(load_only=True)
     cde_codigo     = fields.Int(load_only=True)
     secuencia      = fields.Int(load_only=True)
@@ -620,12 +614,11 @@ class TGUVSearchSchema(Schema):
     cod_agencia      = fields.Int()
     empresa          = fields.Int()
     usuario_oracle   = fields.Str(validate=validate.Length(max=20))
-    q                = fields.Str()  # búsqueda rápida por usuario_oracle o cod_persona
+    q                = fields.Str()
 
-    # paginación y ordenamiento
     page             = fields.Int(load_default=1, validate=validate.Range(min=1))
     page_size        = fields.Int(load_default=20, validate=validate.Range(min=1, max=200))
-    ordering         = fields.List(fields.Str(), load_default=[])  # ej: ["usuario_oracle:asc","cod_persona:desc"]
+    ordering         = fields.List(fields.Str(), load_default=[])
 
 class TGUVUpdateSchema(Schema):
     class Meta:
@@ -661,9 +654,7 @@ def build_ordering_in(allowed_map, ordering_list):
 
 class DDespachoUpdateSchema(Schema):
     class Meta:
-        unknown = EXCLUDE  # ignora claves desconocidas
-
-    # Campos editables (todos opcionales en PATCH; en PUT exigiremos al menos uno)
+        unknown = EXCLUDE
     cod_despacho         = fields.Int(allow_none=True)
     cod_producto         = fields.Str(allow_none=True, validate=validate.Length(max=14))
     numero_serie         = fields.Str(allow_none=True, validate=validate.Length(max=30))
@@ -677,8 +668,6 @@ class DDespachoUpdateSchema(Schema):
     tipo_comprobante_gui = fields.Str(allow_none=True, validate=validate.Length(max=2))
     cod_guia_des         = fields.Str(allow_none=True, validate=validate.Length(max=20))
     cod_tipo_guia_des    = fields.Str(allow_none=True, validate=validate.Length(max=2))
-
-    # Bloqueo de PK por si alguien intenta enviarla
     empresa        = fields.Int(load_only=True)
     cod_ddespacho  = fields.Int(load_only=True)
 
