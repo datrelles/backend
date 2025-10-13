@@ -3567,7 +3567,7 @@ def ddespacho_update(empresa: int, cod_despacho: int, cod_ddespacho: int):
     for field in (
         "cod_producto","numero_serie","fecha_despacho","usuario_despacha",
         "cod_comprobante","tipo_comprobante","en_despacho","despachada",
-        "cod_comprobante_gui","tipo_comprobante_gui","cod_guia_des","cod_tipo_guia_des"
+        "cod_comprobante_gui","tipo_comprobante_gui","cod_guia_des","cod_tipo_guia_des","fecha_entrega","observacion_entrega"
     ):
         if field in data:
             setattr(obj, field, data[field])
@@ -3593,5 +3593,7 @@ def ddespacho_update(empresa: int, cod_despacho: int, cod_ddespacho: int):
         "cod_comprobante_gui": obj.cod_comprobante_gui,
         "tipo_comprobante_gui": obj.tipo_comprobante_gui,
         "cod_guia_des": obj.cod_guia_des,
-        "cod_tipo_guia_des": obj.cod_tipo_guia_des
+        "cod_tipo_guia_des": obj.cod_tipo_guia_des,
+        "fecha_entrega": obj.fecha_entrega,
+        "observacion_entrega": obj.observacion_entrega
     }), 200

@@ -284,9 +284,15 @@ class CDECreateSchema(Schema):
         unknown = EXCLUDE
 
     empresa = fields.Int(required=True)
-    cod_transportista = fields.Str(required=True)
-    cod_ruta = fields.Int(required=True)
     cde_codigo = fields.Int(dump_only=True)
+    fecha = fields.Date(required=False)
+    usuario = fields.Str(required=False, validate=validate.Length(max=20))
+    cod_ruta = fields.Int(required=False)
+    observacion = fields.Str(required=False, validate=validate.Length(max=200))
+    cod_persona = fields.Str(required=True, validate=validate.Length(max=14))
+    cod_tipo_persona = fields.Str(required=True, validate=validate.Length(max=3))
+    cod_transportista = fields.Str(required=False, validate=validate.Length(max=14))
+    finalizado = fields.Int(required=False, validate=validate.OneOf([0, 1]))
 
     @pre_load
     def drop_cde_codigo_if_present(self, in_data, **kwargs):
@@ -486,6 +492,8 @@ class STDDespacho(db.Model):
     tipo_comprobante_gui = db.Column("TIPO_COMPROBANTE_GUI", db.String(2))
     cod_guia_des         = db.Column("COD_GUIA_DES", db.String(20))
     cod_tipo_guia_des    = db.Column("COD_TIPO_GUIA_DES", db.String(2))
+    fecha_entrega = db.Column("FECHA_ENTREGA", db.Date)
+    observacion_entrega = db.Column("OBSERVACION_ENTREGA", db.String(500))
 
     __table_args__ = (
         db.PrimaryKeyConstraint("COD_DDESPACHO", "EMPRESA", name="PK_ST_DDESPACHO"),
@@ -670,12 +678,15 @@ class DDespachoUpdateSchema(Schema):
     cod_tipo_guia_des    = fields.Str(allow_none=True, validate=validate.Length(max=2))
     empresa        = fields.Int(load_only=True)
     cod_ddespacho  = fields.Int(load_only=True)
+    fecha_entrega = fields.Date(allow_none=True)
+    observacion_entrega = fields.Str(allow_none=True, validate=validate.Length(max=500))
 
     @staticmethod
     def require_any_editable(data: dict):
         editable = {
             "cod_despacho","cod_producto","numero_serie","fecha_despacho","usuario_despacha",
             "cod_comprobante","tipo_comprobante","en_despacho","despachada",
-            "cod_comprobante_gui","tipo_comprobante_gui","cod_guia_des","cod_tipo_guia_des"
+            "cod_comprobante_gui","tipo_comprobante_gui","cod_guia_des","cod_tipo_guia_des",
+            "fecha_entrega", "observacion_entrega"
         }
         return any(k in data for k in editable)
