@@ -3,7 +3,7 @@ import logging
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 import datetime
-from sqlalchemy import and_, text, literal, func, select, bindparam, types as satypes, outparam,  or_
+from sqlalchemy import and_, text, literal, func, select, bindparam, types as satypes, outparam, or_, desc, asc
 from sqlalchemy.orm import aliased
 from sqlalchemy.dialects.oracle import CLOB
 from datetime import datetime
@@ -25,7 +25,7 @@ from src.models.rutas import STRuta, STDireccionRuta, RutaCreateSchema, RutaUpda
     CDECreateSchema, CDEUpdateSchema, CDEQuerySchema, CDEOutSchema, STCDespachoEntrega, DDECreateSchema, DDEOutSchema, \
     DDEUpdateSchema, STDDespachoEntrega, DDEListBodySchema, STDDespacho, GenGuiasSchema, TGUsuarioVend, \
     TGUVCreateSchema, TGUVSearchSchema, TGUVUpdateSchema, TGUVOutSchema, build_ordering_in, DDespachoUpdateSchema, \
-    CDCUpdateSchema, CDCOutSchema, STCDespacho
+    CDCUpdateSchema, CDCOutSchema, STCDespacho, STClienteDireccionGuiasSearchIn, STClienteDireccionGuiasOut
 
 bplog = Blueprint('routes_log', __name__)
 
@@ -3596,4 +3596,104 @@ def ddespacho_update(empresa: int, cod_despacho: int, cod_ddespacho: int):
         "cod_tipo_guia_des": obj.cod_tipo_guia_des,
         "fecha_entrega": obj.fecha_entrega,
         "observacion_entrega": obj.observacion_entrega
+    }), 200
+
+search_in_cdg = STClienteDireccionGuiasSearchIn()
+out_many_cdg = STClienteDireccionGuiasOut(many=True)
+
+def build_ordering_in_cdg(allowed_map: dict, ordering_params: list[str]):
+    if not ordering_params:
+        # Orden por defecto PK compuesta
+        return [asc(allowed_map["empresa"]), asc(allowed_map["cod_cliente"]), asc(allowed_map["cod_direccion"])]
+
+    result = []
+    for raw in ordering_params:
+        if not raw:
+            continue
+        direction = asc
+        name = raw
+        if raw.startswith("-"):
+            direction = desc
+            name = raw[1:]
+        col = allowed_map.get(name)
+        if not col:
+            # Ignora columnas no permitidas para evitar SQL injection / errores
+            continue
+        result.append(direction(col))
+    return result
+
+@bplog.route("/cliente-direccion-guias/search", methods=["POST"])
+def cdg_search():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = search_in_cdg.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    qry = db.session.query(STClienteDireccionGuias)
+
+    # Filtros exactos
+    if "empresa" in data:
+        qry = qry.filter(STClienteDireccionGuias.empresa == data["empresa"])
+    if "cod_cliente" in data:
+        qry = qry.filter(STClienteDireccionGuias.cod_cliente == data["cod_cliente"])
+    if "cod_direccion" in data:
+        qry = qry.filter(STClienteDireccionGuias.cod_direccion == data["cod_direccion"])
+    if "cod_zona_ciudad" in data:
+        qry = qry.filter(STClienteDireccionGuias.cod_zona_ciudad == data["cod_zona_ciudad"])
+    if "es_activo" in data:
+        qry = qry.filter(STClienteDireccionGuias.es_activo == data["es_activo"])
+
+    # Filtros parciales por texto (case-insensitive con UPPER para Oracle)
+    def like_ci(col, val):
+        return func.upper(col).like(f"%{val.strip().upper()}%")
+
+    if "ciudad" in data:
+        qry = qry.filter(like_ci(STClienteDireccionGuias.ciudad, data["ciudad"]))
+    if "direccion" in data:
+        qry = qry.filter(like_ci(STClienteDireccionGuias.direccion, data["direccion"]))
+    if "direccion_larga" in data:
+        qry = qry.filter(like_ci(STClienteDireccionGuias.direccion_larga, data["direccion_larga"]))
+    if "nombre" in data:
+        qry = qry.filter(like_ci(STClienteDireccionGuias.nombre, data["nombre"]))
+
+    # Búsqueda libre 'q'
+    if data.get("q"):
+        q = data["q"].strip().upper()
+        qry = qry.filter(or_(
+            func.upper(STClienteDireccionGuias.ciudad).like(f"%{q}%"),
+            func.upper(STClienteDireccionGuias.direccion).like(f"%{q}%"),
+            func.upper(STClienteDireccionGuias.direccion_larga).like(f"%{q}%"),
+            func.upper(STClienteDireccionGuias.nombre).like(f"%{q}%"),
+            func.upper(STClienteDireccionGuias.cod_cliente).like(f"%{q}%"),
+            func.cast(STClienteDireccionGuias.cod_direccion, db.String).like(f"%{data['q'].strip()}%"),
+        ))
+
+    # Ordenamiento seguro
+    allowed_map = {
+        "empresa": STClienteDireccionGuias.empresa,
+        "cod_cliente": STClienteDireccionGuias.cod_cliente,
+        "ciudad": STClienteDireccionGuias.ciudad,
+        "direccion": STClienteDireccionGuias.direccion,
+        "direccion_larga": STClienteDireccionGuias.direccion_larga,
+        "cod_direccion": STClienteDireccionGuias.cod_direccion,
+        "cod_zona_ciudad": STClienteDireccionGuias.cod_zona_ciudad,
+        "es_activo": STClienteDireccionGuias.es_activo,
+        "nombre": STClienteDireccionGuias.nombre,
+    }
+    ordering = build_ordering_in_cdg(allowed_map, data.get("ordering", []))
+    for ob in ordering:
+        qry = qry.order_by(ob)
+
+    # Paginación
+    page = data.get("page", 1)
+    page_size = data.get("page_size", 20)
+    items = qry.paginate(page=page, per_page=page_size, error_out=False)
+
+    return jsonify({
+        "page": page,
+        "per_page": page_size,
+        "total": items.total,
+        "pages": items.pages,
+        "data": out_many_cdg.dump(items.items)
     }), 200

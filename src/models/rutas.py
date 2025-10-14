@@ -251,6 +251,35 @@ class STClienteDireccionGuias(db.Model):
         lazy="select",
     )
 
+class STClienteDireccionGuiasSearchIn(Schema):
+    empresa = fields.Int(required=False)
+    cod_cliente = fields.Str(required=False, validate=validate.Length(max=14))
+    cod_direccion = fields.Int(required=False)
+    cod_zona_ciudad = fields.Str(required=False, validate=validate.Length(max=14))
+    es_activo = fields.Int(required=False, validate=validate.OneOf([0, 1]))
+
+    ciudad = fields.Str(required=False)
+    direccion = fields.Str(required=False)
+    direccion_larga = fields.Str(required=False)
+    nombre = fields.Str(required=False)
+
+    q = fields.Str(required=False)
+
+    ordering = fields.List(fields.Str(), required=False)  # p.ej. ["-ciudad", "cod_cliente"]
+    page = fields.Int(load_default=1)
+    page_size = fields.Int(load_default=20)
+
+class STClienteDireccionGuiasOut(Schema):
+    empresa = fields.Int()
+    cod_cliente = fields.Str()
+    ciudad = fields.Str(allow_none=True)
+    direccion = fields.Str(allow_none=True)
+    direccion_larga = fields.Str(allow_none=True)
+    cod_direccion = fields.Int()
+    cod_zona_ciudad = fields.Str(allow_none=True)
+    es_activo = fields.Int(allow_none=True)
+    nombre = fields.Str(allow_none=True)
+
 class STCDespachoEntrega(db.Model):
     __tablename__ = "ST_CDESPACHO_ENTREGA"
     empresa           = db.Column("EMPRESA", db.Integer, nullable=False, primary_key=True)
