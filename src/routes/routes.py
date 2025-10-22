@@ -4598,6 +4598,47 @@ def get_transportistas():
         error_msg = "An error occurred while fetching transportistas."
         print(str(e))
         return jsonify({"error": error_msg, "details": str(e)}), 500
+
+@bp.route('/get_transportistas_moto', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_transportistas_moto():
+    try:
+        # Obtiene el parámetro de consulta 'empresa' de la solicitud
+        empresa = request.args.get('empresa')
+
+        # Validar que se haya proporcionado el parámetro 'empresa'
+        if not empresa:
+            return jsonify({"error": "El campo empresa es requerido"}), 400
+
+        # Consulta para obtener todos los transportistas de la empresa especificada
+        transportistas = st_transportistas.query().filter(
+            st_transportistas.empresa == empresa
+        ).all()
+
+        # Formatear los resultados en una lista de diccionarios
+        transportistas_list = [
+            {
+                'cod_transportista': t.cod_transportista,
+                'empresa': t.empresa,
+                'nombre': t.nombre,
+                'apellido1': t.apellido1,
+                'direccion': t.direccion,
+                'telefono': t.telefono,
+                'es_activo': t.es_activo,
+                'placa': t.placa,
+                'cod_tipo_identificacion': t.cod_tipo_identificacion,
+                'activo_ecommerce': t.activo_ecommerce
+            }
+            for t in transportistas
+        ]
+
+        return jsonify(transportistas_list), 200
+
+    except Exception as e:
+        error_msg = "An error occurred while fetching transportistas."
+        print(str(e))
+        return jsonify({"error": error_msg, "details": str(e)}), 500
 #---------------------------------------TRANSPORT ECOMMERCE---------------------------------------------////
 @bp.route('/get_cab_credito_directo', methods=['GET'])
 @jwt_required()

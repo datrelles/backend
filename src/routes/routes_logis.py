@@ -1,15 +1,31 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, url_for
 import logging
 from flask_jwt_extended import jwt_required
 from flask_cors import cross_origin
 import datetime
-import re
-from decimal import Decimal
-from datetime import datetime, date
+from sqlalchemy import and_, text, literal, func, select, bindparam, types as satypes, outparam, or_, desc, asc
+from sqlalchemy.orm import aliased
+from sqlalchemy.dialects.oracle import CLOB
+from datetime import datetime
 from src import oracle
 from os import getenv
-import cx_Oracle
-from src.config.database import db, engine, session
+from src.models.clientes import Cliente, persona
+from src.config.database import db
+from src.models.asignacion_cupo import QueryParamsSchema, STReservaProducto, ALLOWED_ORDERING, reservas_schema, \
+    CreateReservaSchema, UpdateReservaSchema, ReservaSchema, map_integrity_error, validate_no_active_duplicate, \
+    validate_available_stock_before_create, validate_available_stock_before_update, ajustar_cantidad_reserva
+from marshmallow import ValidationError
+from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
+from sqlalchemy.exc import IntegrityError
+from src.models.proveedores import st_transportistas
+from src.models.rutas import STRuta, STDireccionRuta, RutaCreateSchema, RutaUpdateSchema, RutaOutSchema, \
+    DirRutaCreateSchema, DirRutaOutSchema, DirRutaSearchSchema, DirRutaDetailSchema, DirRutaDeleteSchema, \
+    TRutaOutSchema, TRutaCreateSchema, TRutaDetailSchema, TRutaUpdateSchema, TRutaSearchSchema, TRutaDeleteSchema, \
+    STTransportistaRuta, DespachoSearchIn, DespachoRowOut, ALLOWED_ORDERING_FIELDS, STClienteDireccionGuias, \
+    CDECreateSchema, CDEUpdateSchema, CDEQuerySchema, CDEOutSchema, STCDespachoEntrega, DDECreateSchema, DDEOutSchema, \
+    DDEUpdateSchema, STDDespachoEntrega, DDEListBodySchema, STDDespacho, GenGuiasSchema, TGUsuarioVend, \
+    TGUVCreateSchema, TGUVSearchSchema, TGUVUpdateSchema, TGUVOutSchema, build_ordering_in, DDespachoUpdateSchema, \
+    CDCUpdateSchema, CDCOutSchema, STCDespacho, STClienteDireccionGuiasSearchIn, STClienteDireccionGuiasOut
 
 bplog = Blueprint('routes_log', __name__)
 
@@ -27,7 +43,6 @@ def parse_date(date_string):
     if date_string:
         return datetime.strptime(date_string, '%d/%m/%Y').date()
     return None
-# --- Utilidades de parseo ----------------------------------------------------
 
 DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y")
 
@@ -40,7 +55,6 @@ def parse_date(s: str):
             return datetime.strptime(s, fmt)
         except ValueError:
             continue
-    # Si no coincide ningún formato, levanta error controlado
     raise ValueError(f"Formato de fecha inválido: '{s}'. Usa YYYY-MM-DD o DD/MM/YYYY.")
 
 def parse_int(s: str):
@@ -58,7 +72,6 @@ def parse_str(s: str):
     return s if s != "" else None
 
 def parse_order(field: str, default_field="COD_PEDIDO"):
-    # Permite solo un conjunto mínimo “seguro” de columnas para ordenar (ajusta a tus columnas reales)
     allowed = {
         "COD_PEDIDO", "FECHA_PEDIDO", "COD_PERSONA_CLI", "COD_PERSONA_VEN",
         "ESTADO", "COD_AGENCIA", "EMPRESA"
@@ -152,8 +165,8 @@ def cambia_estado_y_graba(
                     reg["cod_estado_producto"],
                     estado_nuevo,
                     numero_agencia,
-                    v_tipo_comprobante,    # OUT
-                    v_cod_comprobante,     # OUT
+                    v_tipo_comprobante,
+                    v_cod_comprobante,
                 ],
             )
             v_tipo_comprobante_val = v_tipo_comprobante.getvalue()
@@ -172,9 +185,9 @@ def cambia_estado_y_graba(
                     v_cod_agente,
                     numero_agencia,
                     v_useridc,
-                    empresa_g,                 # IN
-                    v_cod_tipo_comprobante_g,  # OUT
-                    v_cod_comprobante_g,       # OUT
+                    empresa_g,
+                    v_cod_tipo_comprobante_g,
+                    v_cod_comprobante_g,
                 ],
             )
             v_cod_tipo_comprobante_g_val = v_cod_tipo_comprobante_g.getvalue()
@@ -217,6 +230,168 @@ def cambia_estado_y_graba(
     except Exception:
         db1.rollback()
         raise
+
+def inventario_por_serie_info(
+    *,
+    empresa: int,
+    numero_serie: str,
+    bodegas_stock=None,
+    aa: int = 0,
+    cod_tipo_inventario: int = 1,
+    estado_producto: str = "A",
+    reserva_scope: str = "destino"
+) -> dict:
+    if not numero_serie or not str(numero_serie).strip():
+        raise ValueError("Falta parámetro: numero_serie")
+    if empresa is None:
+        raise ValueError("Falta parámetro: empresa")
+
+    bodegas_stock = bodegas_stock or [5, 1, 25]
+    estado_producto = (estado_producto or "A").strip().upper()
+    reserva_bodega_field = "r.cod_bodega_destino" if str(reserva_scope).lower() == "destino" else "r.cod_bodega"
+
+    db1 = None
+    cur = None
+    try:
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = db1.cursor()
+
+        sql_resolver = """
+            SELECT p.cod_producto, d.nombre
+              FROM st_producto_serie p
+              JOIN producto d
+                ON d.empresa = p.empresa
+               AND d.cod_producto = p.cod_producto
+             WHERE p.empresa = :empresa
+               AND p.numero_serie = :numero_serie
+               AND p.cantidad != 0
+        """
+        binds_resolver = {"empresa": int(empresa), "numero_serie": str(numero_serie).strip()}
+        cur.execute(sql_resolver, binds_resolver)
+        row_prod = cur.fetchone()
+
+        if not row_prod:
+            sql_resolver_alt = """
+                SELECT i.cod_producto, d.nombre
+                  FROM st_inventario_serie i
+                  JOIN producto d
+                    ON d.empresa = i.empresa
+                   AND d.cod_producto = i.cod_producto
+                 WHERE i.empresa = :empresa
+                   AND i.numero_serie = :numero_serie
+            """
+            cur.execute(sql_resolver_alt, binds_resolver)
+            row_prod = cur.fetchone()
+
+        if not row_prod:
+            raise ValueError(f"Serie no encontrada o sin producto asociado: {numero_serie}")
+
+        cod_producto, nombre = row_prod[0], row_prod[1]
+
+        def _make_in_binds(prefix, values):
+            placeholders = []
+            bindmap = {}
+            for i, val in enumerate(values):
+                k = f"{prefix}{i}"
+                placeholders.append(f":{k}")
+                bindmap[k] = int(val)
+            return ",".join(placeholders), bindmap
+
+        stock_in_sql, stock_bindmap = _make_in_binds("sb_", bodegas_stock)
+        resv_in_sql,  resv_bindmap  = _make_in_binds("rb_", bodegas_stock)
+
+        base_sql_totales = f"""
+            WITH inv AS (
+                SELECT s.empresa, s.cod_producto, SUM(s.cantidad) AS stock_total
+                  FROM st_inventario s
+                 WHERE s.empresa = :empresa
+                   AND s.cod_bodega IN ({stock_in_sql})
+                   AND s.aa = :aa
+                   AND s.cod_tipo_inventario = :cod_tipo_inv
+                   AND s.cod_estado_producto = :estado_producto
+                   AND s.cod_producto = :cod_producto
+                 GROUP BY s.empresa, s.cod_producto
+            ),
+            resv AS (
+                SELECT r.empresa, r.cod_producto,
+                       SUM(GREATEST(r.cantidad - NVL(r.cantidad_utilizada,0), 0)) AS reservado_activo
+                  FROM st_reserva_producto r
+                 WHERE r.empresa = :empresa
+                   AND r.cod_producto = :cod_producto
+                   AND NVL(r.es_inactivo, 0) = 0
+                   AND r.fecha_fin IS NOT NULL
+                   AND r.fecha_fin > SYSDATE
+                   AND {reserva_bodega_field} IN ({resv_in_sql})
+                 GROUP BY r.empresa, r.cod_producto
+            )
+            SELECT
+                NVL(i.stock_total, 0) AS stock_total,
+                NVL(r.reservado_activo, 0) AS reservado_activo_total,
+                (NVL(i.stock_total,0) - NVL(r.reservado_activo,0)) AS disponible_total
+              FROM inv i
+              FULL OUTER JOIN resv r
+                ON r.empresa = i.empresa
+               AND r.cod_producto = i.cod_producto
+        """
+        binds_tot = {
+            "empresa": int(empresa),
+            "aa": int(aa),
+            "cod_tipo_inv": int(cod_tipo_inventario),
+            "estado_producto": estado_producto,
+            "cod_producto": str(cod_producto),
+        }
+        binds_tot.update(stock_bindmap)
+        binds_tot.update(resv_bindmap)
+
+        cur.execute(base_sql_totales, binds_tot)
+        res_tot = cur.fetchone()
+        stock_total      = int(res_tot[0] or 0) if res_tot else 0
+        reservado_total  = int(res_tot[1] or 0) if res_tot else 0
+        disponible_total = int(res_tot[2] or 0) if res_tot else 0
+
+        base_sql_resv_bod = f"""
+            SELECT {reserva_bodega_field} AS cod_bodega,
+                   SUM(GREATEST(r.cantidad - NVL(r.cantidad_utilizada,0), 0)) AS reservado_activo
+              FROM st_reserva_producto r
+             WHERE r.empresa = :empresa
+               AND r.cod_producto = :cod_producto
+               AND NVL(r.es_inactivo, 0) = 0
+               AND r.fecha_fin IS NOT NULL
+               AND r.fecha_fin > SYSDATE
+               AND {reserva_bodega_field} IN ({resv_in_sql})
+          GROUP BY {reserva_bodega_field}
+          ORDER BY {reserva_bodega_field}
+        """
+        binds_resv_bod = {
+            "empresa": int(empresa),
+            "cod_producto": str(cod_producto),
+            **resv_bindmap
+        }
+        cur.execute(base_sql_resv_bod, binds_resv_bod)
+        reservas_por_bodega = [
+            {"cod_bodega": int(r[0]), "reservado_activo": int(r[1] or 0)}
+            for r in cur.fetchall()
+        ]
+
+        return {
+            "empresa": int(empresa),
+            "numero_serie": str(numero_serie),
+            "cod_producto": str(cod_producto),
+            "nombre": nombre,
+            "stock_total": stock_total,
+            "reservado_activo_total": reservado_total,
+            "disponible_total": disponible_total,
+            "reservas_por_bodega": reservas_por_bodega
+        }
+
+    finally:
+        try:
+            if cur: cur.close()
+        finally:
+            try:
+                if db1: db1.close()
+            except Exception:
+                pass
 
 @bplog.route('/pedidos', methods=['POST'])
 @jwt_required()
@@ -322,29 +497,7 @@ def get_listado_pedido():
 @jwt_required()
 @cross_origin()
 def get_pedidos_get():
-    """
-    GET /pedidos?pd_fecha_inicial=2025-08-01&pd_fecha_final=2025-08-21&pedido=12345&pn_empresa=20&pn_cod_agencia=3
-    Parámetros aceptados (todos opcionales salvo los que tu SP requiera):
-      - pd_fecha_inicial, pd_fecha_final  (YYYY-MM-DD o DD/MM/YYYY)
-      - pedido                           -> pv_cod_pedido
-      - pv_comprobante_manual
-      - pv_cod_persona_ven
-      - pv_nombre_persona_ven
-      - pv_cod_persona_cli
-      - cliente                          -> pv_nombre_persona_cli
-      - pv_estado
-      - pn_cod_agencia                   (int)
-      - pn_empresa                       (int)
-      - pv_cod_tipo_pedido
-      - pn_cod_bodega_despacho           (int)
-      - p_orden                          (validado contra lista segura)
-      - p_tipo_orden                     (ASC|DESC)
-      - bodega_consignacion              -> pv_bodega_envia
-      - direccion                        -> pv_direccion
-      - orden                            -> pv_cod_orden
-    """
     args = request.args
-
     try:
         pd_fecha_inicial = parse_date(args.get('pd_fecha_inicial'))
         pd_fecha_final   = parse_date(args.get('pd_fecha_final'))
@@ -456,23 +609,17 @@ def info_moto():
         bodega_contra = 25
     else:
         bodega_actual = 25
-        bodega_contra = cod_bodega
+        bodega_contra = 1
 
     db1 = None
     try:
         db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
-
         def existe_transferencia_por_serie(
                 db1,
                 *,
                 empresa: int,
                 numero_serie: str
         ) -> bool:
-            """
-            Valida si existe al menos un registro en STA_TRANSFERENCIA
-            con los parámetros dados.
-            Retorna True si existe, False en caso contrario.
-            """
             sql = """
                 SELECT COUNT(1)
                   FROM sta_transferencia x
@@ -494,10 +641,6 @@ def info_moto():
                 *,
                 cod_motor: str
         ) -> str:
-            """
-            Devuelve el cod_producto asociado a un cod_motor en st_prod_packing_list.
-            Si no existe, retorna None.
-            """
             sql = """
                 SELECT s.cod_producto
                   FROM st_prod_packing_list s
@@ -508,6 +651,24 @@ def info_moto():
                 row = cur.fetchone()
                 return row[0] if row else None
 
+        def obtener_cod_estado_por_motor(
+                db1,
+                *,
+                cod_motor: str,
+                cod_producto: str
+        ) -> str:
+            sql = """
+                SELECT s.cod_estado_producto
+                  FROM st_producto_serie s
+                 WHERE s.numero_serie = :cod_motor
+                 AND s.cod_producto = :cod_producto
+            """
+            with db1.cursor() as cur:
+                cur.execute(sql, {"cod_motor": cod_motor, "cod_producto": cod_producto})
+                row = cur.fetchone()
+                return row[0] if row else None
+        if obtener_cod_estado_por_motor(db1, cod_motor=cod_motor, cod_producto=cod_producto) != 'A':
+            return jsonify({"error": "Serie con estado diferente a A (Disponible)"}), 500
 
         if existe_transferencia_por_serie(
                 db1,
@@ -515,8 +676,6 @@ def info_moto():
                 numero_serie=cod_motor
         ):
             return jsonify({"error": "Serie previamente asignada"}), 500
-
-        print(obtener_cod_producto_por_motor(db1, cod_motor=cod_motor))
 
         if obtener_cod_producto_por_motor(db1, cod_motor=cod_motor)!= cod_producto:
             return jsonify({"error": "Serie no pertenece a Modelo Seleccionado"}), 500
@@ -698,6 +857,14 @@ def info_moto():
                             "cod_producto": cod_prod,
                             "numero_serie": cod_motor
                         })
+
+
+            updated_qty = ajustar_cantidad_reserva(
+                empresa=empresa,
+                cod_bodega=cod_bodega,
+                cod_producto=cod_producto,
+                op="inc",
+            )
             db1.commit()
 
             return jsonify({"ok": "Proceso de bodega interna"}), 200
@@ -729,6 +896,8 @@ def info_moto():
             "cod_comprobante": cod_comprobante,
             "tipo_comprobante": tipo_comprobante
         })
+
+        print(cod_comprobante , ' ', tipo_comprobante,  ' ' ,bodega_contra)
         if y == 0:
             return jsonify({"error": "SERIE NO EXISTE EN B1, A3 ni N2"}), 404
 
@@ -741,8 +910,8 @@ def info_moto():
                   and a.numero_serie=b.numero_serie
                   and a.empresa=b.empresa
                   and a.numero_serie=:cod_motor
-                  and b.cod_bodega=5
-            """, {"cod_motor": cod_motor})
+                  and b.cod_bodega in (5, :bodega_contra)
+            """, {"cod_motor": cod_motor, "bodega_contra": bodega_contra})
             row = cur.fetchone()
             if not row:
                 return jsonify({"error": "Serie no encontrada en bodega 5"}), 404
@@ -827,6 +996,12 @@ def info_moto():
                 [empresa, cod_comprobante, tipo_comprobante, cod_motor, cod_bodega]
             )
         db1.commit()
+        updated_qty = ajustar_cantidad_reserva(
+            empresa=empresa,
+            cod_bodega=cod_bodega,
+            cod_producto=cod_producto,
+            op="inc",
+        )
         return jsonify({"ok": "Serie asignada correctamente"}), 200
 
     except cx_Oracle.DatabaseError as e:
@@ -854,7 +1029,6 @@ def revertir_transferencia():
     numero_agencia     = data.get("numero_agencia")
     empresa_g          = data.get("empresa_g") or empresa
     cod_estado_actual  = data.get("cod_estado_producto")
-    # Validaciones mínimas
     requeridos = {
         "empresa": empresa,
         "cod_comprobante": cod_comprobante,
@@ -901,6 +1075,12 @@ def revertir_transferencia():
                 numero_agencia=int(numero_agencia),
                 empresa_g=int(empresa_g),
             )
+            updated_qty = ajustar_cantidad_reserva(
+                empresa=empresa,
+                cod_bodega=int(numero_agencia),
+                cod_producto=cod_producto,
+                op="desc",
+            )
             return jsonify({
                 "ok": True,
                 "mensaje": "Transferencia revertida y estado cambiado a 'A'.",
@@ -941,17 +1121,12 @@ def revertir_transferencia():
 @jwt_required()
 @cross_origin()
 def get_transferencias():
-    """
-    GET /transferencias?cod_comprobante=...&cod_tipo_comprobante=...&empresa=...&cod_producto=...
-    Retorna las filas de STA_TRANSFERENCIA que coinciden con los parámetros.
-    """
     try:
         cod_comprobante = request.args.get('cod_comprobante', type=str)
         cod_tipo_comprobante = request.args.get('cod_tipo_comprobante', type=str)
         empresa = request.args.get('empresa', type=int)
-        cod_producto = request.args.get('cod_producto', type=str)  # <-- opcional
+        cod_producto = request.args.get('cod_producto', type=str)
 
-        # Validación de parámetros obligatorios
         missing = []
         if not cod_comprobante:
             missing.append("cod_comprobante")
@@ -963,7 +1138,6 @@ def get_transferencias():
         if missing:
             return jsonify({"error": f"Faltan parámetros: {', '.join(missing)}"}), 400
 
-        # Conexión y consulta
         db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
         cursor = db1.cursor()
 
@@ -994,7 +1168,7 @@ def get_transferencias():
             "empresa": empresa
         }
 
-        if cod_producto:  # se agrega filtro extra si llega
+        if cod_producto:
             sql += " AND COD_PRODUCTO = :cod_producto"
             params["cod_producto"] = cod_producto
 
@@ -1015,3 +1189,2511 @@ def get_transferencias():
         return jsonify({"error": error.message}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@bplog.route('/series_antiguas_por_serie', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def series_antiguas_por_serie():
+    try:
+        numero_serie = request.args.get('numero_serie', type=str)
+        empresa = request.args.get('empresa', type=int, default=20)
+        bodega = request.args.get('bodega', type=int)
+
+        if not numero_serie:
+            return jsonify({"error": "Falta parámetro: numero_serie"}), 400
+        if bodega is None:
+            return jsonify({"error": "Falta parámetro: bodega"}), 400
+
+        inv = inventario_por_serie_info(
+            empresa=empresa,
+            numero_serie=numero_serie,
+            bodegas_stock=[5, 1, 25],
+            aa=0,
+            cod_tipo_inventario=1,
+            estado_producto="A",
+            reserva_scope="destino"
+        )
+
+        if int(inv.get("disponible_total", 0)) <= 0:
+            reservado_en_bodega = next(
+                (int(r.get("reservado_activo", 0)) for r in inv.get("reservas_por_bodega", [])
+                 if int(r.get("cod_bodega")) == int(bodega)),
+                0
+            )
+            if reservado_en_bodega <= 0:
+                return jsonify({
+                    "error": "No existe Disponibilida ni reserva",
+                    "detalle": {
+                        "empresa": empresa,
+                        "bodega": bodega,
+                        "numero_serie": numero_serie,
+                        "inventario": inv
+                    }
+                }), 409
+
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = db1.cursor()
+
+        sql = """
+            SELECT *
+              FROM (
+                    SELECT i.*,
+                           b.nombre,
+                           TRUNC(SYSDATE) -
+                           TRUNC(ks_inventario_serie.obt_fecha_produccion_sb_pt(
+                                    p_cod_empresa => i.empresa,
+                                    p_cod_motor   => i.numero_serie,
+                                    p_cod_bodega  => 5
+                                )) AS edad_dias,
+                        x.fecha_produccion,
+                           x.edad_dias AS edad_serie_actual
+                      FROM st_inventario_serie i,
+                           bodega b,
+                           (
+                                SELECT s.cod_producto,
+                                       s.empresa,
+                                       s.numero_serie,
+                                       TRUNC(SYSDATE) -
+                                       TRUNC(
+                                           NVL(
+                                               ks_inventario_serie.obt_fecha_produccion_sb_pt(
+                                                   p_cod_empresa => s.empresa,
+                                                   p_cod_motor   => s.numero_serie,
+                                                   p_cod_bodega  => 5
+                                               ),
+                                               ks_inventario_serie.obt_fecha_produccion_sb_pt(
+                                                   p_cod_empresa => s.empresa,
+                                                   p_cod_motor   => s.numero_serie,
+                                                   p_cod_bodega  => 3
+                                               )
+                                           )
+                                       ) AS edad_dias,
+                                        ks_inventario_serie.obt_fecha_produccion_sb_pt(
+                                    p_cod_empresa => s.empresa,
+                                    p_cod_motor   => s.numero_serie,
+                                    p_cod_bodega  => 5
+                                ) fecha_produccion
+                                    
+                                  FROM st_producto_serie s,
+                                       st_inventario_serie iv
+                                 WHERE s.numero_serie = :numero_serie
+                                   AND s.empresa      = :empresa
+                                   AND s.cantidad    != 0
+                                   AND s.empresa      = iv.empresa
+                                   AND s.cod_estado_producto LIKE '%A%'
+                                   AND iv.numero_serie= s.numero_serie
+                           ) x
+                     WHERE i.empresa = :empresa
+                       AND x.empresa = i.empresa
+                       AND x.cod_producto = i.cod_producto
+                       AND x.numero_serie <> i.numero_serie
+                       AND b.empresa = i.empresa
+                       AND b.bodega  = i.cod_bodega
+                       AND i.cod_bodega IN (1, 25, 5)
+                       AND TRUNC(SYSDATE) -
+                           TRUNC(ks_inventario_serie.obt_fecha_produccion_sb_pt(
+                                    p_cod_empresa => i.empresa,
+                                    p_cod_motor   => i.numero_serie,
+                                    p_cod_bodega  => 5
+                                )) > x.edad_dias
+                   ) sub
+             ORDER BY sub.edad_dias DESC
+        """
+
+        params = {
+            "numero_serie": numero_serie.strip(),
+            "empresa": int(empresa),
+        }
+
+        cur.execute(sql, params)
+        cols = [c[0] for c in cur.description]
+        rows = cur.fetchall()
+        data = [dict(zip(cols, r)) for r in rows]
+
+        cur.close()
+        db1.close()
+
+        # --- VALIDACIÓN EXTRA POR UNIDADES DE EDAD (justo antes de responder) ---
+        def _unidad_edad(dias):
+            try:
+                d = int(dias)
+            except (TypeError, ValueError):
+                return None
+            if d <= 30:
+                return 1
+            if d <= 60:
+                return 2
+            if d <= 90:
+                return 3
+            return 4  # > 90 días
+
+        if data:
+            edad_actual_dias = data[0].get("EDAD_SERIE_ACTUAL")
+            unidad_actual = _unidad_edad(edad_actual_dias)
+
+            unidades_list = [
+                _unidad_edad(item.get("EDAD_DIAS"))
+                for item in data
+                if item.get("EDAD_DIAS") is not None
+            ]
+            unidad_max_lista = max(unidades_list) if unidades_list else None
+
+            if unidad_actual is not None and unidad_max_lista is not None and unidad_actual == unidad_max_lista:
+                return jsonify([]), 200
+        # --- FIN VALIDACIÓN EXTRA ---
+
+
+        return jsonify(data), 200
+
+    except cx_Oracle.DatabaseError as e:
+        try:
+            if db1:
+                db1.close()
+        except Exception:
+            pass
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+    except Exception as e:
+        try:
+            if db1:
+                db1.close()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
+
+# ===============================================
+# STA_TRANS_COMENTARIOS_HANDHELD ENDPOINTS
+# ===============================================
+
+@bplog.route('/transferencias/comentarios/rango', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def comentarios_por_rango():
+    db1 = None
+    try:
+        args = request.args
+
+        empresa = args.get('empresa', type=int)
+        desde_s = parse_str(args.get('desde'))
+        hasta_s = parse_str(args.get('hasta'))
+
+        missing = []
+        if empresa is None: missing.append("empresa")
+        if not desde_s:     missing.append("desde")
+        if not hasta_s:     missing.append("hasta")
+        if missing:
+            return jsonify({"error": f"Faltan parámetros: {', '.join(missing)}"}), 400
+
+        desde = parse_date(desde_s)
+        hasta = parse_date(hasta_s)
+
+        cod_comprobante      = parse_str(args.get('cod_comprobante'))
+        cod_tipo_comprobante = parse_str(args.get('cod_tipo_comprobante'))
+        secuencia            = args.get('secuencia', type=int)
+        cod_producto         = parse_str(args.get('cod_producto'))
+        numero_serie         = parse_str(args.get('numero_serie'))
+        usuario_creacion     = parse_str(args.get('usuario_creacion'))
+        origen               = parse_str(args.get('origen'))
+        tipo_comentario      = parse_str(args.get('tipo_comentario'))
+        es_activo            = args.get('es_activo', type=int)
+        buscar               = parse_str(args.get('buscar'))
+
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = db1.cursor()
+
+        sql = """
+            SELECT
+                COD_COMPROBANTE,
+                COD_TIPO_COMPROBANTE,
+                EMPRESA,
+                SECUENCIA,
+                COD_PRODUCTO,
+                SECUENCIA_COMENTARIO,
+                NUMERO_SERIE,
+                COMENTARIO,
+                USUARIO_CREACION,
+                FECHA_CREACION,
+                USUARIO_MODIFICACION,
+                FECHA_MODIFICACION,
+                ORIGEN,
+                TIPO_COMENTARIO,
+                ES_ACTIVO
+              FROM STA_TRANS_COMENTARIOS_HANDHELD
+             WHERE EMPRESA = :empresa
+               AND TRUNC(FECHA_CREACION) BETWEEN TRUNC(:desde) AND TRUNC(:hasta)
+        """
+        params = {"empresa": empresa, "desde": desde, "hasta": hasta}
+
+        if cod_comprobante:
+            sql += " AND COD_COMPROBANTE = :cod_comprobante"
+            params["cod_comprobante"] = cod_comprobante
+        if cod_tipo_comprobante:
+            sql += " AND COD_TIPO_COMPROBANTE = :cod_tipo_comprobante"
+            params["cod_tipo_comprobante"] = cod_tipo_comprobante
+        if secuencia is not None:
+            sql += " AND SECUENCIA = :secuencia"
+            params["secuencia"] = secuencia
+        if cod_producto:
+            sql += " AND COD_PRODUCTO = :cod_producto"
+            params["cod_producto"] = cod_producto
+        if numero_serie:
+            sql += " AND NUMERO_SERIE = :numero_serie"
+            params["numero_serie"] = numero_serie
+        if usuario_creacion:
+            sql += " AND USUARIO_CREACION = :usuario_creacion"
+            params["usuario_creacion"] = usuario_creacion
+        if origen:
+            sql += " AND ORIGEN = :origen"
+            params["origen"] = origen
+        if tipo_comentario:
+            sql += " AND TIPO_COMENTARIO = :tipo_comentario"
+            params["tipo_comentario"] = tipo_comentario
+        if es_activo in (0, 1):
+            sql += " AND ES_ACTIVO = :es_activo"
+            params["es_activo"] = es_activo
+        if buscar:
+            sql += " AND UPPER(COMENTARIO) LIKE UPPER(:buscar)"
+            params["buscar"] = f"%{buscar}%"
+
+        sql += " ORDER BY FECHA_CREACION DESC, COD_COMPROBANTE, SECUENCIA, SECUENCIA_COMENTARIO"
+
+        cur.execute(sql, params)
+        cols = [c[0] for c in cur.description]
+        data = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+        cur.close()
+        db1.close()
+        return jsonify(data), 200
+
+    except cx_Oracle.DatabaseError as e:
+        try:
+            if db1: db1.close()
+        except Exception:
+            pass
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+    except Exception as e:
+        try:
+            if db1: db1.close()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
+
+
+@bplog.route('/transferencias/comentarios', methods=['POST'])
+@jwt_required()
+@cross_origin()
+def crear_comentario_transferencia():
+    db1 = None
+    try:
+        body = request.get_json(silent=True) or {}
+
+        cod_comprobante      = parse_str(body.get('cod_comprobante'))
+        cod_tipo_comprobante = parse_str(body.get('cod_tipo_comprobante'))
+        empresa              = body.get('empresa', None)
+        secuencia            = None
+        cod_producto         = parse_str(body.get('cod_producto'))
+        comentario           = parse_str(body.get('comentario'))
+
+        missing = []
+        if not cod_comprobante:      missing.append("cod_comprobante")
+        if not cod_tipo_comprobante: missing.append("cod_tipo_comprobante")
+        if empresa is None:          missing.append("empresa")
+        if not cod_producto:         missing.append("cod_producto")
+        if not comentario:           missing.append("comentario")
+        if missing:
+            return jsonify({"error": f"Faltan campos requeridos: {', '.join(missing)}"}), 400
+
+        secuencia_comentario = None
+        numero_serie         = parse_str(body.get('numero_serie'))
+        usuario_creacion     = parse_str(body.get('usuario_creacion'))
+        origen               = parse_str(body.get('origen'))
+        tipo_comentario      = parse_str(body.get('tipo_comentario'))
+        es_activo            = body.get('es_activo', 1)
+
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+
+        if not usuario_creacion:
+            with db1.cursor() as cur:
+                cur.execute("SELECT USER FROM dual")
+                usuario_creacion = cur.fetchone()[0]
+
+        if secuencia_comentario is None:
+            with db1.cursor() as cur:
+                cur.execute("""
+                    SELECT NVL(MAX(SECUENCIA_COMENTARIO),0)+1
+                      FROM STA_TRANS_COMENTARIOS_HANDHELD
+                     WHERE COD_COMPROBANTE = :c
+                       AND COD_TIPO_COMPROBANTE = :t
+                       AND EMPRESA = :e
+                """, {"c": cod_comprobante, "t": cod_tipo_comprobante, "e": int(empresa)})
+                row = cur.fetchone()
+                secuencia_comentario = int(row[0]) if row and row[0] is not None else 1
+
+        secuencia = secuencia_comentario
+
+        with db1.cursor() as cur:
+            cur.execute("""
+                INSERT INTO STA_TRANS_COMENTARIOS_HANDHELD (
+                    COD_COMPROBANTE, COD_TIPO_COMPROBANTE, EMPRESA, SECUENCIA,
+                    COD_PRODUCTO, SECUENCIA_COMENTARIO, NUMERO_SERIE, COMENTARIO,
+                    USUARIO_CREACION, FECHA_CREACION, USUARIO_MODIFICACION, FECHA_MODIFICACION,
+                    ORIGEN, TIPO_COMENTARIO, ES_ACTIVO
+                ) VALUES (
+                    :cod_comprobante, :cod_tipo_comprobante, :empresa, :secuencia,
+                    :cod_producto, :secuencia_comentario, :numero_serie, :comentario,
+                    :usuario_creacion, SYSDATE, NULL, NULL,
+                    :origen, :tipo_comentario, :es_activo
+                )
+            """, {
+                "cod_comprobante": cod_comprobante,
+                "cod_tipo_comprobante": cod_tipo_comprobante,
+                "empresa": int(empresa),
+                "secuencia": int(secuencia),
+                "cod_producto": cod_producto,
+                "secuencia_comentario": int(secuencia_comentario),
+                "numero_serie": numero_serie,
+                "comentario": comentario,
+                "usuario_creacion": usuario_creacion,
+                "origen": origen,
+                "tipo_comentario": tipo_comentario,
+                "es_activo": int(es_activo) if es_activo in (0,1) else 1
+            })
+
+        db1.commit()
+
+        with db1.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    COD_COMPROBANTE, COD_TIPO_COMPROBANTE, EMPRESA, SECUENCIA,
+                    COD_PRODUCTO, SECUENCIA_COMENTARIO, NUMERO_SERIE, COMENTARIO,
+                    USUARIO_CREACION, FECHA_CREACION, USUARIO_MODIFICACION, FECHA_MODIFICACION,
+                    ORIGEN, TIPO_COMENTARIO, ES_ACTIVO
+                  FROM STA_TRANS_COMENTARIOS_HANDHELD
+                 WHERE COD_COMPROBANTE = :c
+                   AND COD_TIPO_COMPROBANTE = :t
+                   AND EMPRESA = :e
+                   AND SECUENCIA = :s
+                   AND SECUENCIA_COMENTARIO = :sc
+            """, {"c": cod_comprobante, "t": cod_tipo_comprobante, "e": int(empresa), "s": int(secuencia), "sc": int(secuencia_comentario)})
+            cols = [d[0] for d in cur.description]
+            row = cur.fetchone()
+            data = dict(zip(cols, row)) if row else None
+
+        return jsonify({"ok": True, "data": data}), 201
+
+    except cx_Oracle.DatabaseError as e:
+        if db1:
+            try: db1.rollback()
+            except Exception: pass
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+    except Exception as e:
+        if db1:
+            try: db1.rollback()
+            except Exception: pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if db1: db1.close()
+        except Exception:
+            pass
+
+
+@bplog.route('/transferencias/comentarios', methods=['DELETE'])
+@jwt_required()
+@cross_origin()
+def borrar_comentario_transferencia():
+    db1 = None
+    try:
+        args = request.args
+
+        cod_comprobante      = parse_str(args.get('cod_comprobante'))
+        cod_tipo_comprobante = parse_str(args.get('cod_tipo_comprobante'))
+        empresa              = args.get('empresa', type=int)
+        secuencia            = args.get('secuencia', type=int)
+        secuencia_comentario = args.get('secuencia_comentario', type=int)
+
+        missing = []
+        if not cod_comprobante:      missing.append("cod_comprobante")
+        if not cod_tipo_comprobante: missing.append("cod_tipo_comprobante")
+        if empresa is None:          missing.append("empresa")
+        if secuencia is None:        missing.append("secuencia")
+        if secuencia_comentario is None: missing.append("secuencia_comentario")
+        if missing:
+            return jsonify({"error": f"Faltan parámetros: {', '.join(missing)}"}), 400
+
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        with db1.cursor() as cur:
+            cur.execute("""
+                DELETE FROM STA_TRANS_COMENTARIOS_HANDHELD
+                 WHERE COD_COMPROBANTE = :c
+                   AND COD_TIPO_COMPROBANTE = :t
+                   AND EMPRESA = :e
+                   AND SECUENCIA = :s
+                   AND SECUENCIA_COMENTARIO = :sc
+            """, {"c": cod_comprobante, "t": cod_tipo_comprobante, "e": int(empresa), "s": int(secuencia), "sc": int(secuencia_comentario)})
+            deleted = cur.rowcount
+
+        db1.commit()
+        return jsonify({"ok": True, "deleted": deleted}), 200
+
+    except cx_Oracle.DatabaseError as e:
+        if db1:
+            try: db1.rollback()
+            except Exception: pass
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+    except Exception as e:
+        if db1:
+            try: db1.rollback()
+            except Exception: pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if db1: db1.close()
+        except Exception:
+            pass
+
+query_params_schema = QueryParamsSchema()
+
+def apply_filters(q, params):
+    if "empresa" in params:
+        q = q.filter(STReservaProducto.empresa == params["empresa"])
+    if "cod_producto" in params:
+        q = q.filter(STReservaProducto.cod_producto == params["cod_producto"])
+    if "cod_cliente" in params:
+        q = q.filter(STReservaProducto.cod_cliente == params["cod_cliente"])
+    if "cod_bodega" in params:
+        q = q.filter(STReservaProducto.cod_bodega == params["cod_bodega"])
+    if "fecha_desde" in params:
+        q = q.filter(STReservaProducto.fecha_ini >= params["fecha_desde"])
+    if "fecha_hasta" in params:
+        q = q.filter(STReservaProducto.fecha_ini <= params["fecha_hasta"])
+    return q
+
+def apply_ordering(q, ordering_param):
+    if not ordering_param:
+        return q.order_by(STReservaProducto.fecha_ini.desc(),
+                          STReservaProducto.cod_reserva.desc())
+    clauses = []
+    for token in ordering_param.split(","):
+        token = token.strip()
+        desc = token.startswith("-")
+        key = token.lstrip("-")
+        col = ALLOWED_ORDERING[key]
+        clauses.append(col.desc() if desc else col.asc())
+    return q.order_by(*clauses)
+
+def build_page_link(page, page_size):
+    if page < 1:
+        return None
+    url = request.url
+    parsed = urlparse(url)
+    params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    params["page"] = str(page)
+    params["page_size"] = str(page_size)
+    new_qs = urlencode(params, doseq=True)
+    return urlunparse(parsed._replace(query=new_qs))
+
+@bplog.route("/reservas", methods=["GET"])
+def list_reservas():
+    try:
+        params = query_params_schema.load(request.args)
+    except ValidationError as err:
+        return jsonify({"detail": "Parámetros inválidos.", "errors": err.messages}), 400
+
+    page = params.get("page", 1)
+    page_size = params.get("page_size", 20)
+
+    q = db.session.query(STReservaProducto)
+    q = apply_filters(q, params)
+    q = apply_ordering(q, params.get("ordering"))
+
+    total = q.count()
+
+    items = q.offset((page - 1) * page_size).limit(page_size).all()
+
+    data = reservas_schema.dump(items)
+
+    next_link = build_page_link(page + 1, page_size) if page * page_size < total else None
+    prev_link = build_page_link(page - 1, page_size) if page > 1 else None
+
+    return jsonify({
+        "count": total,
+        "next": next_link,
+        "previous": prev_link,
+        "results": data
+    })
+
+create_schema = CreateReservaSchema()
+update_schema = UpdateReservaSchema()
+out_schema = ReservaSchema()
+
+
+@bplog.route("/reservas", methods=["POST"])
+def create_reserva():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = create_schema.load(payload)
+        validate_no_active_duplicate(data)
+        validate_available_stock_before_create(data)
+    except Exception as e:
+        from marshmallow import ValidationError
+        if isinstance(e, ValidationError):
+            return jsonify({"detail": "Datos inválidos.", "errors": e.messages}), 200
+        raise
+
+    if data.get("cod_reserva") is not None:
+        existing = db.session.get(
+            STReservaProducto, {"EMPRESA": data["empresa"], "COD_RESERVA": data["cod_reserva"]}
+        )
+        if existing:
+            return jsonify({"detail": "El registro ya existe."}), 409
+
+    obj = STReservaProducto(
+        empresa=data["empresa"],
+        cod_reserva=data.get("cod_reserva"),
+        cod_producto=data.get("cod_producto"),
+        cod_bodega=data.get("cod_bodega"),
+        cod_cliente=data.get("cod_cliente"),
+        fecha_ini=data.get("fecha_ini"),
+        fecha_fin=data.get("fecha_fin"),
+        observacion=data.get("observacion"),
+        es_inactivo=data.get("es_inactivo", 0),
+        cantidad=data.get("cantidad"),
+        cod_bodega_destino=data.get("cod_bodega_destino"),
+        cantidad_utilizada=data.get("cantidad_utilizada"),
+    )
+
+    db.session.add(obj)
+    try:
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    body = out_schema.dump(obj)
+    location = url_for(
+        "routes_log.update_reserva",
+        empresa=int(obj.empresa),
+        cod_reserva=int(obj.cod_reserva),
+        _external=True,
+    )
+    return jsonify(body), 201, {"Location": location}
+
+@bplog.route("/reservas/<int:empresa>/<int:cod_reserva>", methods=["PUT"])
+def update_reserva(empresa: int, cod_reserva: int):
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = update_schema.load(payload)
+    except Exception as e:
+        from marshmallow import ValidationError
+        if isinstance(e, ValidationError):
+            return jsonify({"detail": "Datos inválidos.", "errors": e.messages}), 200
+        raise
+
+    if "empresa" in data and data["empresa"] != empresa:
+        return jsonify({"detail": "No se permite cambiar empresa en PUT."}), 400
+    if "cod_reserva" in data and data["cod_reserva"] != cod_reserva:
+        return jsonify({"detail": "No se permite cambiar cod_reserva en PUT."}), 400
+
+    obj = db.session.get(STReservaProducto, (cod_reserva, empresa))
+
+    if not obj:
+        return jsonify({"detail": "No encontrado."}), 404
+
+    validate_available_stock_before_update(obj, data)
+
+    updatable_fields = [
+        "cod_producto", "cod_bodega", "cod_cliente",
+        "fecha_ini", "fecha_fin", "observacion",
+        "es_inactivo", "cantidad", "cod_bodega_destino",
+        "cantidad_utilizada"
+    ]
+    for f in updatable_fields:
+        if f in data:
+            setattr(obj, f, data[f])
+
+    try:
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    return jsonify(out_schema.dump(obj)), 200
+
+@bplog.route('/stock_productos_motos', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def get_stock_productos_motos():
+    args = request.args
+    def _parse_int(v, default=None):
+        if v is None or str(v).strip() == '':
+            return default
+        return int(v)
+
+    def _parse_csv_ints(v, default):
+        if v is None or str(v).strip() == '':
+            return default
+        try:
+            return [int(x.strip()) for x in str(v).split(',') if x.strip() != '']
+        except ValueError:
+            raise ValueError("Parámetro 'bodegas' inválido. Use enteros separados por coma.")
+
+    def _parse_bool_01(v, default=1):
+        if v is None or str(v).strip() == '':
+            return default
+        iv = int(v)
+        if iv not in (0, 1):
+            raise ValueError("Parámetro booleano inválido. Use 0 ó 1.")
+        return iv
+
+    allowed_order = {
+        "COD_PRODUCTO": "COD_PRODUCTO",
+        "NOMBRE": "NOMBRE",
+        "COD_ITEM_CAT": "COD_ITEM_CAT",
+        "STOCK_TOTAL": "STOCK_TOTAL",
+        "RESERVADO_ACTIVO": "RESERVADO_ACTIVO",
+        "DISPONIBLE": "DISPONIBLE",
+    }
+
+    try:
+        empresa         = _parse_int(args.get('empresa'), 20)
+        bodegas         = _parse_csv_ints(args.get('bodegas'), [5, 1, 25])
+        aa              = _parse_int(args.get('aa'), 0)
+        cod_tipo_inv    = _parse_int(args.get('cod_tipo_inventario'), 1)
+        estado_producto = (args.get('estado_producto') or 'A').strip().upper()
+        cod_item_cat    = (args.get('cod_item_cat') or 'T').strip()
+        cat_match       = (args.get('cat_match') or 'exact').strip().lower()
+        cod_producto_f  = (args.get('cod_producto') or '').strip()
+        nombre_like     = (args.get('nombre_like') or '').strip()
+        only_positive   = _parse_bool_01(args.get('only_positive'), 1)
+        order_by        = allowed_order.get((args.get('order_by') or 'NOMBRE').strip().upper(), "NOMBRE")
+        order_dir       = "ASC" if (args.get('order_dir') or 'ASC').strip().upper() == "ASC" else "DESC"
+        limit           = max(0, _parse_int(args.get('limit'), 200))
+        offset          = max(0, _parse_int(args.get('offset'), 0))
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+
+    binds = {
+        "empresa": empresa,
+        "aa": aa,
+        "cod_tipo_inv": cod_tipo_inv,
+        "estado_producto": estado_producto,
+        "cod_item_cat": cod_item_cat,
+    }
+
+    in_placeholders_stock = []
+    for i, b in enumerate(bodegas):
+        key = f"b{i}"
+        in_placeholders_stock.append(f":{key}")
+        binds[key] = b
+    bodegas_in_stock = ",".join(in_placeholders_stock)
+
+    in_placeholders_resv = []
+    for i, b in enumerate(bodegas):
+        key = f"rb{i}"
+        in_placeholders_resv.append(f":{key}")
+        binds[key] = b
+    bodegas_in_resv = ",".join(in_placeholders_resv)
+
+    if cat_match == "prefix":
+        cat_filter = "d.cod_item_cat LIKE :cod_item_cat_like"
+        binds["cod_item_cat_like"] = f"{cod_item_cat}%"
+    else:
+        cat_filter = "d.cod_item_cat = :cod_item_cat"
+
+    where_extra = []
+    if cod_producto_f:
+        where_extra.append("d.cod_producto = :cod_producto_f")
+        binds["cod_producto_f"] = cod_producto_f
+    if nombre_like:
+        where_extra.append("UPPER(d.nombre) LIKE :nombre_like")
+        binds["nombre_like"] = f"%{nombre_like.upper()}%"
+
+    where_extra_sql = f" AND {' AND '.join(where_extra)}" if where_extra else ""
+
+    only_positive_sql = "AND NVL(i.stock_total,0) > 0"   if only_positive == 1 else ""
+    RESERVA_BODEGA_FIELD = "r.cod_bodega"
+
+    base_sql = f"""
+        /* CTE de inventario total por producto */
+        WITH inv AS (
+            SELECT
+                s.empresa,
+                s.cod_producto,
+                SUM(s.cantidad) AS stock_total
+            FROM st_inventario s
+            WHERE s.empresa = :empresa
+              AND s.cod_bodega IN ({bodegas_in_stock})
+              AND s.aa = :aa
+              AND s.cod_tipo_inventario = :cod_tipo_inv
+              AND s.cod_estado_producto = :estado_producto
+            GROUP BY s.empresa, s.cod_producto
+        ),
+        /* CTE de reservas activas por producto (remanente = cantidad - NVL(cantidad_utilizada,0)) */
+        resv AS (
+            SELECT
+                r.empresa,
+                r.cod_producto,
+                SUM(GREATEST(r.cantidad - NVL(r.cantidad_utilizada,0), 0)) AS reservado_activo
+            FROM ST_RESERVA_PRODUCTO r
+            WHERE r.empresa = :empresa
+              AND NVL(r.es_inactivo, 0) = 0
+              AND r.fecha_fin IS NOT NULL
+              AND r.fecha_fin > SYSDATE
+              AND {RESERVA_BODEGA_FIELD} IN ({bodegas_in_resv})
+            GROUP BY r.empresa, r.cod_producto
+        )
+        SELECT
+            i.cod_producto                  AS COD_PRODUCTO,
+            d.nombre                        AS NOMBRE,
+            d.cod_item_cat                  AS COD_ITEM_CAT,
+            NVL(i.stock_total, 0)           AS STOCK_TOTAL,
+            NVL(r.reservado_activo, 0)      AS RESERVADO_ACTIVO,
+            (NVL(i.stock_total,0) - NVL(r.reservado_activo,0)) AS DISPONIBLE
+        FROM inv i
+        JOIN producto d
+          ON d.empresa = i.empresa
+         AND d.cod_producto = i.cod_producto
+        LEFT JOIN resv r
+          ON r.empresa = i.empresa
+         AND r.cod_producto = i.cod_producto
+        WHERE {cat_filter}
+        {where_extra_sql}
+        {only_positive_sql}
+        ORDER BY {order_by} {order_dir}
+    """
+
+    if limit > 0:
+        binds["min_row"] = offset
+        binds["max_row"] = offset + limit
+        sql = f"""
+            SELECT * FROM (
+                SELECT q.*, ROWNUM rnum
+                FROM (
+                    {base_sql}
+                ) q
+                WHERE ROWNUM <= :max_row
+            )
+            WHERE rnum > :min_row
+        """
+    else:
+        sql = base_sql
+
+    db1 = None
+    cur = None
+    try:
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = db1.cursor()
+        cur.execute(sql, binds)
+        cols = [c[0] for c in cur.description]
+        rows = cur.fetchall()
+        data = [dict(zip(cols, r)) for r in rows]
+        return jsonify(data), 200
+    except cx_Oracle.DatabaseError as e:
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if cur: cur.close()
+        finally:
+            try:
+                if db1: db1.close()
+            except Exception:
+                pass
+
+@bplog.route('/inventario_por_serie', methods=['GET'])
+@jwt_required()
+@cross_origin()
+def inventario_por_serie():
+    args = request.args
+    def _parse_int(v, default=None):
+        if v is None or str(v).strip() == '':
+            return default
+        return int(v)
+
+    def _parse_csv_ints(v, default):
+        if v is None or str(v).strip() == '':
+            return default
+        try:
+            return [int(x.strip()) for x in str(v).split(',') if x.strip() != '']
+        except ValueError:
+            raise ValueError("Parámetro 'bodegas' inválido. Use enteros separados por coma.")
+
+    def _parse_bool_01(v, default=0):
+        if v is None or str(v).strip() == '':
+            return default
+        iv = int(v)
+        if iv not in (0, 1):
+            raise ValueError("Parámetro booleano inválido. Use 0 ó 1.")
+        return iv
+
+    try:
+        numero_serie    = (args.get('numero_serie') or '').strip()
+        if not numero_serie:
+            return jsonify({"error": "Falta parámetro: numero_serie"}), 400
+
+        empresa         = _parse_int(args.get('empresa'), 20)
+        bodegas         = _parse_csv_ints(args.get('bodegas'), [5, 1, 25])
+        aa              = _parse_int(args.get('aa'), 0)
+        cod_tipo_inv    = _parse_int(args.get('cod_tipo_inventario'), 1)
+        estado_producto = (args.get('estado_producto') or 'A').strip().upper()
+        reserva_scope   = (args.get('reserva_scope') or 'origen').strip().lower()  # origen|destino
+        only_positive   = _parse_bool_01(args.get('only_positive'), 0)
+
+        reserva_bodega_field = "r.cod_bodega_destino"
+
+        db1 = oracle.connection(getenv("USERORA"), getenv("PASSWORD"))
+        cur = db1.cursor()
+
+        sql_resolver = """
+            SELECT p.cod_producto, d.nombre
+              FROM st_producto_serie p
+              JOIN producto d
+                ON d.empresa = p.empresa
+               AND d.cod_producto = p.cod_producto
+             WHERE p.empresa = :empresa
+               AND p.numero_serie = :numero_serie
+               AND p.cantidad != 0
+        """
+        binds_resolver = {"empresa": empresa, "numero_serie": numero_serie}
+        cur.execute(sql_resolver, binds_resolver)
+        row_prod = cur.fetchone()
+
+        if not row_prod:
+            sql_resolver_alt = """
+                SELECT i.cod_producto, d.nombre
+                  FROM st_inventario_serie i
+                  JOIN producto d
+                    ON d.empresa = i.empresa
+                   AND d.cod_producto = i.cod_producto
+                 WHERE i.empresa = :empresa
+                   AND i.numero_serie = :numero_serie
+            """
+            cur.execute(sql_resolver_alt, binds_resolver)
+            row_prod = cur.fetchone()
+
+        if not row_prod:
+            cur.close(); db1.close()
+            return jsonify({"error": "Serie no encontrada o sin producto asociado", "numero_serie": numero_serie}), 404
+
+        cod_producto, nombre = row_prod[0], row_prod[1]
+
+        def make_in_binds(prefix, values):
+            placeholders = []
+            bindmap = {}
+            for i, val in enumerate(values):
+                k = f"{prefix}{i}"
+                placeholders.append(f":{k}")
+                bindmap[k] = int(val)
+            return ",".join(placeholders), bindmap
+
+        stock_in_sql, stock_bindmap = make_in_binds("sb_", bodegas)
+        resv_in_sql,  resv_bindmap  = make_in_binds("rb_", bodegas)
+
+        base_sql_totales = f"""
+            WITH inv AS (
+                SELECT s.empresa, s.cod_producto, SUM(s.cantidad) AS stock_total
+                  FROM st_inventario s
+                 WHERE s.empresa = :empresa
+                   AND s.cod_bodega IN ({stock_in_sql})
+                   AND s.aa = :aa
+                   AND s.cod_tipo_inventario = :cod_tipo_inv
+                   AND s.cod_estado_producto = :estado_producto
+                   AND s.cod_producto = :cod_producto
+                 GROUP BY s.empresa, s.cod_producto
+            ),
+            resv AS (
+                SELECT r.empresa, r.cod_producto,
+                       SUM(GREATEST(r.cantidad - NVL(r.cantidad_utilizada,0), 0)) AS reservado_activo
+                  FROM st_reserva_producto r
+                 WHERE r.empresa = :empresa
+                   AND r.cod_producto = :cod_producto
+                   AND NVL(r.es_inactivo, 0) = 0
+                   AND r.fecha_fin IS NOT NULL
+                   AND r.fecha_fin > SYSDATE
+                   AND {reserva_bodega_field} IN ({resv_in_sql})
+                 GROUP BY r.empresa, r.cod_producto
+            )
+            SELECT
+                NVL(i.stock_total, 0) AS stock_total,
+                NVL(r.reservado_activo, 0) AS reservado_activo_total,
+                (NVL(i.stock_total,0) - NVL(r.reservado_activo,0)) AS disponible_total
+              FROM inv i
+              FULL OUTER JOIN resv r
+                ON r.empresa = i.empresa
+               AND r.cod_producto = i.cod_producto
+        """
+
+        binds_tot = {
+            "empresa": empresa,
+            "aa": aa,
+            "cod_tipo_inv": cod_tipo_inv,
+            "estado_producto": estado_producto,
+            "cod_producto": cod_producto,
+        }
+        binds_tot.update(stock_bindmap)
+        binds_tot.update(resv_bindmap)
+
+        cur.execute(base_sql_totales, binds_tot)
+        res_tot = cur.fetchone()
+        stock_total     = int(res_tot[0] or 0) if res_tot else 0
+        reservado_total = int(res_tot[1] or 0) if res_tot else 0
+        disponible_total= int(res_tot[2] or 0) if res_tot else 0
+
+        base_sql_resv_bod = f"""
+            SELECT {reserva_bodega_field} AS cod_bodega,
+                   SUM(GREATEST(r.cantidad - NVL(r.cantidad_utilizada,0), 0)) AS reservado_activo
+              FROM st_reserva_producto r
+             WHERE r.empresa = :empresa
+               AND r.cod_producto = :cod_producto
+               AND NVL(r.es_inactivo, 0) = 0
+               AND r.fecha_fin IS NOT NULL
+               AND r.fecha_fin > SYSDATE
+               AND {reserva_bodega_field} IN ({resv_in_sql})
+          GROUP BY {reserva_bodega_field}
+          ORDER BY {reserva_bodega_field}
+        """
+        binds_resv_bod = {
+            "empresa": empresa,
+            "cod_producto": cod_producto,
+            **resv_bindmap
+        }
+        cur.execute(base_sql_resv_bod, binds_resv_bod)
+        reservas_por_bodega = [
+            {"cod_bodega": int(r[0]), "reservado_activo": int(r[1] or 0)}
+            for r in cur.fetchall()
+        ]
+
+        cur.close(); db1.close()
+
+        if only_positive == 1 and disponible_total <= 0:
+            return jsonify({
+                "warning": "Sin disponible en las bodegas indicadas",
+                "empresa": empresa,
+                "numero_serie": numero_serie,
+                "cod_producto": cod_producto,
+                "nombre": nombre,
+                "stock_total": stock_total,
+                "reservado_activo_total": reservado_total,
+                "disponible_total": disponible_total,
+                "reservas_por_bodega": reservas_por_bodega
+            }), 200
+
+        return jsonify({
+            "empresa": empresa,
+            "numero_serie": numero_serie,
+            "cod_producto": cod_producto,
+            "nombre": nombre,
+            "stock_total": stock_total,
+            "reservado_activo_total": reservado_total,
+            "disponible_total": disponible_total,
+            "reservas_por_bodega": reservas_por_bodega
+        }), 200
+
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+    except cx_Oracle.DatabaseError as e:
+        try:
+            if 'cur' in locals() and cur: cur.close()
+        finally:
+            try:
+                if 'db1' in locals() and db1: db1.close()
+            except Exception:
+                pass
+        error, = e.args
+        return jsonify({"error": error.message}), 500
+    except Exception as e:
+        try:
+            if 'cur' in locals() and cur: cur.close()
+        finally:
+            try:
+                if 'db1' in locals() and db1: db1.close()
+            except Exception:
+                pass
+        return jsonify({"error": str(e)}), 500
+
+out_schema_ru = RutaOutSchema(many=True)
+out_many_schema_ru = RutaOutSchema()
+create_schema_ru = RutaCreateSchema()
+update_schema_ru = RutaUpdateSchema()
+
+def map_integrity_error(err: IntegrityError):
+    msg = str(err.orig)
+    if "ORA-00001" in msg:
+        return 409, "Conflicto de clave única."
+    if "ORA-02291" in msg: return 409, "Violación de integridad referencial."
+    if "ORA-02292" in msg: return 409, "No se puede borrar por dependencias referenciales."
+    return 400, "Violación de integridad."
+
+@bplog.route("/rutas", methods=["GET"])
+def list_rutas():
+    try:
+        empresa = request.args.get("empresa", type=int)
+        fid = request.args.get("id", type=str)
+        fnombre = request.args.get("nombre", type=str)
+        page = max(request.args.get("page", default=1, type=int), 1)
+        page_size = min(max(request.args.get("page_size", default=20, type=int), 1), 200)
+    except Exception:
+        return jsonify({"detail": "Parámetros inválidos."}), 400
+
+    q = db.session.query(STRuta)
+    if empresa is not None:
+        q = q.filter(STRuta.empresa == empresa)
+    if fid:
+        q = q.filter(STRuta.id.ilike(f"%{fid}%"))
+    if fnombre:
+        q = q.filter(STRuta.nombre.ilike(f"%{fnombre}%"))
+
+    total = q.count()
+    items = (q.order_by(STRuta.cod_ruta.desc())
+               .offset((page - 1) * page_size)
+               .limit(page_size).all())
+
+    from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
+    def page_link(n):
+        parsed = urlparse(request.url)
+        params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        params["page"] = str(n)
+        params["page_size"] = str(page_size)
+        return urlunparse(parsed._replace(query=urlencode(params, doseq=True)))
+
+    next_link = page_link(page + 1) if page * page_size < total else None
+    prev_link = page_link(page - 1) if page > 1 else None
+
+    return jsonify({
+        "count": total,
+        "next": next_link,
+        "previous": prev_link,
+        "results": out_schema_ru.dump(items)
+    })
+
+@bplog.route("/rutas/<int:empresa>/<int:cod_ruta>", methods=["GET"])
+def get_ruta(empresa: int, cod_ruta: int):
+    obj = db.session.get(STRuta, (cod_ruta, empresa))
+    if not obj:
+        return jsonify({"detail": "No encontrado."}), 404
+    return jsonify(out_many_schema_ru.dump(obj))
+
+@bplog.route("/rutas", methods=["POST"])
+def create_ruta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = create_schema_ru.load(payload)
+        for forbidden in ("cod_ruta", "id"):
+            if forbidden in payload:
+                raise ValidationError({forbidden: ["Este campo no se acepta en creación."]})
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = STRuta(
+        empresa=data["empresa"],
+        nombre=data.get("nombre"),
+    )
+
+    db.session.add(obj)
+    try:
+        db.session.flush()
+
+        obj.id = str(int(obj.cod_ruta))
+
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    location = url_for("routes_log.get_ruta", empresa=int(obj.empresa), cod_ruta=int(obj.cod_ruta), _external=True)
+    return jsonify(out_many_schema_ru.dump(obj)), 201, {"Location": location}
+@bplog.route("/rutas/<int:empresa>/<int:cod_ruta>", methods=["PUT"])
+def update_ruta(empresa: int, cod_ruta: int):
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = update_schema_ru.load(payload)
+        if "empresa" in data and data["empresa"] != empresa:
+            raise ValidationError({"empresa": ["No se permite cambiar la PK en PUT."]})
+        if "cod_ruta" in data and data["cod_ruta"] != cod_ruta:
+            raise ValidationError({"cod_ruta": ["No se permite cambiar la PK en PUT."]})
+        if "id" in payload:
+            raise ValidationError({"id": ["No se permite modificar este campo."]})
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = db.session.get(STRuta, (cod_ruta, empresa))
+    if not obj:
+        return jsonify({"detail": "No encontrado."}), 404
+
+    if "nombre" in data:
+        obj.nombre = data["nombre"]
+
+    try:
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    return jsonify(out_many_schema_ru.dump(obj)), 200
+
+out_schema_dir = DirRutaOutSchema()
+out_many_schema_dir = DirRutaOutSchema(many=True)
+create_schema_dir = DirRutaCreateSchema()
+search_schema_dir = DirRutaSearchSchema()
+detail_schema_dir = DirRutaDetailSchema()
+delete_schema_dir = DirRutaDeleteSchema()
+def fk_exists(sql: str, params: dict) -> bool:
+    return db.session.execute(text(sql), params).first() is not None
+
+def validate_foreign_keys_dir_rutas(data):
+    errors = {}
+    if not fk_exists("SELECT 1 FROM CLIENTE WHERE EMPRESA=:e AND COD_CLIENTE=:c AND ROWNUM=1",
+                     {"e": data["empresa"], "c": data["cod_cliente"]}):
+        errors["cod_cliente"] = ["Cliente no existe para la empresa."]
+    if not fk_exists("""SELECT 1 FROM ST_CLIENTE_DIRECCION_GUIAS
+                        WHERE EMPRESA=:e AND COD_CLIENTE=:c AND COD_DIRECCION=:d AND ROWNUM=1""",
+                     {"e": data["empresa"], "c": data["cod_cliente"], "d": data["cod_direccion"]}):
+        errors["cod_direccion"] = ["Dirección no existe para ese cliente y empresa."]
+    if not fk_exists("SELECT 1 FROM ST_RUTAS WHERE COD_RUTA=:r AND EMPRESA=:e AND ROWNUM=1",
+                     {"r": data["cod_ruta"], "e": data["empresa"]}):
+        errors["cod_ruta"] = ["Ruta no existe para la empresa."]
+    if errors:
+        raise ValidationError(errors)
+
+@bplog.route("/direccion-rutas/search", methods=["POST"])
+def search_dir_rutas():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = search_schema_dir.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    page = max(data.get("page", 1), 1)
+    page_size = min(max(data.get("page_size", 20), 1), 200)
+
+    base_q = db.session.query(STDireccionRuta)
+    if data.get("empresa") is not None:
+        base_q = base_q.filter(STDireccionRuta.empresa == data["empresa"])
+    if data.get("cod_cliente"):
+        base_q = base_q.filter(STDireccionRuta.cod_cliente == data["cod_cliente"])
+    if data.get("cod_ruta") is not None:
+        base_q = base_q.filter(STDireccionRuta.cod_ruta == data["cod_ruta"])
+
+    total = base_q.count()
+
+    c   = aliased(Cliente, name="c")
+    cdg = aliased(STClienteDireccionGuias, name="cdg")
+
+    nombre_cli = func.concat(
+        c.nombre,
+        func.coalesce(func.concat(literal(" "), c.apellido1), literal(""))
+    ).label("nombre_cliente")
+
+    q = (
+        db.session.query(
+            STDireccionRuta,
+            nombre_cli,
+            cdg.nombre.label("nombre_direccion"),
+            cdg.direccion.label("direccion"),
+            cdg.direccion_larga.label("direccion_larga"),
+        )
+        .select_from(STDireccionRuta)
+        .outerjoin(
+            c,
+            and_(
+                c.empresa == STDireccionRuta.empresa,
+                c.cod_cliente == STDireccionRuta.cod_cliente,
+            ),
+        )
+        .outerjoin(
+            cdg,
+            and_(
+                cdg.empresa == STDireccionRuta.empresa,
+                cdg.cod_cliente == STDireccionRuta.cod_cliente,
+                cdg.cod_direccion == STDireccionRuta.cod_direccion,
+            ),
+        )
+        .enable_eagerloads(False)
+    )
+
+    if data.get("empresa") is not None:
+        q = q.filter(STDireccionRuta.empresa == data["empresa"])
+    if data.get("cod_cliente"):
+        q = q.filter(STDireccionRuta.cod_cliente == data["cod_cliente"])
+    if data.get("cod_ruta") is not None:
+        q = q.filter(STDireccionRuta.cod_ruta == data["cod_ruta"])
+
+    rows = (
+        q.order_by(
+            STDireccionRuta.empresa.asc(),
+            STDireccionRuta.cod_cliente.asc(),
+            STDireccionRuta.cod_direccion.asc(),
+            STDireccionRuta.cod_ruta.asc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    results = []
+    for r, nombre_cli, nombre_dir, dir_corta, dir_larga in rows:
+        item = out_schema_dir.dump(r)
+        item.update({
+            "nombre_cliente": nombre_cli,
+            "nombre_direccion": nombre_dir,
+            "direccion": dir_corta,
+            "direccion_larga": dir_larga,
+        })
+        results.append(item)
+
+    next_page = page + 1 if page * page_size < total else None
+    prev_page = page - 1 if page > 1 else None
+
+    return jsonify({
+        "count": total,
+        "next": next_page,
+        "previous": prev_page,
+        "results": results
+    })
+
+@bplog.route("/direccion-rutas/detail", methods=["POST"])
+def detail_dir_ruta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = detail_schema_dir.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = db.session.get(STDireccionRuta, (
+        data["empresa"], data["cod_cliente"], data["cod_direccion"], data["cod_ruta"]
+    ))
+    if not obj:
+        return jsonify({"detail": "No encontrado."}), 404
+    return jsonify(out_schema_dir.dump(obj)), 200
+
+@bplog.route("/direccion-rutas", methods=["POST"])
+def create_dir_ruta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = create_schema_dir.load(payload)
+        validate_foreign_keys_dir_rutas(data)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    existing = db.session.get(STDireccionRuta, (
+        data["empresa"], data["cod_cliente"], data["cod_direccion"], data["cod_ruta"]
+    ))
+    if existing:
+        return jsonify({"detail": "La relación ya existe."}), 409
+
+    obj = STDireccionRuta(**data)
+    db.session.add(obj)
+    try:
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    return jsonify(out_schema_dir.dump(obj)), 201
+
+@bplog.route("/direccion-rutas/delete", methods=["POST"])
+def delete_dir_ruta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = delete_schema_dir.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = db.session.get(STDireccionRuta, (
+        data["empresa"], data["cod_cliente"], data["cod_direccion"], data["cod_ruta"]
+    ))
+    if not obj:
+        return "", 204
+
+    db.session.delete(obj)
+    try:
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    return "", 204
+
+out_schema_t = TRutaOutSchema()
+out_many_schema_t = TRutaOutSchema(many=True)
+create_schema_t = TRutaCreateSchema()
+detail_schema_t = TRutaDetailSchema()
+update_schema_t = TRutaUpdateSchema()
+search_schema_t = TRutaSearchSchema()
+delete_schema_t = TRutaDeleteSchema()
+
+def validate_foreign_keys_t(data):
+    errors = {}
+    if not fk_exists(
+        "SELECT 1 FROM ST_RUTAS WHERE COD_RUTA=:r AND EMPRESA=:e AND ROWNUM=1",
+        {"r": data["cod_ruta"], "e": data["empresa"]}
+    ):
+        errors["cod_ruta"] = ["Ruta no existe para la empresa."]
+    if not fk_exists(
+        "SELECT 1 FROM ST_TRANSPORTISTA WHERE COD_TRANSPORTISTA=:t AND EMPRESA=:e AND ROWNUM=1",
+        {"t": data["cod_transportista"], "e": data["empresa"]}
+    ):
+        errors["cod_transportista"] = ["Transportista no existe para la empresa."]
+    if errors:
+        raise ValidationError(errors)
+
+def validate_unique_transportista_ruta(empresa: int, cod_transportista: str, cod_ruta: int, exclude_codigo: int | None = None):
+
+    base_sql = """
+        SELECT 1
+          FROM ST_TRANSPORTISTA_RUTA
+         WHERE EMPRESA = :e
+           AND COD_TRANSPORTISTA = :t
+           AND COD_RUTA = :r
+    """
+    params = {"e": empresa, "t": cod_transportista, "r": cod_ruta}
+
+    if exclude_codigo is not None:
+        base_sql += " AND CODIGO <> :codigo"
+        params["codigo"] = exclude_codigo
+
+    exists = db.session.execute(text(base_sql + " AND ROWNUM = 1"), params).first() is not None
+    if exists:
+        from marshmallow import ValidationError
+        raise ValidationError({
+            "cod_transportista": [f"Ya existe un vínculo para transportista '{cod_transportista}' con ruta {cod_ruta} en empresa {empresa}."],
+            "cod_ruta": ["Par (cod_transportista, cod_ruta) duplicado."]
+        })
+
+@bplog.route("/transportista-ruta/search", methods=["POST"])
+def search_truta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = search_schema_t.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    page = max(data.get("page", 1), 1)
+    page_size = min(max(data.get("page_size", 20), 1), 200)
+
+    base_q = db.session.query(STTransportistaRuta)
+    if data.get("empresa") is not None:
+        base_q = base_q.filter(STTransportistaRuta.empresa == data["empresa"])
+    if data.get("cod_transportista"):
+        base_q = base_q.filter(STTransportistaRuta.cod_transportista == data["cod_transportista"])
+    if data.get("cod_ruta") is not None:
+        base_q = base_q.filter(STTransportistaRuta.cod_ruta == data["cod_ruta"])
+    total = base_q.count()
+
+    tr = aliased(st_transportistas, name="tr")
+
+    nombre_completo = func.concat(
+        func.concat(tr.apellido1, literal(" ")),
+        tr.nombre
+    ).label("nombre_transportista")
+
+    q = (
+        db.session.query(
+            STTransportistaRuta,
+            nombre_completo,
+        )
+        .select_from(STTransportistaRuta)
+        .outerjoin(
+            tr,
+            and_(
+                tr.empresa == STTransportistaRuta.empresa,
+                tr.cod_transportista == STTransportistaRuta.cod_transportista,
+            ),
+        )
+        .enable_eagerloads(False)
+    )
+
+    if data.get("empresa") is not None:
+        q = q.filter(STTransportistaRuta.empresa == data["empresa"])
+    if data.get("cod_transportista"):
+        q = q.filter(STTransportistaRuta.cod_transportista == data["cod_transportista"])
+    if data.get("cod_ruta") is not None:
+        q = q.filter(STTransportistaRuta.cod_ruta == data["cod_ruta"])
+
+    rows = (
+        q.order_by(
+            STTransportistaRuta.empresa.asc(),
+            STTransportistaRuta.codigo.desc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    results = []
+    for r, nombre_t in rows:
+        item = out_schema_t.dump(r)
+        item.update({
+            "nombre_transportista": nombre_t,
+        })
+        results.append(item)
+
+    return jsonify({
+        "count": total,
+        "next": (page + 1) if page * page_size < total else None,
+        "previous": (page - 1) if page > 1 else None,
+        "results": results
+    })
+
+@bplog.route("/transportista-ruta/detail", methods=["POST"])
+def detail_truta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = detail_schema_t.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = db.session.get(STTransportistaRuta, (data["codigo"], data["empresa"]))
+    if not obj:
+        return jsonify({"detail": "No encontrado."}), 404
+    return jsonify(out_schema_t.dump(obj)), 200
+
+@bplog.route("/transportista-ruta", methods=["POST"])
+def create_truta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        if "codigo" in payload:
+            raise ValidationError({"codigo": ["Este campo no se acepta en creación."]})
+        data = create_schema_t.load(payload)
+        validate_foreign_keys_t(data)
+        validate_unique_transportista_ruta(
+            empresa=data["empresa"],
+            cod_transportista=data["cod_transportista"],
+            cod_ruta=data["cod_ruta"]
+        )
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = STTransportistaRuta(
+        empresa=data["empresa"],
+        cod_transportista=data["cod_transportista"],
+        cod_ruta=data["cod_ruta"],
+    )
+    db.session.add(obj)
+    try:
+        db.session.flush()
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    return jsonify(out_schema_t.dump(obj)), 201
+
+@bplog.route("/transportista-ruta/update", methods=["POST"])
+def update_truta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = update_schema_t.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = db.session.get(STTransportistaRuta, (data["codigo"], data["empresa"]))
+    if not obj:
+        return jsonify({"detail": "No encontrado."}), 404
+
+    fks_to_check = {}
+    if "cod_ruta" in data:
+        fks_to_check["cod_ruta"] = data["cod_ruta"]
+    if "cod_transportista" in data:
+        fks_to_check["cod_transportista"] = data["cod_transportista"]
+    if fks_to_check:
+        validate_foreign_keys_t({**{"empresa": data["empresa"]}, **fks_to_check})
+
+    if "cod_ruta" in data:
+        obj.cod_ruta = data["cod_ruta"]
+    if "cod_transportista" in data:
+        obj.cod_transportista = data["cod_transportista"]
+
+    try:
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    return jsonify(out_schema_t.dump(obj)), 200
+
+@bplog.route("/transportista-ruta/delete", methods=["POST"])
+def delete_truta():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = detail_schema_t.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = db.session.get(STTransportistaRuta, (data["codigo"], data["empresa"]))
+    if not obj:
+        return "", 204
+
+    db.session.delete(obj)
+    try:
+        db.session.commit()
+    except IntegrityError as ie:
+        db.session.rollback()
+        status, detail = map_integrity_error(ie)
+        return jsonify({"detail": detail}), status
+
+    return "", 204
+
+in_schema_d = DespachoSearchIn()
+out_many_d = DespachoRowOut(many=True)
+
+def build_ordering(ordering_param: str | None):
+    if not ordering_param:
+        return "ORDER BY fecha_est_desp DESC, cod_orden DESC"
+    clauses = []
+    for tok in ordering_param.split(","):
+        tok = tok.strip()
+        desc = tok.startswith("-")
+        key = tok.lstrip("-")
+        if key not in ALLOWED_ORDERING_FIELDS:
+            continue
+        direction = "DESC" if desc else "ASC"
+        clauses.append(f"{key} {direction}")
+    return "ORDER BY " + ", ".join(clauses) if clauses else "ORDER BY fecha_est_desp DESC, cod_orden DESC"
+
+@bplog.route("/despachos/search", methods=["POST"])
+def search_despachos():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = in_schema_d.load(payload)
+        in_schema_d.validate_ordering(data.get("ordering"))
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    base_select = """
+        SELECT
+            *
+        FROM VT_DESPACHO_FINAL
+    """
+
+    where = ["empresa = :empresa"]
+    params = {"empresa": data["empresa"]}
+
+    if data.get("cod_ruta") is not None:
+        where.append("cod_ruta = :cod_ruta")
+        params["cod_ruta"] = data["cod_ruta"]
+    if data.get("cod_tipo_pedido"):
+        where.append("cod_tipo_pedido = :cod_tipo_pedido")
+        params["cod_tipo_pedido"] = data["cod_tipo_pedido"]
+    if data.get("cod_pedido") is not None:
+        where.append("cod_pedido = :cod_pedido")
+        params["cod_pedido"] = data["cod_pedido"]
+    if data.get("cod_tipo_orden"):
+        where.append("cod_tipo_orden = :cod_tipo_orden")
+        params["cod_tipo_orden"] = data["cod_tipo_orden"]
+    if data.get("cod_orden") is not None:
+        where.append("cod_orden = :cod_orden")
+        params["cod_orden"] = data["cod_orden"]
+    if data.get("cod_cliente"):
+        where.append("ruc_cliente = :cod_cliente")
+        params["cod_cliente"] = data["cod_cliente"]
+    if data.get("cod_producto"):
+        where.append("pr.cod_producto = :cod_producto")
+        params["cod_producto"] = data["cod_producto"]
+    if data.get("cadena"):
+        where.append("CADENA = :cadena")
+        params["cadena"] = data["cadena"]
+    if data.get("fac_con"):
+        where.append("FAC_CON = :fac_con")
+        params["fac_con"] = data["fac_con"]
+    if data.get("numero_serie"):
+        where.append("numero_serie = :numero_serie")
+        params["numero_serie"] = data["numero_serie"]
+    if data.get("modelo"):
+        where.append("p.modelo = :modelo")
+        params["modelo"] = data["modelo"]
+    if data.get("transportista"):
+        where.append("UPPER(transportista) LIKE :transportista")
+        params["transportista"] = f"%{data['transportista'].upper()}%"
+    if data.get("destino"):
+        where.append("UPPER(DESTINO) LIKE :destino")
+        params["destino"] = f"%{data['destino'].upper()}%"
+    if data.get("ruta"):
+        where.append("UPPER(ruta) LIKE :ruta")
+        params["ruta"] = f"%{data['ruta'].upper()}%"
+    if data.get("bod_destino"):
+        where.append("UPPER(bod_destino) LIKE :bod_destino")
+        params["bod_destino"] = f"%{data['bod_destino'].upper()}%"
+    if data.get("en_despacho") is not None:
+        where.append("NVL(en_despacho,0) = :en_despacho")
+        params["en_despacho"] = data["en_despacho"]
+    if data.get("despachada") is not None:
+        where.append("NVL(despachada,0) = :despachada")
+        params["despachada"] = data["despachada"]
+    date_field = data.get("date_field", "fecha_est_desp")
+    if data.get("fecha_desde"):
+        where.append(f"{date_field} >= :fecha_desde")
+        params["fecha_desde"] = data["fecha_desde"]
+    if data.get("fecha_hasta"):
+        where.append(f"{date_field} <= :fecha_hasta")
+        params["fecha_hasta"] = data["fecha_hasta"]
+
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+
+    order_sql = build_ordering(data.get("ordering"))
+
+    page = max(data.get("page", 1), 1)
+    page_size = min(max(data.get("page_size", 20), 1), 200)
+    offset = (page - 1) * page_size
+
+    count_sql = text(f"SELECT COUNT(1) AS cnt FROM VT_DESPACHO_FINAL {where_sql}")
+    total = db.session.execute(count_sql, params).scalar() or 0
+
+    data_sql = text(f"""
+        SELECT * FROM (
+            SELECT inner_q.*, ROWNUM AS rn FROM (
+                {base_select}
+                {where_sql}
+                {order_sql}
+            ) inner_q
+            WHERE ROWNUM <= :rownum_max
+        ) 
+        WHERE rn > :rownum_min
+    """)
+    rownum_max = offset + page_size
+    rownum_min = offset
+    rows = db.session.execute(data_sql, {**params, "rownum_max": rownum_max, "rownum_min": rownum_min}).mappings().all()
+
+    next_page = page + 1 if page * page_size < total else None
+    prev_page = page - 1 if page > 1 else None
+
+    return jsonify({
+        "count": int(total),
+        "next": next_page,
+        "previous": prev_page,
+        "results": out_many_d.dump(rows)
+    }), 200
+
+create_schema_cde = CDECreateSchema()
+update_schema_cde = CDEUpdateSchema()
+query_schema_cde  = CDEQuerySchema()
+out_schema_cde    = CDEQuerySchema()
+out_many_cde      = CDEOutSchema(many=True)
+
+@bplog.route("/cdespacho-entrega", methods=["POST"])
+def cde_create():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = create_schema_cde.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    if data.get("cde_codigo") is not None:
+        exists = db.session.query(STCDespachoEntrega).filter_by(
+            empresa=data["empresa"], cde_codigo=data["cde_codigo"]
+        ).first()
+        if exists:
+            return jsonify({"detail": "Registro ya existe (PK duplicada)."}), 409
+
+    obj = STCDespachoEntrega(**data)
+    db.session.add(obj)
+    db.session.commit()
+
+    return jsonify(out_schema_cde.dump(obj)), 201
+@bplog.route("/cdespacho-entrega/<int:empresa>/<int:cde_codigo>", methods=["PUT", "PATCH"])
+def cde_update(empresa, cde_codigo):
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = update_schema_cde.load(payload, partial=True)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = db.session.query(STCDespachoEntrega).filter_by(
+        empresa=empresa, cde_codigo=cde_codigo
+    ).first()
+
+    if not obj:
+        return jsonify({"detail": "No encontrado."}), 404
+
+    for k, v in data.items():
+        setattr(obj, k, v)
+
+    db.session.commit()
+    return jsonify(out_schema_cde.dump(obj)), 200
+
+
+@bplog.route("/cdespacho-entrega/search", methods=["POST"])
+def cde_search():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = query_schema_cde.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    page = max(data.get("page", 1), 1)
+    page_size = min(max(data.get("page_size", 20), 1), 200)
+
+    base_q = db.session.query(STCDespachoEntrega)
+    if data.get("empresa") is not None:
+        base_q = base_q.filter(STCDespachoEntrega.empresa == data["empresa"])
+    if data.get("cde_codigo") is not None:
+        base_q = base_q.filter(STCDespachoEntrega.cde_codigo == data["cde_codigo"])
+    if data.get("cod_ruta") is not None:
+        base_q = base_q.filter(STCDespachoEntrega.cod_ruta == data["cod_ruta"])
+    if data.get("cod_persona"):
+        base_q = base_q.filter(STCDespachoEntrega.cod_persona == data["cod_persona"])
+    if data.get("cod_tipo_persona"):
+        base_q = base_q.filter(STCDespachoEntrega.cod_tipo_persona == data["cod_tipo_persona"])
+    if data.get("cod_transportista"):
+        base_q = base_q.filter(STCDespachoEntrega.cod_transportista == data["cod_transportista"])
+    if data.get("finalizado") is not None:
+        base_q = base_q.filter(STCDespachoEntrega.finalizado == data["finalizado"])
+
+    total = base_q.count()
+
+    p  = aliased(persona, name="p")
+    r  = aliased(STRuta, name="r")
+    tr = aliased(st_transportistas, name="tr")
+
+    nombre_persona = p.nombre.label("nombre_persona")
+
+    nombre_transportista = func.concat(
+        func.coalesce(tr.apellido1, literal("")),
+        func.coalesce(func.concat(literal(" "), tr.nombre), literal(""))
+    ).label("nombre_transportista")
+
+    nombre_ruta = (r.nombre).label("nombre_ruta")
+
+    q = (
+        db.session.query(
+            STCDespachoEntrega,
+            nombre_persona,
+            nombre_ruta,
+            nombre_transportista,
+        )
+        .select_from(STCDespachoEntrega)
+        .outerjoin(
+            p,
+            and_(
+                p.cod_persona == STCDespachoEntrega.cod_persona,
+                p.cod_tipo_persona == STCDespachoEntrega.cod_tipo_persona,
+                p.empresa == STCDespachoEntrega.empresa
+            ),
+        )
+        .outerjoin(
+            r,
+            and_(
+                r.cod_ruta == STCDespachoEntrega.cod_ruta,
+                r.empresa == STCDespachoEntrega.empresa,
+            ),
+        )
+        .outerjoin(
+            tr,
+            and_(
+                tr.cod_transportista == STCDespachoEntrega.cod_transportista,
+                tr.empresa == STCDespachoEntrega.empresa,
+            ),
+        )
+        .enable_eagerloads(False)
+    )
+    if data.get("empresa") is not None:
+        q = q.filter(STCDespachoEntrega.empresa == data["empresa"])
+    if data.get("cde_codigo") is not None:
+        q = q.filter(STCDespachoEntrega.cde_codigo == data["cde_codigo"])
+    if data.get("cod_ruta") is not None:
+        q = q.filter(STCDespachoEntrega.cod_ruta == data["cod_ruta"])
+    if data.get("cod_persona"):
+        q = q.filter(STCDespachoEntrega.cod_persona == data["cod_persona"])
+    if data.get("cod_tipo_persona"):
+        q = q.filter(STCDespachoEntrega.cod_tipo_persona == data["cod_tipo_persona"])
+    if data.get("cod_transportista"):
+        q = q.filter(STCDespachoEntrega.cod_transportista == data["cod_transportista"])
+    if data.get("finalizado") is not None:
+        q = q.filter(STCDespachoEntrega.finalizado == data["finalizado"])
+
+    rows = (
+        q.order_by(
+            STCDespachoEntrega.empresa.asc(),
+            STCDespachoEntrega.cde_codigo.desc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    results = []
+    for obj, nom_persona, nom_ruta, nom_trans in rows:
+        base = out_schema_cde.dump(obj)
+        base.update({
+            "nombre_persona": nom_persona,
+            "nombre_ruta": nom_ruta,
+            "nombre_transportista": nom_trans,
+        })
+        results.append(base)
+
+    return jsonify({
+        "count": total,
+        "next": (page + 1) if page * page_size < total else None,
+        "previous": (page - 1) if page > 1 else None,
+        "results": results
+    })
+
+dde_create_schema = DDECreateSchema()
+dde_out_schema = DDEOutSchema()
+dde_out_many_schema = DDEOutSchema(many=True)
+dde_update_schema = DDEUpdateSchema()
+dde_list_body_schema = DDEListBodySchema()
+
+@bplog.route("/ddespacho-entrega", methods=["POST"])
+def dde_create():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = dde_create_schema.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    parent = db.session.query(STCDespachoEntrega).filter_by(
+        empresa=data["empresa"], cde_codigo=data["cde_codigo"]
+    ).first()
+    if parent is None:
+        return jsonify({"detail": "Cabecera inexistente (CDE_CODIGO, EMPRESA)."}), 422
+
+    obj = STDDespachoEntrega(**data)
+    db.session.add(obj)
+    db.session.flush()
+    db.session.refresh(obj)
+    db.session.commit()
+
+    return jsonify(dde_out_schema.dump(obj)), 201
+
+@bplog.route("/ddespacho-entrega/list", methods=["POST"])
+def dde_list_body():
+    payload = request.get_json(silent=True) or {}
+    try:
+        params = dde_list_body_schema.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    empresa    = params["empresa"]
+    cde_codigo = params["cde_codigo"]
+    page       = params["page"]
+    per_page   = params["per_page"]
+
+    query = (db.session.query(STDDespachoEntrega)
+             .filter(STDDespachoEntrega.empresa == empresa,
+                     STDDespachoEntrega.cde_codigo == cde_codigo)
+             .order_by(STDDespachoEntrega.secuencia.asc()))
+
+    items = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    return jsonify({
+        "page": page,
+        "per_page": per_page,
+        "total": items.total,
+        "pages": items.pages,
+        "data": dde_out_many_schema.dump(items.items)
+    }), 200
+
+@bplog.route("/ddespacho-entrega/<int:empresa>/<int:cde_codigo>/<int:secuencia>", methods=["PUT", "PATCH"])
+def dde_update(empresa: int, cde_codigo: int, secuencia: int):
+    payload = request.get_json(silent=True) or {}
+    if not payload:
+        return jsonify({"detail": "Body JSON requerido."}), 400
+    try:
+        data = dde_update_schema.load(payload, partial=(request.method == "PATCH"))
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    if request.method == "PUT":
+        campos_editables = {"cod_ddespacho", "cod_producto", "numero_serie", "fecha", "observacion"}
+        if not (set(data.keys()) & campos_editables):
+            return jsonify({"detail": "PUT requiere al menos un campo editable."}), 400
+
+    obj = (db.session.query(STDDespachoEntrega)
+           .filter_by(empresa=empresa, cde_codigo=cde_codigo, secuencia=secuencia)
+           .first())
+    if obj is None:
+        return jsonify({"detail": "Detalle no encontrado."}), 404
+
+    if "cod_ddespacho" in data and data["cod_ddespacho"] is not None:
+        exists_dd = (db.session.query(STDDespacho)
+                     .filter_by(empresa=empresa, cod_ddespacho=data["cod_ddespacho"])
+                     .first())
+        if exists_dd is None:
+            return jsonify({"detail": "COD_DDESPACHO no existe para la EMPRESA indicada."}), 422
+
+    for field in ("cod_ddespacho", "cod_producto", "numero_serie", "fecha", "observacion"):
+        if field in data:
+            setattr(obj, field, data[field])
+
+    db.session.commit()
+
+    return jsonify(dde_out_schema.dump(obj)), 200
+
+@bplog.route("/ddespacho-entrega/<int:empresa>/<int:cde_codigo>/<int:secuencia>", methods=["DELETE"])
+def dde_delete(empresa: int, cde_codigo: int, secuencia: int):
+    obj = (db.session.query(STDDespachoEntrega)
+           .filter_by(empresa=empresa, cde_codigo=cde_codigo, secuencia=secuencia)
+           .first())
+    if obj is None:
+        return jsonify({"detail": "Detalle no encontrado."}), 404
+    try:
+        db.session.delete(obj)
+        db.session.commit()
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({
+            "detail": "Conflicto de integridad al eliminar (posible referencia en otra tabla).",
+            "error": str(e.orig)
+        }), 409
+    return jsonify({"detail": "Eliminado"}), 200
+
+@bplog.route("/clientes_con_direcciones", methods=["GET"])
+def clientes_con_direcciones():
+
+    try:
+        page = max(int(request.args.get("page", 1)), 1)
+    except Exception:
+        page = 1
+
+    try:
+        page_size = int(request.args.get("page_size", 20))
+        page_size = min(max(page_size, 1), 200)
+    except Exception:
+        page_size = 20
+
+    empresa = request.args.get("empresa", type=int)
+    cod_cliente_like = (request.args.get("cod_cliente_like") or "").strip()
+    nombre_like = (request.args.get("nombre_like") or "").strip()
+
+    C = aliased(Cliente, name="c")
+    CDG = aliased(STClienteDireccionGuias, name="cdg")
+
+    nombre_cli = func.concat(
+        C.nombre,
+        func.coalesce(func.concat(literal(" "), C.apellido1), literal(""))
+    ).label("nombre_cliente")
+
+    exists_dir_expr = (
+        select(literal(1))
+        .select_from(CDG)
+        .where(
+            CDG.empresa == C.empresa,
+            CDG.cod_cliente == C.cod_cliente,
+        )
+        .exists()
+    )
+
+    q = (
+        db.session.query(
+            C.empresa.label("empresa"),
+            C.cod_cliente.label("cod_cliente"),
+            nombre_cli
+        )
+        .filter(exists_dir_expr)
+    )
+
+    if empresa is not None:
+        q = q.filter(C.empresa == empresa)
+
+    if cod_cliente_like:
+        q = q.filter(func.lower(C.cod_cliente).like(f"%{cod_cliente_like.lower()}%"))
+
+    if nombre_like:
+        q = q.filter(
+            func.lower(
+                func.concat(
+                    func.concat(C.nombre, literal(" ")),
+                    func.coalesce(C.apellido1, literal(""))
+                )
+            ).like(f"%{nombre_like.lower()}%")
+        )
+
+    total = q.count()
+
+    rows = (
+        q.order_by(C.empresa.asc(), C.cod_cliente.asc())
+         .offset((page - 1) * page_size)
+         .limit(page_size)
+         .all()
+    )
+
+    results = [
+        {
+            "empresa": r.empresa,
+            "cod_cliente": r.cod_cliente,
+            "nombre_cliente": r.nombre_cliente
+        }
+        for r in rows
+    ]
+
+    next_page = page + 1 if page * page_size < total else None
+    prev_page = page - 1 if page > 1 else None
+
+    return jsonify({
+        "count": total,
+        "next": next_page,
+        "previous": prev_page,
+        "results": results
+    }), 200
+
+@bplog.route("/clientes_direcciones", methods=["GET"])
+def direcciones_por_cliente():
+    cod_cliente = (request.args.get("cod_cliente") or "").strip()
+    if not cod_cliente:
+        return jsonify({"detail": "El parámetro 'cod_cliente' es requerido."}), 400
+    empresa = request.args.get("empresa", type=int)
+    try:
+        page = max(int(request.args.get("page", 1)), 1)
+    except Exception:
+        page = 1
+
+    try:
+        page_size = int(request.args.get("page_size", 50))
+        page_size = min(max(page_size, 1), 500)
+    except Exception:
+        page_size = 50
+
+    CDG = aliased(STClienteDireccionGuias, name="cdg")
+
+    q = db.session.query(
+        CDG.cod_direccion.label("cod_direccion"),
+        CDG.direccion.label("direccion"),
+        CDG.ciudad.label("ciudad"),
+    ).filter(CDG.cod_cliente == cod_cliente)
+
+    if empresa is not None:
+        q = q.filter(CDG.empresa == empresa)
+    total = q.count()
+    rows = (
+        q.order_by(CDG.empresa.asc(), CDG.cod_cliente.asc(), CDG.cod_direccion.asc())
+         .offset((page - 1) * page_size)
+         .limit(page_size)
+         .all()
+    )
+    results = [
+        {
+            "cod_direccion": r.cod_direccion,
+            "direccion": r.direccion,
+            "ciudad": r.ciudad,
+        }
+        for r in rows
+    ]
+    next_page = page + 1 if page * page_size < total else None
+    prev_page = page - 1 if page > 1 else None
+
+    return jsonify({
+        "count": total,
+        "next": next_page,
+        "previous": prev_page,
+        "results": results
+    }), 200
+
+#############################################GENERAR GUIAS FINAL##############################################
+
+PROC_FQN = "STOCK.KS_DESPACHOS.GENERAR_GUIAS_FINALES"
+def call_generar_guias_finales(empresa: int, despacho: int) -> str:
+    empresa = int(empresa)
+    despacho = int(despacho)
+    stmt = text(f"""
+    BEGIN
+      {PROC_FQN}(:p_emp, :p_desp, :p_out);
+    END;
+    """).bindparams(
+        bindparam("p_emp", type_=satypes.Integer),
+        bindparam("p_desp", type_=satypes.Integer),
+        outparam("p_out", satypes.String(length=4000))
+    )
+    result = db.session.execute(stmt, {"p_emp": empresa, "p_desp": despacho})
+    out_raw = result.out_parameters.get("p_out") or ""
+    db.session.commit()
+    return out_raw
+
+
+def call_generar_guias_finales_clob(empresa: int, despacho: int) -> str:
+    empresa = int(empresa)
+    despacho = int(despacho)
+
+    stmt = text(f"""
+    BEGIN
+      {PROC_FQN}(:p_emp, :p_desp, :p_out);
+    END;
+    """).bindparams(
+        bindparam("p_emp", type_=satypes.Integer),
+        bindparam("p_desp", type_=satypes.Integer),
+        outparam("p_out", CLOB())
+
+    )
+
+    result = db.session.execute(stmt, {"p_emp": empresa, "p_desp": despacho})
+    clob = result.out_parameters.get("p_out")
+    out_raw = clob.read() if clob is not None else ""
+
+    db.session.commit()
+    return out_raw
+
+bp_desp = Blueprint("despachos", __name__)
+
+gen_guias_in_schema = GenGuiasSchema()
+
+@bplog.route("/despachos/generar-guias", methods=["POST"])
+def generar_guias():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = gen_guias_in_schema.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    empresa  = data["empresa"]
+    despacho = data["despacho"]
+
+    try:
+        raw_out = call_generar_guias_finales(empresa, despacho)
+        guias = [g for g in (raw_out or "").split(";") if g]
+
+        return jsonify({
+            "empresa": empresa,
+            "despacho": despacho,
+            "guias": guias,
+            "out_raw": raw_out or ""
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "detail": "Error al generar guías.",
+            "error": str(e)
+        }), 500
+
+create_in  = TGUVCreateSchema()
+search_in  = TGUVSearchSchema()
+update_in  = TGUVUpdateSchema()
+out_one    = TGUVOutSchema()
+out_many_in   = TGUVOutSchema(many=True)
+
+# Crear
+@bplog.route("/usuarios-vend", methods=["POST"])
+def tguv_create():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = create_in.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    obj = TGUsuarioVend(**data)
+    db.session.add(obj)
+    try:
+        db.session.commit()
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"detail": "Conflicto de integridad.", "error": str(e.orig)}), 409
+
+
+
+    return jsonify(out_one.dump(obj)), 201
+
+@bplog.route("/usuarios-vend/search", methods=["POST"])
+def tguv_search():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = search_in.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    qry = db.session.query(TGUsuarioVend)
+
+    if "empresa" in data:
+        qry = qry.filter(TGUsuarioVend.empresa == data["empresa"])
+    if "cod_agencia" in data:
+        qry = qry.filter(TGUsuarioVend.cod_agencia == data["cod_agencia"])
+    if "cod_tipo_persona" in data:
+        qry = qry.filter(TGUsuarioVend.cod_tipo_persona == data["cod_tipo_persona"])
+    if "cod_persona" in data:
+        qry = qry.filter(TGUsuarioVend.cod_persona == data["cod_persona"])
+    if "usuario_oracle" in data:
+        qry = qry.filter(TGUsuarioVend.usuario_oracle == data["usuario_oracle"])
+
+    if "q" in data and data["q"]:
+        q = data["q"].upper()
+        qry = qry.filter(or_(
+            func.upper(TGUsuarioVend.usuario_oracle).like(f"%{q}%"),
+            func.upper(TGUsuarioVend.cod_persona).like(f"%{q}%")
+        ))
+
+    allowed_map = {
+        "empresa": TGUsuarioVend.empresa,
+        "cod_agencia": TGUsuarioVend.cod_agencia,
+        "cod_tipo_persona": TGUsuarioVend.cod_tipo_persona,
+        "cod_persona": TGUsuarioVend.cod_persona,
+        "usuario_oracle": TGUsuarioVend.usuario_oracle,
+    }
+    ordering = build_ordering_in(allowed_map, data.get("ordering", []))
+    for ob in ordering:
+        qry = qry.order_by(ob)
+
+    page = data.get("page", 1)
+    page_size = data.get("page_size", 20)
+    items = qry.paginate(page=page, per_page=page_size, error_out=False)
+
+    return jsonify({
+        "page": page,
+        "per_page": page_size,
+        "total": items.total,
+        "pages": items.pages,
+        "data": out_many_in.dump(items.items)
+    }), 200
+
+@bplog.route(
+    "/usuarios-vend/<string:cod_persona>/<string:cod_tipo_persona>/<int:cod_agencia>/<int:empresa>/<string:usuario_oracle>",
+    methods=["PUT","PATCH"]
+)
+def tguv_update(cod_persona, cod_tipo_persona, cod_agencia, empresa, usuario_oracle):
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = update_in.load(payload)
+        update_in.validate_has_changes(data)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    current = (db.session.query(TGUsuarioVend)
+               .filter_by(cod_persona=cod_persona,
+                          cod_tipo_persona=cod_tipo_persona,
+                          cod_agencia=cod_agencia,
+                          empresa=empresa,
+                          usuario_oracle=usuario_oracle)
+               .first())
+    if current is None:
+        return jsonify({"detail": "Registro no encontrado."}), 404
+
+    new_obj = TGUsuarioVend(
+        cod_persona      = data.get("new_cod_persona", current.cod_persona),
+        cod_tipo_persona = data.get("new_cod_tipo_persona", current.cod_tipo_persona),
+        cod_agencia      = data.get("new_cod_agencia", current.cod_agencia),
+        empresa          = data.get("new_empresa", current.empresa),
+        usuario_oracle   = data.get("new_usuario_oracle", current.usuario_oracle),
+    )
+
+    if (new_obj.cod_persona == current.cod_persona and
+        new_obj.cod_tipo_persona == current.cod_tipo_persona and
+        new_obj.cod_agencia == current.cod_agencia and
+        new_obj.empresa == current.empresa and
+        new_obj.usuario_oracle == current.usuario_oracle):
+        return jsonify(out_one.dump(current)), 200
+
+    try:
+        db.session.delete(current)
+        db.session.flush()
+        db.session.add(new_obj)
+        db.session.commit()
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"detail": "Conflicto de integridad.", "error": str(e.orig)}), 409
+
+    return jsonify(out_one.dump(new_obj)), 200
+
+cdc_update_schema = CDCUpdateSchema()
+cdc_out_schema = CDCOutSchema()
+d_desp_update_schema = DDespachoUpdateSchema()
+@bplog.route("/cdespacho/<int:empresa>/<int:cod_despacho>", methods=["PUT","PATCH"])
+def cdespacho_update(empresa: int, cod_despacho: int):
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = cdc_update_schema.load(payload, partial=(request.method == "PATCH"))
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    if request.method == "PUT" and not CDCUpdateSchema.require_any_editable(data):
+        return jsonify({"detail": "PUT requiere al menos un campo editable."}), 400
+
+    obj = (db.session.query(STCDespacho)
+           .filter_by(empresa=empresa, cod_despacho=cod_despacho)
+           .first())
+    if obj is None:
+        return jsonify({"detail": "Registro no encontrado."}), 404
+
+    for field in (
+        "cod_pedido","cod_tipo_pedido","cod_orden","cod_tipo_orden","cod_producto",
+        "fecha_agrega","fecha_est_desp","fecha_entrega","usr_agrega","bodega_ini",
+        "bodega_destino","cod_cliente","cod_ruta","cod_transportista","en_despacho",
+        "es_despachada","secuencia","cod_direccion_cli"
+    ):
+        if field in data:
+            setattr(obj, field, data[field])
+
+    try:
+        db.session.commit()
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"detail": "Conflicto de integridad.", "error": str(e.orig)}), 409
+
+    return jsonify(cdc_out_schema.dump(obj)), 200
+@bplog.route("/ddespacho/<int:empresa>/<int:cod_despacho>/<int:cod_ddespacho>", methods=["PUT", "PATCH"])
+def ddespacho_update(empresa: int, cod_despacho: int, cod_ddespacho: int):
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = d_desp_update_schema.load(payload, partial=(request.method == "PATCH"))
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    if request.method == "PUT" and not DDespachoUpdateSchema.require_any_editable(data):
+        return jsonify({"detail": "PUT requiere al menos un campo editable."}), 400
+
+    exists_header = (db.session.query(STCDespacho)
+                     .filter_by(empresa=empresa, cod_despacho=cod_despacho)
+                     .first())
+    if exists_header is None:
+        return jsonify({"detail": "Cabecera ST_CDESPACHO no existe para (empresa, cod_despacho)."}), 404
+
+    obj = (db.session.query(STDDespacho)
+           .filter_by(empresa=empresa, cod_ddespacho=cod_ddespacho, cod_despacho=cod_despacho)
+           .first())
+
+    if obj is None:
+        alt = (db.session.query(STDDespacho)
+               .filter_by(empresa=empresa, cod_ddespacho=cod_ddespacho)
+               .first())
+        if alt is not None:
+            return jsonify({"detail": "El detalle existe pero está asociado a otro COD_DESPACHO."}), 409
+        return jsonify({"detail": "Detalle no encontrado."}), 404
+
+    if "cod_despacho" in data and data["cod_despacho"] is not None:
+        if data["cod_despacho"] != cod_despacho:
+            return jsonify({"detail": "cod_despacho del body debe coincidir con la ruta."}), 400
+        data.pop("cod_despacho", None)
+
+    for field in (
+        "cod_producto","numero_serie","fecha_despacho","usuario_despacha",
+        "cod_comprobante","tipo_comprobante","en_despacho","despachada",
+        "cod_comprobante_gui","tipo_comprobante_gui","cod_guia_des","cod_tipo_guia_des","fecha_entrega","observacion_entrega"
+    ):
+        if field in data:
+            setattr(obj, field, data[field])
+
+    try:
+        db.session.commit()
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"detail": "Conflicto de integridad.", "error": str(e.orig)}), 409
+
+    return jsonify({
+        "empresa": obj.empresa,
+        "cod_despacho": obj.cod_despacho,
+        "cod_ddespacho": obj.cod_ddespacho,
+        "cod_producto": obj.cod_producto,
+        "numero_serie": obj.numero_serie,
+        "fecha_despacho": obj.fecha_despacho.isoformat() if obj.fecha_despacho else None,
+        "usuario_despacha": obj.usuario_despacha,
+        "cod_comprobante": obj.cod_comprobante,
+        "tipo_comprobante": obj.tipo_comprobante,
+        "en_despacho": obj.en_despacho,
+        "despachada": obj.despachada,
+        "cod_comprobante_gui": obj.cod_comprobante_gui,
+        "tipo_comprobante_gui": obj.tipo_comprobante_gui,
+        "cod_guia_des": obj.cod_guia_des,
+        "cod_tipo_guia_des": obj.cod_tipo_guia_des,
+        "fecha_entrega": obj.fecha_entrega,
+        "observacion_entrega": obj.observacion_entrega
+    }), 200
+
+search_in_cdg = STClienteDireccionGuiasSearchIn()
+out_many_cdg = STClienteDireccionGuiasOut(many=True)
+
+def build_ordering_in_cdg(allowed_map: dict, ordering_params: list[str]):
+    if not ordering_params:
+        # Orden por defecto PK compuesta
+        return [asc(allowed_map["empresa"]), asc(allowed_map["cod_cliente"]), asc(allowed_map["cod_direccion"])]
+
+    result = []
+    for raw in ordering_params:
+        if not raw:
+            continue
+        direction = asc
+        name = raw
+        if raw.startswith("-"):
+            direction = desc
+            name = raw[1:]
+        col = allowed_map.get(name)
+        if not col:
+            # Ignora columnas no permitidas para evitar SQL injection / errores
+            continue
+        result.append(direction(col))
+    return result
+
+@bplog.route("/cliente-direccion-guias/search", methods=["POST"])
+def cdg_search():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = search_in_cdg.load(payload)
+    except ValidationError as err:
+        return jsonify({"detail": "Datos inválidos.", "errors": err.messages}), 400
+
+    qry = db.session.query(STClienteDireccionGuias)
+
+    # Filtros exactos
+    if "empresa" in data:
+        qry = qry.filter(STClienteDireccionGuias.empresa == data["empresa"])
+    if "cod_cliente" in data:
+        qry = qry.filter(STClienteDireccionGuias.cod_cliente == data["cod_cliente"])
+    if "cod_direccion" in data:
+        qry = qry.filter(STClienteDireccionGuias.cod_direccion == data["cod_direccion"])
+    if "cod_zona_ciudad" in data:
+        qry = qry.filter(STClienteDireccionGuias.cod_zona_ciudad == data["cod_zona_ciudad"])
+    if "es_activo" in data:
+        qry = qry.filter(STClienteDireccionGuias.es_activo == data["es_activo"])
+
+    # Filtros parciales por texto (case-insensitive con UPPER para Oracle)
+    def like_ci(col, val):
+        return func.upper(col).like(f"%{val.strip().upper()}%")
+
+    if "ciudad" in data:
+        qry = qry.filter(like_ci(STClienteDireccionGuias.ciudad, data["ciudad"]))
+    if "direccion" in data:
+        qry = qry.filter(like_ci(STClienteDireccionGuias.direccion, data["direccion"]))
+    if "direccion_larga" in data:
+        qry = qry.filter(like_ci(STClienteDireccionGuias.direccion_larga, data["direccion_larga"]))
+    if "nombre" in data:
+        qry = qry.filter(like_ci(STClienteDireccionGuias.nombre, data["nombre"]))
+
+    # Búsqueda libre 'q'
+    if data.get("q"):
+        q = data["q"].strip().upper()
+        qry = qry.filter(or_(
+            func.upper(STClienteDireccionGuias.ciudad).like(f"%{q}%"),
+            func.upper(STClienteDireccionGuias.direccion).like(f"%{q}%"),
+            func.upper(STClienteDireccionGuias.direccion_larga).like(f"%{q}%"),
+            func.upper(STClienteDireccionGuias.nombre).like(f"%{q}%"),
+            func.upper(STClienteDireccionGuias.cod_cliente).like(f"%{q}%"),
+            func.cast(STClienteDireccionGuias.cod_direccion, db.String).like(f"%{data['q'].strip()}%"),
+        ))
+
+    # Ordenamiento seguro
+    allowed_map = {
+        "empresa": STClienteDireccionGuias.empresa,
+        "cod_cliente": STClienteDireccionGuias.cod_cliente,
+        "ciudad": STClienteDireccionGuias.ciudad,
+        "direccion": STClienteDireccionGuias.direccion,
+        "direccion_larga": STClienteDireccionGuias.direccion_larga,
+        "cod_direccion": STClienteDireccionGuias.cod_direccion,
+        "cod_zona_ciudad": STClienteDireccionGuias.cod_zona_ciudad,
+        "es_activo": STClienteDireccionGuias.es_activo,
+        "nombre": STClienteDireccionGuias.nombre,
+    }
+    ordering = build_ordering_in_cdg(allowed_map, data.get("ordering", []))
+    for ob in ordering:
+        qry = qry.order_by(ob)
+
+    # Paginación
+    page = data.get("page", 1)
+    page_size = data.get("page_size", 20)
+    items = qry.paginate(page=page, per_page=page_size, error_out=False)
+
+    return jsonify({
+        "page": page,
+        "per_page": page_size,
+        "total": items.total,
+        "pages": items.pages,
+        "data": out_many_cdg.dump(items.items)
+    }), 200
