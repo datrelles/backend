@@ -4,6 +4,7 @@ from sqlalchemy.orm import declarative_base, validates, relationship, foreign
 from src.config.database import db
 from src.enums import tipo_estado
 from src.enums.validation import tipo_estado_activacion
+from src.exceptions import validation_error
 from src.models.clientes import Cliente, cliente_hor
 from src.models.custom_base import custom_base
 from src.models.proveedores import Proveedor
@@ -637,9 +638,9 @@ class st_form_promotoria(custom_base):
         "st_mar_seg_frm_prom",
         back_populates="form_promotoria"
     )
-    total_vendedores = Column(NUMBER(3), nullable=False)
     total_motos_piso = Column(NUMBER(3), nullable=False)
     total_motos_shi = Column(NUMBER(3), nullable=False)
+    participacion = Column(NUMBER(5, 2))
     audit_usuario_ing = Column(VARCHAR(30), nullable=False)
     audit_fecha_ing = Column(DateTime, nullable=False, server_default=text("sysdate"))
     audit_usuario_mod = Column(VARCHAR(30))
@@ -661,10 +662,6 @@ class st_form_promotoria(custom_base):
     def validar_cod_tienda(self, key, value):
         return validar_number(key, value, 3)
 
-    @validates('total_vendedores')
-    def validar_total_vendedores(self, key, value):
-        return validar_number(key, value, 3)
-
     @validates('total_motos_piso')
     def validar_total_motos_piso(self, key, value):
         return validar_number(key, value, 3)
@@ -672,6 +669,11 @@ class st_form_promotoria(custom_base):
     @validates('total_motos_shi')
     def validar_total_motos_shi(self, key, value):
         return validar_number(key, value, 3)
+
+    @validates('participacion')
+    def validar_participacion(self, key, value):
+        valor = validar_number(key, value, 3, 2, es_requerido=False, es_positivo=True)
+        return round(valor, 2)
 
 
 class st_mod_seg_frm_prom(custom_base):
