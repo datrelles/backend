@@ -836,6 +836,10 @@ def post_form_promotoria(empresa, data):
     formulario.total_motos_shi = reduce(lambda total, item: total + item['cantidad'], modelos_segmento, 0)
     formulario.total_motos_piso = formulario.total_motos_shi + reduce(lambda total, item: total + item['cantidad'],
                                                                       marcas_segmento, 0)
+    if formulario.total_motos_piso > 0:
+        formulario.participacion = round((formulario.total_motos_shi / formulario.total_motos_piso) * 100, 2)
+    else:
+        formulario.participacion = None
     db.session.add(formulario)
     db.session.flush()
     db.session.refresh(formulario)
@@ -913,12 +917,19 @@ def put_form_promotoria(cod_form, data):
     db.session.execute(delete(st_mar_seg_frm_prom).where(st_mar_seg_frm_prom.cod_form == cod_form))
     formulario.cod_cliente = data['cod_cliente']
     formulario.cod_tienda = data['cod_tienda']
-    formulario.total_vendedores = data['total_vendedores']
+    # formulario.total_vendedores = data['total_vendedores']
     formulario.audit_usuario_mod = get_jwt_identity()
     formulario.audit_fecha_mod = text('sysdate')
     formulario.total_motos_shi = reduce(lambda total, item: total + item['cantidad'], modelos_segmento, 0)
     formulario.total_motos_piso = formulario.total_motos_shi + reduce(lambda total, item: total + item['cantidad'],
                                                                       marcas_segmento, 0)
+    if formulario.total_motos_piso > 0:
+        formulario.participacion = round(
+            (formulario.total_motos_shi / formulario.total_motos_piso) * 100, 2
+        )
+    else:
+        formulario.participacion = 0
+
     if modelos_segmento:
         formulario.modelos_segmento = [
             st_mod_seg_frm_prom(**{**item, "cod_form": formulario.cod_form, 'audit_usuario_ing': get_jwt_identity()})
