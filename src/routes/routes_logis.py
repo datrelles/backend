@@ -2847,7 +2847,7 @@ def search_despachos():
     order_sql = build_ordering(data.get("ordering"))
 
     page = max(data.get("page", 1), 1)
-    page_size = min(max(data.get("page_size", 20), 1), 200)
+    page_size = min(max(data.get("page_size", 20), 1), 2000)
     offset = (page - 1) * page_size
 
     count_sql = text(f"SELECT COUNT(1) AS cnt FROM VT_DESPACHO_FINAL {where_sql}")
