@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 COD_MODELO_CATAL_ACTIV = "ACT"
 CODIGOS_MARCAS_PROPIAS = [3, 18, 22]
+ROLES_SUPERVISORES = ['SUPER_RET', 'SUPER_MAY']
 
 
 def calcular_diferencia_horas_en_minutos(inicio, fin):
@@ -202,10 +203,15 @@ def get_activaciones(empresa):
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
         activaciones = activaciones.filter(st_activacion.fecha_act.between(fecha_inicio, fecha_fin))
-    activaciones = activaciones.all()
-    return jsonify(
-        st_activacion.to_list(activaciones,
-                              ["promotor", "cliente", "cliente_hor", "tienda", "bodega", "proveedor", "estados"]))
+    activaciones = st_activacion.to_list(activaciones.all(),
+                                         ["promotor", "cliente", "cliente_hor", "tienda", "bodega", "proveedor",
+                                          "estados"])
+    rol = tg_rol_usuario.query().filter(tg_rol_usuario.usuario == get_jwt_identity().upper(),
+                                        tg_rol_usuario.activo == 1).first()
+    if not rol or rol.cod_rol not in ROLES_SUPERVISORES:
+        for a in activaciones:
+            del a['estados']
+    return jsonify(activaciones)
 
 
 @activaciones_b.route("/empresas/<empresa>/activaciones", methods=["POST"])
@@ -268,6 +274,8 @@ def post_activacion(empresa, data):
 @validate_json()
 @handle_exceptions("actualizar la activación")
 def put_activacion(cod_activacion, data):
+    rol = tg_rol_usuario.query().filter(tg_rol_usuario.usuario == get_jwt_identity().upper(),
+                                        tg_rol_usuario.activo == 1).first()
     cod_activacion = validar_number('cod_activacion', cod_activacion, 22)
     activacion = db.session.get(st_activacion, cod_activacion)
     if not activacion:
@@ -284,6 +292,14 @@ def put_activacion(cod_activacion, data):
             'empresa': activacion.empresa, 'cod_promotor': activacion.cod_promotor}
     st_activacion(**data)
     if estado:
+        if not rol:
+            mensaje = 'El usuario {} no tiene ningún rol activo asignado'.format(get_jwt_identity().upper())
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        if rol.cod_rol not in ROLES_SUPERVISORES:
+            mensaje = "Solo los supervisores pueden actualizar el estado"
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 403
         if activacion.estado == tipo_estado_activacion.APROBADA.value:
             mensaje = 'No se puede actualizar el estado de una activación aprobada'
             logger.error(mensaje)
