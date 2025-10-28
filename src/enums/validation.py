@@ -22,9 +22,21 @@ class tipo_estado(CustomEnum):
     ACTIVO = 1
     INACTIVO = 0
 
+
+class rol_supervisor(CustomEnum):
+    MAYOREO = 'SUPER_MAY'
+    RETAIL = 'SUPER_RET'
+
+
+class rol_promotor(CustomEnum):
+    MAYOREO = 'PROM_MAY'
+    RETAIL = 'PROM_RET'
+
+
 class cod_canal_activacion(CustomEnum):
     MAYOREO = 1
     RETAIL = 2
+
 
 class tipo_estado_activacion(CustomEnum):
     PENDIENTE = 0

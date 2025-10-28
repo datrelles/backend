@@ -238,7 +238,7 @@ class st_activacion(custom_base):
     )
     cod_modelo_act = Column(VARCHAR(8))
     cod_item_act = Column(VARCHAR(3))
-    cod_canal = Column(NUMBER(precision=1))
+    cod_canal = Column(NUMBER(precision=1), server_default=FetchedValue())
     estado = Column(NUMBER(precision=1), server_default=text("0"))
     estados = relationship("st_estado_activacion", order_by="st_estado_activacion.cod_estado_act")
     hora_inicio = Column(VARCHAR(5), nullable=False)

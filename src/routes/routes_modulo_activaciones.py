@@ -10,7 +10,7 @@ from sqlalchemy import text, and_, delete
 
 from src.decorators import validate_json, handle_exceptions
 from src.config.database import db
-from src.enums.validation import tipo_estado_activacion
+from src.enums.validation import tipo_estado_activacion, rol_supervisor, rol_promotor, cod_canal_activacion
 from src.exceptions import validation_error
 from src.models.catalogos_bench import Marca, Segmento
 from src.models.clientes import cliente_hor, Cliente
@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 COD_MODELO_CATAL_ACTIV = "ACT"
 CODIGOS_MARCAS_PROPIAS = [3, 18, 22]
-ROLES_SUPERVISORES = ['SUPER_RET', 'SUPER_MAY']
 
 
 def calcular_diferencia_horas_en_minutos(inicio, fin):
@@ -211,7 +210,7 @@ def get_activaciones(empresa):
                                           "estados"])
     rol = tg_rol_usuario.query().filter(tg_rol_usuario.usuario == get_jwt_identity().upper(),
                                         tg_rol_usuario.activo == 1).first()
-    if not rol or rol.cod_rol not in ROLES_SUPERVISORES:
+    if not rol or rol.cod_rol not in rol_supervisor.values():
         for a in activaciones:
             del a['estados']
     return jsonify(activaciones)
@@ -255,6 +254,17 @@ def post_activacion(empresa, data):
         mensaje = 'Promotor {} no vinculado a la tienda {}'.format(data['cod_promotor'], data['cod_tienda'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 403
+    rol = tg_rol_usuario.query().filter(tg_rol_usuario.usuario == get_jwt_identity().upper(),
+                                        tg_rol_usuario.activo == 1).first()
+    if not rol:
+        mensaje = 'El usuario {} no tiene ningún rol activo asignado'.format(get_jwt_identity().upper())
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if rol.cod_rol not in rol_promotor.values():
+        mensaje = 'Solo los promotores pueden registrar activaciones'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 403
+    data['cod_canal'] = cod_canal_activacion(rol_promotor(rol.cod_rol).name).value
     if not db.session.get(Proveedor, (empresa, data['cod_proveedor'])):
         mensaje = 'Proveedor {} inexistente'.format(data['cod_proveedor'])
         logger.error(mensaje)
@@ -289,7 +299,6 @@ def put_activacion(cod_activacion, data):
     data = {'cod_cliente': activacion.cod_cliente, 'cod_tienda': activacion.cod_tienda,
             'cod_proveedor': activacion.cod_proveedor, 'cod_modelo_act': activacion.cod_modelo_act,
             'cod_item_act': activacion.cod_item_act,
-            'cod_canal': activacion.cod_canal,
             'hora_inicio': activacion.hora_inicio, 'hora_fin': activacion.hora_fin,
             'fecha_act': activacion.fecha_act.strftime("%Y-%m-%d"),
             'num_exhi_motos': activacion.num_exhi_motos, **data, 'audit_usuario_ing': activacion.audit_usuario_ing,
@@ -300,7 +309,7 @@ def put_activacion(cod_activacion, data):
             mensaje = 'El usuario {} no tiene ningún rol activo asignado'.format(get_jwt_identity().upper())
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
-        if rol.cod_rol not in ROLES_SUPERVISORES:
+        if rol.cod_rol not in rol_supervisor.values():
             mensaje = "Solo los supervisores pueden actualizar el estado"
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 403
