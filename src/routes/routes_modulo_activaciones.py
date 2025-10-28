@@ -264,7 +264,7 @@ def post_activacion(empresa, data):
         mensaje = 'Solo los promotores pueden registrar activaciones'
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 403
-    data['cod_canal'] = cod_canal_activacion(rol_promotor(rol.cod_rol).name).value
+    activacion.cod_canal = cod_canal_activacion[rol_promotor(rol.cod_rol).name].value
     if not db.session.get(Proveedor, (empresa, data['cod_proveedor'])):
         mensaje = 'Proveedor {} inexistente'.format(data['cod_proveedor'])
         logger.error(mensaje)
