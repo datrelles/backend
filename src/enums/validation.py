@@ -22,6 +22,9 @@ class tipo_estado(CustomEnum):
     ACTIVO = 1
     INACTIVO = 0
 
+class cod_canal_activacion(CustomEnum):
+    MAYOREO = 1
+    RETAIL = 2
 
 class tipo_estado_activacion(CustomEnum):
     PENDIENTE = 0

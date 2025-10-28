@@ -3,7 +3,7 @@ from sqlalchemy.dialects.oracle import NUMBER
 from sqlalchemy.orm import declarative_base, validates, relationship, foreign
 from src.config.database import db
 from src.enums import tipo_estado
-from src.enums.validation import tipo_estado_activacion
+from src.enums.validation import tipo_estado_activacion, cod_canal_activacion
 from src.exceptions import validation_error
 from src.models.clientes import Cliente, cliente_hor
 from src.models.custom_base import custom_base
@@ -22,6 +22,10 @@ def validar_empresa(clave, valor):
 def validar_estado(clave, valor, es_requerido=True):
     return validar_number(clave, valor, 1, es_requerido=es_requerido, valores_permitidos=tipo_estado.values())
 
+
+def validar_cod_canal_activacion(clave, valor, es_requerido=True):
+    return validar_number(clave, valor, 1, es_requerido=es_requerido,
+                          valores_permitidos=cod_canal_activacion.values())
 
 def validar_estado_activacion(clave, valor, es_requerido=True):
     return validar_number(clave, valor, 1, es_requerido=es_requerido,
@@ -234,6 +238,7 @@ class st_activacion(custom_base):
     )
     cod_modelo_act = Column(VARCHAR(8))
     cod_item_act = Column(VARCHAR(3))
+    cod_canal = Column(NUMBER(precision=1))
     estado = Column(NUMBER(precision=1), server_default=text("0"))
     estados = relationship("st_estado_activacion", order_by="st_estado_activacion.cod_estado_act")
     hora_inicio = Column(VARCHAR(5), nullable=False)
@@ -277,6 +282,10 @@ class st_activacion(custom_base):
     @validates('cod_item_act')
     def validar_cod_item_act(self, key, value):
         return validar_varchar(key, value, 3)
+
+    @validates('cod_canal')
+    def validar_cod_canal(self, key, value):
+        return validar_cod_canal_activacion(key, value)
 
     @validates('estado')
     def validar_estado(self, key, value):
