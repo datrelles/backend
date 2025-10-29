@@ -10,13 +10,13 @@ from sqlalchemy import text, and_, delete
 
 from src.decorators import validate_json, handle_exceptions
 from src.config.database import db
-from src.enums.validation import tipo_estado_activacion
+from src.enums.validation import tipo_estado_activacion, rol_supervisor, rol_promotor, cod_canal_activacion
 from src.exceptions import validation_error
 from src.models.catalogos_bench import Marca, Segmento
 from src.models.clientes import cliente_hor, Cliente
 from src.models.modulo_activaciones import st_activacion, st_cliente_direccion_guias, rh_empleados, st_promotor_tienda, \
     ad_usuarios, st_encuesta, st_form_promotoria, st_mod_seg_frm_prom, st_mar_seg_frm_prom, st_bodega_consignacion, \
-    st_estado_activacion, st_opcion_pregunta, st_respuesta_multiple
+    st_estado_activacion, st_opcion_pregunta, st_respuesta_multiple, validar_cod_canal_activacion
 from src.models.modulo_formulas import validar_empresa
 from src.models.proveedores import TgModeloItem, Proveedor
 from src.models.users import Empresa, Usuario, tg_rol_usuario
@@ -172,6 +172,7 @@ def get_activaciones(empresa):
     empresa = validar_number('empresa', empresa, 2)
     cod_promotor = validar_varchar('cod_promotor', request.args.get('cod_promotor'), 20, False)
     cod_cliente = validar_varchar('cod_cliente', request.args.get("cod_cliente"), 14, False)
+    cod_canal = validar_cod_canal_activacion('cod_canal', request.args.get("cod_canal"), False)
     fecha_inicio = validar_fecha('fecha_inicio', request.args.get("fecha_inicio"), False)
     fecha_fin = validar_fecha('fecha_fin', request.args.get("fecha_fin"), False)
     if not db.session.get(Empresa, empresa):
@@ -196,16 +197,23 @@ def get_activaciones(empresa):
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 404
         activaciones = activaciones.filter(st_activacion.cod_cliente == cod_cliente)
+    if cod_canal:
+        activaciones = activaciones.filter(st_activacion.cod_canal == cod_canal)
     if fecha_inicio and fecha_fin:
         if fecha_inicio >= fecha_fin:
             mensaje = 'La fecha de inicio debe ser menor a la de fin'
             logger.error(mensaje)
             return jsonify({'mensaje': mensaje}), 400
         activaciones = activaciones.filter(st_activacion.fecha_act.between(fecha_inicio, fecha_fin))
-    activaciones = activaciones.all()
-    return jsonify(
-        st_activacion.to_list(activaciones,
-                              ["promotor", "cliente", "cliente_hor", "tienda", "bodega", "proveedor", "estados"]))
+    activaciones = st_activacion.to_list(activaciones.all(),
+                                         ["promotor", "cliente", "cliente_hor", "tienda", "bodega", "proveedor",
+                                          "estados"])
+    rol = tg_rol_usuario.query().filter(tg_rol_usuario.usuario == get_jwt_identity().upper(),
+                                        tg_rol_usuario.activo == 1).first()
+    if not rol or rol.cod_rol not in rol_supervisor.values():
+        for a in activaciones:
+            del a['estados']
+    return jsonify(activaciones)
 
 
 @activaciones_b.route("/empresas/<empresa>/activaciones", methods=["POST"])
@@ -246,6 +254,17 @@ def post_activacion(empresa, data):
         mensaje = 'Promotor {} no vinculado a la tienda {}'.format(data['cod_promotor'], data['cod_tienda'])
         logger.error(mensaje)
         return jsonify({'mensaje': mensaje}), 403
+    rol = tg_rol_usuario.query().filter(tg_rol_usuario.usuario == get_jwt_identity().upper(),
+                                        tg_rol_usuario.activo == 1).first()
+    if not rol:
+        mensaje = 'El usuario {} no tiene ningún rol activo asignado'.format(get_jwt_identity().upper())
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 404
+    if rol.cod_rol not in rol_promotor.values():
+        mensaje = 'Solo los promotores pueden registrar activaciones'
+        logger.error(mensaje)
+        return jsonify({'mensaje': mensaje}), 403
+    activacion.cod_canal = cod_canal_activacion[rol_promotor(rol.cod_rol).name].value
     if not db.session.get(Proveedor, (empresa, data['cod_proveedor'])):
         mensaje = 'Proveedor {} inexistente'.format(data['cod_proveedor'])
         logger.error(mensaje)
@@ -268,6 +287,8 @@ def post_activacion(empresa, data):
 @validate_json()
 @handle_exceptions("actualizar la activación")
 def put_activacion(cod_activacion, data):
+    rol = tg_rol_usuario.query().filter(tg_rol_usuario.usuario == get_jwt_identity().upper(),
+                                        tg_rol_usuario.activo == 1).first()
     cod_activacion = validar_number('cod_activacion', cod_activacion, 22)
     activacion = db.session.get(st_activacion, cod_activacion)
     if not activacion:
@@ -284,6 +305,14 @@ def put_activacion(cod_activacion, data):
             'empresa': activacion.empresa, 'cod_promotor': activacion.cod_promotor}
     st_activacion(**data)
     if estado:
+        if not rol:
+            mensaje = 'El usuario {} no tiene ningún rol activo asignado'.format(get_jwt_identity().upper())
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 404
+        if rol.cod_rol not in rol_supervisor.values():
+            mensaje = "Solo los supervisores pueden actualizar el estado"
+            logger.error(mensaje)
+            return jsonify({'mensaje': mensaje}), 403
         if activacion.estado == tipo_estado_activacion.APROBADA.value:
             mensaje = 'No se puede actualizar el estado de una activación aprobada'
             logger.error(mensaje)
